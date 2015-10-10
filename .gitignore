@@ -1,2 +1,2 @@
-Lexer.hi
-Lexer.o
+*.hi
+*.o
