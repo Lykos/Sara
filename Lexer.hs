@@ -9,8 +9,16 @@ import qualified Text.Parsec.Token as Token
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
   where
-    ops = ["+", "*", "-", "/", "%", "&&", "||", ";", "==", "<=>", "!=", ">=", "<=", "="]
-    names = ["function", "extern"]
+    ops = ["!", "~",
+           "*", "/", "%",
+           "+", "-",
+           "<<", ">>",
+           "<", "<=", ">", ">=",
+           "==", "!=",
+           "&", "^", "|",
+           "&&", "^^", "||",
+           "<==", "==>", "<==>", "<!=>"]
+    names = ["function", "extern", "if", "then", "else"]
     style = emptyDef {
                Token.commentStart = "/*"
 	     , Token.commentEnd = "*/"
@@ -18,34 +26,33 @@ lexer = Token.makeTokenParser style
              , Token.nestedComments = True
              , Token.identStart = letter <|> char '_'
              , Token.identLetter = alphaNum <|> char '_'
-             , Token.opStart = oneOf "<=>*/%&|;!"
-             , Token.opLetter = oneOf "=&|>"
+             , Token.opStart = oneOf "<=>*/%&|;!~"
+             , Token.opLetter = oneOf "=&|><"
              , Token.reservedOpNames = ops
              , Token.reservedNames = names
 	     , Token.caseSensitive = True
              }
 
-integer :: Parser Integer
-integer = Token.integer lexer
+integerToken :: Parser Integer
+integerToken = Token.integer lexer
 
-float :: Parser Double
-float = Token.float lexer
+doubleToken :: Parser Double
+doubleToken = Token.float lexer
 
-identifier :: Parser String
-identifier = Token.identifier lexer
+identifierToken :: Parser String
+identifierToken = Token.identifier lexer
 
-parens :: Parser a -> Parser a
-parens = Token.parens lexer
+parensToken :: Parser a -> Parser a
+parensToken = Token.parens lexer
 
-semiSep :: Parser a -> Parser [a]
-semiSep = Token.semiSep lexer
+semiSepToken :: Parser a -> Parser [a]
+semiSepToken = Token.semiSep lexer
 
-commaSep :: Parser a -> Parser [a]
-commaSep = Token.commaSep lexer
+commaSepToken :: Parser a -> Parser [a]
+commaSepToken = Token.commaSep lexer
 
-reserved :: String -> Parser ()
-reserved = Token.reserved lexer
+reservedToken :: String -> Parser ()
+reservedToken = Token.reserved lexer
 
-reservedOp :: String -> Parser ()
-reservedOp = Token.reservedOp lexer
-
+reservedOpToken :: String -> Parser ()
+reservedOpToken = Token.reservedOp lexer
