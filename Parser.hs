@@ -9,8 +9,45 @@ import qualified Text.Parsec.Token as Token
 import Lexer
 import Syntax
 
-parser :: Parser Expression
-parser = Expr.buildExpressionParser operatorTable expression
+type DeclarationOrExpression = Either Declaration Expression
+
+declarationOrExpression :: Parser DeclarationOrExpression
+declarationOrExpression = try topLevelDeclaration
+                          <|> toplevelExpression
+                          <?> "declaration or expression"
+
+topLevelDeclaration :: Parser DeclarationOrExpression
+topLevelDeclaration = do
+  decl <- declaration
+  return $ Left decl
+
+declaration :: Parser Declaration
+declaration = try function
+              <|> try extern
+              <?> "declaration"
+
+function :: Parser Declaration
+function = do
+  reservedToken "function"
+  name <- identifierToken
+  args <- parensToken $ many variable
+  body <- expression
+  return $ Function name args body
+
+extern :: Parser Declaration
+extern = do
+  reservedToken "extern"
+  name <- identifierToken
+  args <- parensToken $ many variable
+  return $ Extern name args
+
+toplevelExpression :: Parser DeclarationOrExpression
+toplevelExpression = do
+  expr <- expression
+  return $ Right expr
+
+expression :: Parser Expression
+expression = Expr.buildExpressionParser operatorTable term
 
 operatorTable = [[unaryOperator "+" UnaryPlus,
                   unaryOperator "-" UnaryMinus,
@@ -43,34 +80,13 @@ operatorTable = [[unaryOperator "+" UnaryPlus,
 unaryOperator symbol operator = Expr.Prefix (reservedOpToken symbol >> return (UnaryOperation operator))
 binaryOperator symbol operator assoc = Expr.Infix (reservedOpToken symbol >> return (BinaryOperation operator)) assoc
 
-expressionOrDeclaration :: Parser Expression
-expressionOrDeclaration = try function
-                          <|> try extern
-                          <|> expression
-                          <?> "expression or declaration"
-
-expression :: Parser Expression
-expression = try integer
-             <|> try call
-             <|> try conditional
-             <|> variable
-             <|> parensToken expression
-             <?> "expression"
-
-function :: Parser Expression
-function = do
-  reservedToken "function"
-  name <- identifierToken
-  args <- parensToken $ many variable
-  body <- expression
-  return $ Function name args body
-
-extern :: Parser Expression
-extern = do
-  reservedToken "extern"
-  name <- identifierToken
-  args <- parensToken $ many variable
-  return $ Extern name args
+term :: Parser Expression
+term = try integer
+       <|> try call
+       <|> try conditional
+       <|> variable
+       <|> parensToken expression
+       <?> "expression"
       
 integer :: Parser Expression
 integer = do
@@ -97,3 +113,22 @@ conditional = do
   reservedToken "else"
   thenExpr <- expression
   return $ Conditional cond ifExpr thenExpr
+
+contents :: Parser a -> Parser a
+contents p = do
+  Token.whiteSpace lexer
+  r <- p
+  eof
+  return r
+
+toplevel :: Parser [DeclarationOrExpression]
+toplevel = many $ do
+    def <- declarationOrExpression
+    reservedOpToken ";"
+    return def
+
+parseExpr :: String -> Either ParseError Expression
+parseExpr s = parse (contents expression) "<stdin>" s
+
+parseToplevel :: String -> Either ParseError [DeclarationOrExpression]
+parseToplevel s = parse (contents toplevel) "<stdin>" s

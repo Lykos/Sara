@@ -34,10 +34,13 @@ data BinaryOperator
   | NotEquivalentTo
   deriving (Eq, Ord, Show)
 
-data Expression
+data Declaration
   = Function Name [Expression] Expression
   | Extern Name [Expression]
-  | Integer Integer
+  deriving (Eq, Ord, Show)
+
+data Expression
+  = Integer Integer
   | UnaryOperation UnaryOperator Expression
   | BinaryOperation BinaryOperator Expression Expression
   | Variable Name
