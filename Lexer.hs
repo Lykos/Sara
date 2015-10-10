@@ -18,8 +18,8 @@ lexer = Token.makeTokenParser style
            "&", "^", "|",
            "&&", "^^", "||",
            "<==", "==>", "<==>", "<!=>",
-           ";"]
-    names = ["function", "extern", "if", "then", "else"]
+           ";", ":"]
+    names = ["function", "extern", "if", "then", "else", "true", "false", "Boolean", "Integer", "Double"]
     style = emptyDef {
                Token.commentStart = "/*"
 	     , Token.commentEnd = "*/"

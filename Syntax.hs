@@ -1,5 +1,7 @@
 module Syntax where
 
+import Types
+
 type Name = String
 data UnaryOperator
   = UnaryPlus
@@ -35,15 +37,23 @@ data BinaryOperator
   deriving (Eq, Ord, Show)
 
 data Declaration
-  = Function Name [Expression] Expression
-  | Extern Name [Expression]
+  = Function Signature Expression
+  | Extern Signature
+  deriving (Eq, Ord, Show)
+
+data Signature = Signature Name [TypedVariable] Type
+  deriving (Eq, Ord, Show)
+
+data TypedVariable = TypedVariable Name Type
   deriving (Eq, Ord, Show)
 
 data Expression
-  = Integer Integer
-  | UnaryOperation UnaryOperator Expression
-  | BinaryOperation BinaryOperator Expression Expression
-  | Variable Name
-  | Call Name [Expression]
-  | Conditional Expression Expression Expression
+  = Boolean Bool
+  | Integer Integer
+  | Double Double
+  | UnaryOperation UnaryOperator Expression Type
+  | BinaryOperation BinaryOperator Expression Expression Type
+  | Variable Name Type
+  | Call Name [Expression] Type
+  | Conditional Expression Expression Expression Type
   deriving (Eq, Ord, Show)

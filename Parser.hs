@@ -29,17 +29,46 @@ declaration = try function
 function :: Parser Declaration
 function = do
   reservedToken "function"
-  name <- identifierToken
-  args <- parensToken $ many variable
+  sig <- signature
   body <- expression
-  return $ Function name args body
+  return $ Function signature body
 
 extern :: Parser Declaration
 extern = do
   reservedToken "extern"
+  sig <- signature
+  return $ Extern sig
+
+signature :: Parser Signature
+signature = do
   name <- identifierToken
-  args <- parensToken $ many variable
-  return $ Extern name args
+  args <- parensToken $ many typedVariable
+  reservedToken ":"
+  retType <- typeExpression
+
+typedVariable :: Parser TypedVariable
+typedVariable = do
+  name <- identifierToken
+  varType <- typeExpression
+  return TypedVariable name varType
+
+typeExpression :: Parser Type
+typeExpression = try booleanType
+                 <|> try integerType
+                 <|> try doubleType
+                 <?> "type"
+
+booleanType :: Parser Type
+booleanType = do
+  reservedToken "Boolean"
+
+integerType :: Parser Type
+integerType = do
+  reservedToken "Integer"
+
+doubleType :: Parser Type
+doubleType = do
+  reservedToken "Double"
 
 toplevelExpression :: Parser DeclarationOrExpression
 toplevelExpression = do
@@ -81,28 +110,47 @@ unaryOperator symbol operator = Expr.Prefix (reservedOpToken symbol >> return (U
 binaryOperator symbol operator assoc = Expr.Infix (reservedOpToken symbol >> return (BinaryOperation operator)) assoc
 
 term :: Parser Expression
-term = try integer
+term = try boolean
+       <|> try integer
        <|> try call
        <|> try conditional
        <|> variable
        <|> parensToken expression
        <?> "expression"
-      
+
+boolean :: Parser Expression
+boolean = try true <|> false
+
+true :: Parser Expression
+true = do
+  reservedToken "true"
+  return Boolean True
+
+false :: Parser Expression
+false = do
+  reservedToken "false"
+  return Boolean False
+
 integer :: Parser Expression
 integer = do
   n <- integerToken
   return $ Integer n
 
+double :: Parser Expression
+double = do
+  n <- doubleToken
+  return $ Double n
+
 variable :: Parser Expression
 variable = do
   var <- identifierToken
-  return $ Variable var
+  return $ Variable var Unknown
 
 call :: Parser Expression
 call = do
   name <- identifierToken
   args <- parensToken $ many expression
-  return $ Call name args
+  return $ Call name args Unknown
 
 conditional :: Parser Expression
 conditional = do
@@ -112,7 +160,7 @@ conditional = do
   ifExpr <- expression
   reservedToken "else"
   thenExpr <- expression
-  return $ Conditional cond ifExpr thenExpr
+  return $ Conditional cond ifExpr thenExpr Unknown
 
 contents :: Parser a -> Parser a
 contents p = do
