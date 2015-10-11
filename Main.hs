@@ -16,7 +16,7 @@ process line = do
       mapM_ print asts
       let typed = typeCheck asts
       case typed of
-        TypeError err    -> print err
+        Error err        -> print err
         Result typedAsts -> mapM_ print typedAsts
 
 main :: IO ()

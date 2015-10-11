@@ -1,6 +1,7 @@
 module Syntax where
 
 import Types
+import Text.Parsec.Pos
 
 type Name = String
 data UnaryOperator
@@ -36,6 +37,12 @@ data BinaryOperator
   | NotEquivalentTo
   deriving (Eq, Ord, Show)
 
+-- Declaration AST node that contains the declaration and some metadata.
+data DeclarationAst
+  = DeclarationAst { decl :: Declaration
+                   , declPos :: SourcePos }
+  deriving (Eq, Ord, Show)
+
 data Declaration
   = Function Signature ExpressionAst
   | Extern Signature
@@ -59,7 +66,8 @@ data TypedVariable
 -- Expression AST node that contains the expression and some metadata.
 data ExpressionAst
   = ExpressionAst { astExp :: Expression
-                  , expType :: Type }
+                  , expType :: Type
+                  , expPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
 data Expression
@@ -73,4 +81,4 @@ data Expression
   | Conditional ExpressionAst ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
 
-type DeclarationOrExpression = Either Declaration ExpressionAst
+type DeclarationOrExpression = Either DeclarationAst ExpressionAst

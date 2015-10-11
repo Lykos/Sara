@@ -1,7 +1,9 @@
-module TypeChecker (TypeErrorOr(..)
-                   , typeCheck) where
+module TypeChecker (
+  TypeErrorOr(..)
+  , TypeError
+  , typeCheck) where
 
-
+import Text.Parsec.Pos
 import Control.Monad
 import Data.Either
 import Types
@@ -16,17 +18,24 @@ data FunctionType =
 type FunctionMap = Map.Map FunctionType Type
 type VariableMap = Map.Map Name Type
 data TypeErrorOr a
-  = TypeError String
+  = Error TypeError
   | Result a
 
+data TypeError =
+  TypeError { errorPos :: SourcePos
+            , errorMsg :: String }
+  deriving (Eq, Ord)
+instance Show TypeError where
+  show err = show (errorPos err) ++ ":\n" ++ errorMsg err
+
 instance Functor TypeErrorOr where
-  fmap f (TypeError s) = TypeError s
-  fmap f (Result a)    = Result $ f a
+  fmap f (Error e)  = Error e
+  fmap f (Result a) = Result $ f a
 
 instance Monad TypeErrorOr where
-  TypeError e >>= f = TypeError e
-  Result r    >>= f = f r
-  return            = Result
+  Error e >>= f  = Error e
+  Result r >>= f = f r
+  return         = Result
 
 typeCheck :: [DeclarationOrExpression] -> TypeErrorOr [DeclarationOrExpression]
 typeCheck asts = do
@@ -37,23 +46,30 @@ typeCheckOne :: FunctionMap -> DeclarationOrExpression -> TypeErrorOr Declaratio
 typeCheckOne funcs (Left d)  = typeCheckDeclaration funcs d >>= return . Left
 typeCheckOne funcs (Right e) = typeCheckExp funcs Map.empty e >>= return . Right
 
-typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
-typeCheckDeclaration funcs (Function sig body) =
+typeCheckDeclaration :: FunctionMap -> DeclarationAst -> TypeErrorOr DeclarationAst
+typeCheckDeclaration funcs declAst = do
+  typedDecl <- typeCheckDeclarationAst funcs $ decl declAst
+  return declAst { decl = typedDecl }
+
+typeCheckDeclarationAst :: FunctionMap -> Declaration -> TypeErrorOr Declaration
+typeCheckDeclarationAst funcs (Function sig body) =
   let var (TypedVariable varName varType) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
   in typeCheckExp funcs vars body >>= return . Function sig
-typeCheckDeclaration funcs e@(Extern _)        =  return e
+typeCheckDeclarationAst funcs e@(Extern _)        =  return e
 
 functions :: [DeclarationOrExpression] -> TypeErrorOr FunctionMap
 functions = functionsFromDecls . lefts
 
-functionsFromDecls :: [Declaration] -> TypeErrorOr FunctionMap
-functionsFromDecls d = foldr addOneFunction (Result Map.empty) (map signature d)
+functionsFromDecls :: [DeclarationAst] -> TypeErrorOr FunctionMap
+functionsFromDecls d = foldr addOneFunction (Result Map.empty) d
 
-addOneFunction :: Signature -> TypeErrorOr FunctionMap -> TypeErrorOr FunctionMap
-addOneFunction sig m = do
+addOneFunction :: DeclarationAst -> TypeErrorOr FunctionMap -> TypeErrorOr FunctionMap
+addOneFunction d m = do
+  let sig = signature . decl $ d
+  let pos = declPos d
   n <- m
-  when ((functionType sig) `Map.member` n) (ambiguousFunction sig)
+  when ((functionType sig) `Map.member` n) (ambiguousFunction sig pos)
   return $ insertFunction sig n
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
@@ -72,13 +88,13 @@ typeCheckExp funcs vars ast =
     UnaryOperation op subExp -> do
       typedSubExp <- typedSubExp subExp
       subExpType <- astType typedSubExp
-      addType (UnaryOperation op typedSubExp) (unOpType op subExpType)
+      addType (UnaryOperation op typedSubExp) (unOpType op subExpType pos)
     BinaryOperation op left right -> do
       typedLeft <- typedSubExp left
       typedRight <- typedSubExp right
       leftType <- astType typedLeft
       rightType <- astType typedRight
-      addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType)
+      addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType pos)
     Variable name -> addType e (varType name)
     Call name args -> do
       typedArgs <- conjunctErrors $ map typedSubExp args
@@ -93,17 +109,18 @@ typeCheckExp funcs vars ast =
       elseType <- astType typedElseExp
       case (condType, ifType, elseType) of
         (Types.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (Result ifType)
-                                          | otherwise             -> mismatchingCondTypes ifType elseType
-        (condType, _, _)                                          -> invalidCondType condType
-  where typedSubExp = typeCheckExp funcs vars
-        checkNotUnknown :: Type -> TypeErrorOr Type
-        checkNotUnknown Unknown = unknownType
-        checkNotUnknown t       = Result t
+                                          | otherwise             -> mismatchingCondTypes ifType elseType pos
+        (condType, _, _)                                          -> invalidCondType condType pos
+  where pos = expPos ast
+        typedSubExp = typeCheckExp funcs vars
+        checkNotUnknown :: Type -> SourcePos -> TypeErrorOr Type
+        checkNotUnknown Unknown pos = unknownType pos
+        checkNotUnknown t _         = Result t
         astType :: ExpressionAst -> TypeErrorOr Type
-        astType = checkNotUnknown . expType
+        astType exp = checkNotUnknown (expType exp) (expPos exp)
         typedAst :: Type -> TypeErrorOr ExpressionAst
         typedAst t = do
-          s <- checkNotUnknown t
+          s <- checkNotUnknown t pos
           return ast { expType = s }
         addType :: Expression -> TypeErrorOr Type -> TypeErrorOr ExpressionAst
         addType e t = do
@@ -111,11 +128,11 @@ typeCheckExp funcs vars ast =
           return ast { astExp = e , expType = s }
         varType :: Name -> TypeErrorOr Type
         varType name = case name `Map.lookup` vars of
-          Nothing -> unknownVariable name
+          Nothing -> unknownVariable name pos
           Just t  -> Result t
         funcType :: Name -> [Type] -> TypeErrorOr Type
         funcType name argTypes = case (FunctionType name argTypes) `Map.lookup` funcs of
-          Nothing -> unknownFunction name argTypes
+          Nothing -> unknownFunction name argTypes pos
           Just t  -> Result t
 
 conjunctErrors :: [TypeErrorOr a] -> TypeErrorOr [a]
@@ -127,9 +144,9 @@ conjunctTwoErrors a as = do
   bs <- as
   return $ b : bs
 
-unOpType :: UnaryOperator -> Type -> TypeErrorOr Type
-unOpType op t = case (TypedUnOp op t) `Map.lookup` typedUnOps of
-  Nothing -> unknownUnOp op t
+unOpType :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr Type
+unOpType op t pos = case (TypedUnOp op t) `Map.lookup` typedUnOps of
+  Nothing -> unknownUnOp op t pos
   Just t  -> Result t
 
 data TypedUnOp = TypedUnOp UnaryOperator Type
@@ -146,9 +163,9 @@ typedUnOps = Map.fromList [ (TypedUnOp UnaryPlus Types.Integer, Types.Integer)
 data TypedBinOp = TypedBinOp BinaryOperator Type Type
                 deriving (Eq, Ord, Show)
 
-binOpType :: BinaryOperator -> Type -> Type -> TypeErrorOr Type
-binOpType op s t = case (TypedBinOp op s t) `Map.lookup` typedBinOps of
-  Nothing -> unknownBinOp op s t
+binOpType :: BinaryOperator -> Type -> Type -> SourcePos -> TypeErrorOr Type
+binOpType op s t pos = case (TypedBinOp op s t) `Map.lookup` typedBinOps of
+  Nothing -> unknownBinOp op s t pos
   Just t  -> Result t
 
 typedBinOps :: Map.Map TypedBinOp Type
@@ -172,33 +189,36 @@ relOps = [LessThan, AtMost, GreaterThan, AtLeast, EqualTo, NotEqualTo]
 boolOps :: [BinaryOperator]
 boolOps = [LogicalAnd, LogicalXor, LogicalOr, Implies, ImpliedBy, EquivalentTo, NotEquivalentTo]
 
-unknownUnOp :: UnaryOperator -> Type -> TypeErrorOr a
+unknownUnOp :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr a
 unknownUnOp op t =
-  TypeError $ "Unknown operator " ++ show op ++ " for expression of type " ++ show t ++ "."
+  typeError $ "Unknown operator " ++ show op ++ " for expression of type " ++ show t ++ "."
 
-unknownBinOp :: BinaryOperator -> Type -> Type -> TypeErrorOr a
+unknownBinOp :: BinaryOperator -> Type -> Type -> SourcePos -> TypeErrorOr a
 unknownBinOp op s t =
-  TypeError $ "Unknown operator " ++ show op ++ " for expressions of type " ++ show s ++ " and " ++ show t ++ "."
+  typeError $ "Unknown operator " ++ show op ++ " for expressions of type " ++ show s ++ " and " ++ show t ++ "."
 
-unknownVariable :: Name -> TypeErrorOr a
-unknownVariable name = TypeError $ "Unknown variable " ++ name ++ "."
+unknownVariable :: Name -> SourcePos -> TypeErrorOr a
+unknownVariable name =
+  typeError $ "Unknown variable " ++ name ++ "."
 
-unknownFunction :: Name -> [Type] -> TypeErrorOr a
+unknownFunction :: Name -> [Type] -> SourcePos -> TypeErrorOr a
 unknownFunction name argTypes =
-  TypeError $ "Unknown function " ++ name ++ " for argument types " ++ show argTypes ++ "."
+  typeError $ "Unknown function " ++ name ++ " for argument types " ++ show argTypes ++ "."
 
-invalidCondType :: Type -> TypeErrorOr a
+invalidCondType :: Type -> SourcePos -> TypeErrorOr a
 invalidCondType condType =
-  TypeError $ "Conditions of conditionals have to have type " ++ show Types.Boolean ++ ", found " ++ show condType
+  typeError $ "Conditions of conditionals have to have type " ++ show Types.Boolean ++ ", found " ++ show condType
 
-mismatchingCondTypes :: Type -> Type -> TypeErrorOr a
+mismatchingCondTypes :: Type -> Type -> SourcePos -> TypeErrorOr a
 mismatchingCondTypes ifType elseType =
-  TypeError $ "If and Else branch of conditionals have to have the same types, found " ++ show ifType ++ " and " ++ show elseType ++ "."
+  typeError $ "If and Else branch of conditionals have to have the same types, found " ++ show ifType ++ " and " ++ show elseType ++ "."
 
-ambiguousFunction :: Signature -> TypeErrorOr a
+ambiguousFunction :: Signature -> SourcePos -> TypeErrorOr a
 ambiguousFunction sig =
-  TypeError $ "Function " ++ show sig ++ " is ambiguous. A function with the same name and the same argument types already exists."
+  typeError $ "Function " ++ show sig ++ " is ambiguous. A function with the same name and the same argument types already exists."
 
-unknownType :: TypeErrorOr a
-unknownType =
-  TypeError "Unknown type."
+unknownType :: SourcePos -> TypeErrorOr a
+unknownType = typeError "Unknown type."
+
+typeError :: String -> SourcePos -> TypeErrorOr a
+typeError msg pos = Error $ TypeError pos msg

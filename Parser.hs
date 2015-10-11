@@ -16,9 +16,12 @@ declarationOrExpression = try topLevelDeclaration
                           <?> "declaration or expression"
 
 topLevelDeclaration :: Parser DeclarationOrExpression
-topLevelDeclaration = do
+topLevelDeclaration = declarationAst >>= return . Left
+
+declarationAst :: Parser DeclarationAst
+declarationAst = do
   decl <- declaration
-  return $ Left decl
+  addPosition . return $ DeclarationAst decl
 
 declaration :: Parser Declaration
 declaration = try function
@@ -81,42 +84,48 @@ toplevelExpression = do
 expressionAst :: Parser ExpressionAst
 expressionAst = Expr.buildExpressionParser operatorTable term
 
-operatorTable = [[unaryOperator "+" UnaryPlus,
-                  unaryOperator "-" UnaryMinus,
-                  unaryOperator "~" BitwiseNot,
-                  unaryOperator "!" LogicalNot]
-                 ,[binaryOperator "*" Times Expr.AssocLeft,
-                  binaryOperator "%" Modulo Expr.AssocLeft,
-                  binaryOperator "/" DividedBy Expr.AssocLeft]
-                ,[binaryOperator "+" Plus Expr.AssocLeft,
-                  binaryOperator "-" Minus Expr.AssocLeft]
-                ,[binaryOperator "<<" LeftShift Expr.AssocLeft,
-                  binaryOperator ">>" RightShift Expr.AssocLeft]
-                ,[binaryOperator "<" LessThan Expr.AssocLeft,
-                  binaryOperator "<=" AtMost Expr.AssocLeft,
-                  binaryOperator ">" GreaterThan Expr.AssocLeft,
-                  binaryOperator ">=" AtLeast Expr.AssocLeft]
-                ,[binaryOperator "==" EqualTo Expr.AssocLeft,
-                  binaryOperator "!=" NotEqualTo Expr.AssocLeft]
-                ,[binaryOperator "&" BitwiseAnd Expr.AssocLeft]
-                ,[binaryOperator "^" BitwiseXor Expr.AssocLeft]
-                ,[binaryOperator "|" BitwiseOr Expr.AssocLeft]
-                ,[binaryOperator "&&" LogicalAnd Expr.AssocLeft]
-                ,[binaryOperator "^^" LogicalXor Expr.AssocLeft]
-                ,[binaryOperator "||" LogicalOr Expr.AssocLeft]
-                ,[binaryOperator "<==" ImpliedBy Expr.AssocLeft,
-                  binaryOperator "==>" Implies Expr.AssocRight]
-                ,[binaryOperator "<==>" EquivalentTo Expr.AssocLeft,
-                  binaryOperator "<!=>" NotEquivalentTo Expr.AssocLeft]]
+operatorTable = [ [ unaryOperator "+" UnaryPlus
+                  , unaryOperator "-" UnaryMinus
+                  , unaryOperator "~" BitwiseNot
+                  , unaryOperator "!" LogicalNot]
+                 , [ binaryOperator "*" Times Expr.AssocLeft
+                   , binaryOperator "%" Modulo Expr.AssocLeft
+                   , binaryOperator "/" DividedBy Expr.AssocLeft]
+                , [ binaryOperator "+" Plus Expr.AssocLeft
+                  , binaryOperator "-" Minus Expr.AssocLeft]
+                , [ binaryOperator "<<" LeftShift Expr.AssocLeft
+                  , binaryOperator ">>" RightShift Expr.AssocLeft]
+                , [ binaryOperator "<" LessThan Expr.AssocLeft
+                  , binaryOperator "<=" AtMost Expr.AssocLeft
+                  , binaryOperator ">" GreaterThan Expr.AssocLeft
+                  , binaryOperator ">=" AtLeast Expr.AssocLeft]
+                , [ binaryOperator "==" EqualTo Expr.AssocLeft
+                  , binaryOperator "!=" NotEqualTo Expr.AssocLeft]
+                , [ binaryOperator "&" BitwiseAnd Expr.AssocLeft]
+                , [ binaryOperator "^" BitwiseXor Expr.AssocLeft]
+                , [ binaryOperator "|" BitwiseOr Expr.AssocLeft]
+                , [ binaryOperator "&&" LogicalAnd Expr.AssocLeft]
+                , [ binaryOperator "^^" LogicalXor Expr.AssocLeft]
+                , [ binaryOperator "||" LogicalOr Expr.AssocLeft]
+                , [ binaryOperator "<==" ImpliedBy Expr.AssocLeft
+                  , binaryOperator "==>" Implies Expr.AssocRight]
+                , [ binaryOperator "<==>" EquivalentTo Expr.AssocLeft
+                  , binaryOperator "<!=>" NotEquivalentTo Expr.AssocLeft]]
 
-unaryOperator symbol operator = Expr.Prefix (reservedOpToken symbol >> return (unaryOperation operator))
-binaryOperator symbol operator assoc = Expr.Infix (reservedOpToken symbol >> return (binaryOperation operator)) assoc
+unaryOperator symbol operator = Expr.Prefix (operation symbol (unaryOperation operator))
 
-unaryOperation :: UnaryOperator -> ExpressionAst -> ExpressionAst
-unaryOperation op exp = ExpressionAst (UnaryOperation op exp) Unknown
+binaryOperator symbol operator assoc = Expr.Infix (operation symbol (binaryOperation operator)) assoc
 
-binaryOperation :: BinaryOperator -> ExpressionAst -> ExpressionAst -> ExpressionAst
-binaryOperation op left right = ExpressionAst (BinaryOperation op left right) Unknown
+operation :: String -> (SourcePos -> a) -> Parser a
+operation symbol op = do
+  reservedOpToken symbol
+  addPosition . return $ op
+
+unaryOperation :: UnaryOperator -> SourcePos -> ExpressionAst -> ExpressionAst
+unaryOperation op pos exp = ExpressionAst (UnaryOperation op exp) Unknown pos
+
+binaryOperation :: BinaryOperator -> SourcePos -> ExpressionAst -> ExpressionAst -> ExpressionAst
+binaryOperation op pos left right = ExpressionAst (BinaryOperation op left right) Unknown pos
 
 term :: Parser ExpressionAst
 term = do
@@ -124,10 +133,16 @@ term = do
   <|> parensToken expressionAst
   <?> "expression"
 
+addPosition :: Parser (SourcePos -> a) -> Parser a
+addPosition parser = do
+  ast <- parser
+  pos <- getPosition
+  return $ ast pos
+
 simpleExpressionAst :: Parser ExpressionAst
 simpleExpressionAst = do
   t <- expression
-  return $ ExpressionAst t Unknown
+  addPosition . return $ ExpressionAst t Unknown
 
 expression :: Parser Expression
 expression = try boolean
