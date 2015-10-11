@@ -44,7 +44,7 @@ extern = do
 signature :: Parser Signature
 signature = do
   name <- identifierToken
-  args <- parensToken $ many typedVariable
+  args <- parensToken $ commaSep typedVariable
   reservedToken ":"
   retType <- typeExpression
   return $ Signature name args retType
@@ -52,6 +52,7 @@ signature = do
 typedVariable :: Parser TypedVariable
 typedVariable = do
   name <- identifierToken
+  reservedToken ":"
   varType <- typeExpression
   return $ TypedVariable name varType
 
@@ -173,7 +174,7 @@ variable = do
 call :: Parser Expression
 call = do
   name <- identifierToken
-  args <- parensToken $ many expressionAst
+  args <- parensToken $ commaSep expressionAst
   return $ Call name args
 
 conditional :: Parser Expression
@@ -194,10 +195,7 @@ contents p = do
   return r
 
 toplevel :: Parser [DeclarationOrExpression]
-toplevel = many $ do
-    def <- declarationOrExpression
-    reservedOpToken ";"
-    return def
+toplevel = semiSep declarationOrExpression
 
 parseToplevel :: String -> String -> Either ParseError [DeclarationOrExpression]
 parseToplevel source s = parse (contents toplevel) source s

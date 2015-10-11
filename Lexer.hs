@@ -38,11 +38,11 @@ identifierToken = Token.identifier lexer
 parensToken :: Parser a -> Parser a
 parensToken = Token.parens lexer
 
-semiSepToken :: Parser a -> Parser [a]
-semiSepToken = Token.semiSep lexer
+semiSep :: Parser a -> Parser [a]
+semiSep = Token.semiSep lexer
 
-commaSepToken :: Parser a -> Parser [a]
-commaSepToken = Token.commaSep lexer
+commaSep :: Parser a -> Parser [a]
+commaSep = Token.commaSep lexer
 
 reservedToken :: String -> Parser ()
 reservedToken = Token.reserved lexer

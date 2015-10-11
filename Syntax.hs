@@ -14,8 +14,8 @@ data UnaryOperator
 unarySymbol :: UnaryOperator -> String
 unarySymbol UnaryPlus  = "+"
 unarySymbol UnaryMinus = "-"
-unarySymbol BitwiseNot = "!"
-unarySymbol LogicalNot = "~"
+unarySymbol BitwiseNot = "~"
+unarySymbol LogicalNot = "!"
 
 unaryOperators :: [UnaryOperator]
 unaryOperators = enumFrom $ toEnum 0

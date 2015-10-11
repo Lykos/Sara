@@ -2,6 +2,7 @@ module Main where
 
 import Parser
 import TypeChecker
+import PrettyPrinter
 
 import Control.Monad.Trans
 
@@ -13,11 +14,14 @@ process line = do
   case parsed of
     Left err -> print err
     Right asts -> do
-      mapM_ print asts
+      putStrLn "\nParsed AST:"
+      putStrLn $ prettyRender asts
       let typed = typeCheck asts
       case typed of
         Error err        -> print err
-        Result typedAsts -> mapM_ print typedAsts
+        Result typedAsts -> do
+          putStrLn "\nTyped AST:"
+          putStrLn $ prettyRender typedAsts
 
 main :: IO ()
 main = getLine >>= process
