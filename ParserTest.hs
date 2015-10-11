@@ -79,10 +79,10 @@ boolean :: Gen Expression
 boolean = liftM Syntax.Boolean arbitrary
 
 integer :: Gen Expression
-integer = liftM Syntax.Integer arbitrary
+integer = liftM (Syntax.Integer . abs) arbitrary
 
 double :: Gen Expression
-double = liftM Syntax.Double arbitrary
+double = liftM (Syntax.Double . abs) arbitrary
 
 variable :: Gen Expression
 variable = liftM Variable identifier
@@ -178,7 +178,8 @@ instance Arbitrary Declaration where
   shrink (Function sig body) = [Function s b | (s, b) <- shrink (sig, body)]
   shrink _                   = []
 
-prop_prettyInv xs = code `counterexample` liftBool (clearPos (Parser.parse "<testinput>" code) == Right xs)
+prop_prettyInv xs = show parsed `counterexample` (code `counterexample` liftBool (parsed == Right xs))
   where code = prettyRender xs
+        parsed = clearPos (Parser.parse testfile code)
 
 parserCheck = $quickCheckAll
