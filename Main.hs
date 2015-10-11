@@ -9,8 +9,8 @@ import Control.Monad.Trans
 outputStrLn = putStrLn
 
 process :: String -> IO ()
-process line = do
-  let parsed = parse "<stdin>" line
+process contents = do
+  let parsed = parse "<stdin>" contents
   case parsed of
     Left err -> print err
     Right asts -> do
@@ -26,4 +26,4 @@ process line = do
           putStrLn $ prettyRender typedAsts
 
 main :: IO ()
-main = getLine >>= process
+main = getContents >>= process
