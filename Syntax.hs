@@ -9,7 +9,16 @@ data UnaryOperator
   | UnaryMinus
   | BitwiseNot
   | LogicalNot
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum)
+
+unarySymbol :: UnaryOperator -> String
+unarySymbol UnaryPlus  = "+"
+unarySymbol UnaryMinus = "-"
+unarySymbol BitwiseNot = "!"
+unarySymbol LogicalNot = "~"
+
+unaryOperators :: [UnaryOperator]
+unaryOperators = enumFrom $ toEnum 0
 
 data BinaryOperator
   = Times
@@ -35,7 +44,35 @@ data BinaryOperator
   | ImpliedBy
   | EquivalentTo
   | NotEquivalentTo
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum)
+
+binarySymbol :: BinaryOperator -> String
+binarySymbol Times           = "*"
+binarySymbol DividedBy       = "/"
+binarySymbol Modulo          = "%"
+binarySymbol Plus            = "+"
+binarySymbol Minus           = "-"
+binarySymbol LeftShift       = "<<"
+binarySymbol RightShift      = ">>"
+binarySymbol LessThan        = "<"
+binarySymbol AtMost          = "<="
+binarySymbol GreaterThan     = ">"
+binarySymbol AtLeast         = ">="
+binarySymbol EqualTo         = "=="
+binarySymbol NotEqualTo      = "!="
+binarySymbol BitwiseAnd      = "&"
+binarySymbol BitwiseXor      = "^"
+binarySymbol BitwiseOr       = "|"
+binarySymbol LogicalAnd      = "&&"
+binarySymbol LogicalXor      = "^^"
+binarySymbol LogicalOr       = "||"
+binarySymbol Implies         = "==>"
+binarySymbol ImpliedBy       = "<=="
+binarySymbol EquivalentTo    = "<==>"
+binarySymbol NotEquivalentTo = "<!=>"
+
+binaryOperators :: [BinaryOperator]
+binaryOperators = enumFrom $ toEnum 0
 
 -- Declaration AST node that contains the declaration and some metadata.
 data DeclarationAst

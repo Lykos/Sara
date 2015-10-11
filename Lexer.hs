@@ -1,5 +1,6 @@
 module Lexer where
 
+import Syntax
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
@@ -9,16 +10,9 @@ import qualified Text.Parsec.Token as Token
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
   where
-    ops = ["!", "~",
-           "*", "/", "%",
-           "+", "-",
-           "<<", ">>",
-           "<", "<=", ">", ">=",
-           "==", "!=",
-           "&", "^", "|",
-           "&&", "^^", "||",
-           "<==", "==>", "<==>", "<!=>",
-           ";", ":"]
+    ops = map unarySymbol unaryOperators
+          ++ map binarySymbol binaryOperators
+          ++ [";", ":"]
     names = ["function", "extern", "if", "then", "else", "true", "false", "Boolean", "Integer", "Double"]
     style = emptyDef {
                Token.commentStart = "/*"
@@ -27,8 +21,6 @@ lexer = Token.makeTokenParser style
              , Token.nestedComments = True
              , Token.identStart = letter <|> char '_'
              , Token.identLetter = alphaNum <|> char '_'
-             , Token.opStart = oneOf "<=>*/%&|;!~"
-             , Token.opLetter = oneOf "=&|><"
              , Token.reservedOpNames = ops
              , Token.reservedNames = names
 	     , Token.caseSensitive = True

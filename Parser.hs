@@ -84,37 +84,37 @@ toplevelExpression = do
 expressionAst :: Parser ExpressionAst
 expressionAst = Expr.buildExpressionParser operatorTable term
 
-operatorTable = [ [ unaryOperator "+" UnaryPlus
-                  , unaryOperator "-" UnaryMinus
-                  , unaryOperator "~" BitwiseNot
-                  , unaryOperator "!" LogicalNot]
-                 , [ binaryOperator "*" Times Expr.AssocLeft
-                   , binaryOperator "%" Modulo Expr.AssocLeft
-                   , binaryOperator "/" DividedBy Expr.AssocLeft]
-                , [ binaryOperator "+" Plus Expr.AssocLeft
-                  , binaryOperator "-" Minus Expr.AssocLeft]
-                , [ binaryOperator "<<" LeftShift Expr.AssocLeft
-                  , binaryOperator ">>" RightShift Expr.AssocLeft]
-                , [ binaryOperator "<" LessThan Expr.AssocLeft
-                  , binaryOperator "<=" AtMost Expr.AssocLeft
-                  , binaryOperator ">" GreaterThan Expr.AssocLeft
-                  , binaryOperator ">=" AtLeast Expr.AssocLeft]
-                , [ binaryOperator "==" EqualTo Expr.AssocLeft
-                  , binaryOperator "!=" NotEqualTo Expr.AssocLeft]
-                , [ binaryOperator "&" BitwiseAnd Expr.AssocLeft]
-                , [ binaryOperator "^" BitwiseXor Expr.AssocLeft]
-                , [ binaryOperator "|" BitwiseOr Expr.AssocLeft]
-                , [ binaryOperator "&&" LogicalAnd Expr.AssocLeft]
-                , [ binaryOperator "^^" LogicalXor Expr.AssocLeft]
-                , [ binaryOperator "||" LogicalOr Expr.AssocLeft]
-                , [ binaryOperator "<==" ImpliedBy Expr.AssocLeft
-                  , binaryOperator "==>" Implies Expr.AssocRight]
-                , [ binaryOperator "<==>" EquivalentTo Expr.AssocLeft
-                  , binaryOperator "<!=>" NotEquivalentTo Expr.AssocLeft]]
+operatorTable = [ [ unaryOperator UnaryPlus
+                  , unaryOperator UnaryMinus
+                  , unaryOperator BitwiseNot
+                  , unaryOperator LogicalNot]
+                 , [ binaryOperator Times Expr.AssocLeft
+                   , binaryOperator Modulo Expr.AssocLeft
+                   , binaryOperator DividedBy Expr.AssocLeft]
+                , [ binaryOperator Plus Expr.AssocLeft
+                  , binaryOperator Minus Expr.AssocLeft]
+                , [ binaryOperator LeftShift Expr.AssocLeft
+                  , binaryOperator RightShift Expr.AssocLeft]
+                , [ binaryOperator LessThan Expr.AssocLeft
+                  , binaryOperator AtMost Expr.AssocLeft
+                  , binaryOperator GreaterThan Expr.AssocLeft
+                  , binaryOperator AtLeast Expr.AssocLeft]
+                , [ binaryOperator EqualTo Expr.AssocLeft
+                  , binaryOperator NotEqualTo Expr.AssocLeft]
+                , [ binaryOperator BitwiseAnd Expr.AssocLeft]
+                , [ binaryOperator BitwiseXor Expr.AssocLeft]
+                , [ binaryOperator BitwiseOr Expr.AssocLeft]
+                , [ binaryOperator LogicalAnd Expr.AssocLeft]
+                , [ binaryOperator LogicalXor Expr.AssocLeft]
+                , [ binaryOperator LogicalOr Expr.AssocLeft]
+                , [ binaryOperator ImpliedBy Expr.AssocLeft
+                  , binaryOperator Implies Expr.AssocRight]
+                , [ binaryOperator EquivalentTo Expr.AssocLeft
+                  , binaryOperator NotEquivalentTo Expr.AssocLeft]]
 
-unaryOperator symbol operator = Expr.Prefix (operation symbol (unaryOperation operator))
+unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOperation operator))
 
-binaryOperator symbol operator assoc = Expr.Infix (operation symbol (binaryOperation operator)) assoc
+binaryOperator operator assoc = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator)) assoc
 
 operation :: String -> (SourcePos -> a) -> Parser a
 operation symbol op = do
