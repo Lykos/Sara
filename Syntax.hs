@@ -12,7 +12,7 @@ data UnaryOperator
 
 data BinaryOperator
   = Times
-  | Divide
+  | DividedBy
   | Modulo
   | Plus
   | Minus
@@ -37,23 +37,40 @@ data BinaryOperator
   deriving (Eq, Ord, Show)
 
 data Declaration
-  = Function Signature Expression
+  = Function Signature ExpressionAst
   | Extern Signature
   deriving (Eq, Ord, Show)
 
-data Signature = Signature Name [TypedVariable] Type
+signature :: Declaration -> Signature
+signature (Function sig _) = sig
+signature (Extern sig)     = sig
+
+data Signature
+  = Signature { funcName :: Name
+              , args :: [TypedVariable]
+              , returnType :: Type }
   deriving (Eq, Ord, Show)
 
-data TypedVariable = TypedVariable Name Type
+data TypedVariable
+  = TypedVariable { varName :: Name
+                  , varType :: Type }
+  deriving (Eq, Ord, Show)
+
+-- Expression AST node that contains the expression and some metadata.
+data ExpressionAst
+  = ExpressionAst { astExp :: Expression
+                  , expType :: Type }
   deriving (Eq, Ord, Show)
 
 data Expression
   = Boolean Bool
   | Integer Integer
   | Double Double
-  | UnaryOperation UnaryOperator Expression Type
-  | BinaryOperation BinaryOperator Expression Expression Type
-  | Variable Name Type
-  | Call Name [Expression] Type
-  | Conditional Expression Expression Expression Type
+  | UnaryOperation UnaryOperator ExpressionAst
+  | BinaryOperation BinaryOperator ExpressionAst ExpressionAst
+  | Variable Name
+  | Call Name [ExpressionAst]
+  | Conditional ExpressionAst ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
+
+type DeclarationOrExpression = Either Declaration ExpressionAst
