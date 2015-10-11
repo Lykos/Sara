@@ -26,14 +26,13 @@ prettyDeclarationAst :: DeclarationAst -> Doc
 prettyDeclarationAst = prettyDeclaration . decl
 
 prettyDeclaration :: Declaration -> Doc
-prettyDeclaration (Function sig body) = prettySignature sig
+prettyDeclaration (Function sig body) = text "function" <+> prettySignature sig
                                         $+$ nest indentation (prettyExpressionAst body)
-prettyDeclaration (Extern sig)        = prettySignature sig
+prettyDeclaration (Extern sig)        = text "extern" <+> prettySignature sig
 
 prettySignature :: Signature -> Doc
 prettySignature (Signature name args retType) = prettyTyped sig retType
-  where sig = text "function"
-              <+> text name
+  where sig = text name
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
 
 prettyTyped :: Doc -> Type -> Doc

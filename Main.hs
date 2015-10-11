@@ -10,7 +10,7 @@ outputStrLn = putStrLn
 
 process :: String -> IO ()
 process line = do
-  let parsed = parseToplevel "<stdin>" line
+  let parsed = parse "<stdin>" line
   case parsed of
     Left err -> print err
     Right asts -> do

@@ -1,4 +1,4 @@
-module Parser (parseToplevel) where
+module Parser (Parser.parse) where
 
 import Text.Parsec
 import Text.Parsec.String (Parser)
@@ -197,5 +197,5 @@ contents p = do
 toplevel :: Parser [DeclarationOrExpression]
 toplevel = semiSep declarationOrExpression
 
-parseToplevel :: String -> String -> Either ParseError [DeclarationOrExpression]
-parseToplevel source s = parse (contents toplevel) source s
+parse :: String -> String -> Either ParseError [DeclarationOrExpression]
+parse source s = Text.Parsec.parse (contents toplevel) source s
