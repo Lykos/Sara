@@ -66,10 +66,7 @@ typedVariable :: Gen TypedVariable
 typedVariable = liftM2 TypedVariable identifier typ
 
 expressionAst :: Gen ExpressionAst
-expressionAst = do
-    astExp <- expression
-    expPos <- position
-    return $ ExpressionAst astExp Unknown expPos
+expressionAst = liftM3 ExpressionAst expression typ position
 
 typ :: Gen Type
 typ = elements [Types.Boolean, Types.Integer, Types.Double]
@@ -159,3 +156,11 @@ instance Arbitrary Declaration where
   shrink (Function sig body) = [Function s b | (s, b) <- shrink (sig, body)]
   shrink _                   = []
 
+clearPositions :: [DeclarationOrExpression] -> [DeclarationOrExpression]
+clearPositions = mapDeclarationAst clearPosDeclarationAst . mapExpressionAst clearPosExpressionAst
+  where clearPosDeclarationAst (DeclarationAst decl _) = DeclarationAst decl pos
+        clearPosExpressionAst (ExpressionAst exp typ _) = ExpressionAst exp typ pos
+
+clearTypes :: [DeclarationOrExpression] -> [DeclarationOrExpression]
+clearTypes = mapExpressionAst clearTypesExpressionAst
+  where clearTypesExpressionAst (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos

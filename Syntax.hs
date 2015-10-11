@@ -1,5 +1,6 @@
 module Syntax where
 
+import Data.Bifunctor
 import Types
 import Text.Parsec.Pos
 
@@ -106,6 +107,24 @@ data ExpressionAst
                   , expType :: Type
                   , expPos :: SourcePos }
   deriving (Eq, Ord, Show)
+
+mapExpressionAstExpressionAst :: (ExpressionAst -> ExpressionAst) -> ExpressionAst -> ExpressionAst
+mapExpressionAstExpressionAst f (ExpressionAst exp typ pos) = f (ExpressionAst mappedExp typ pos)
+  where mappedExp = case exp of
+          BinaryOperation op left right  -> BinaryOperation op (mapExpressionAstExpressionAst f left) (mapExpressionAstExpressionAst f right)
+          UnaryOperation op exp          -> UnaryOperation op (mapExpressionAstExpressionAst f exp)
+          Conditional cond ifExp elseExp -> Conditional (mapExpressionAstExpressionAst f cond)
+                                            (mapExpressionAstExpressionAst f ifExp) (mapExpressionAstExpressionAst f elseExp)
+          Call name args                 -> Call name (map (mapExpressionAstExpressionAst f) args)
+          e                              -> e
+
+mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> [DeclarationOrExpression] -> [DeclarationOrExpression]
+mapExpressionAst f = map (second (mapExpressionAstExpressionAst f) . first mapExpressionAstFunction)
+  where mapExpressionAstFunction (DeclarationAst (Function sig body) pos) = DeclarationAst (Function sig (mapExpressionAstExpressionAst f body)) pos
+        mapExpressionAstFunction d                                        = d
+
+mapDeclarationAst :: (DeclarationAst -> DeclarationAst) -> [DeclarationOrExpression] -> [DeclarationOrExpression]
+mapDeclarationAst = map . first
 
 data Expression
   = Boolean Bool
