@@ -28,10 +28,16 @@ idenN :: Gen [Char]
 idenN = listOf $ elements idenN'
 
 identifier :: Gen String
-identifier = iden0 >>= \i0 -> idenN >>= return . (i0:)
+identifier = do
+  i0 <- iden0
+  iN <- idenN
+  return (i0:iN)
 
 shrinkIdentifier :: String -> [String]
 shrinkIdentifier = filter (\a -> not $ null a) . shrink
+
+shrinkWithIdentifier :: Arbitrary a => String -> a -> [(String, a)]
+shrinkWithIdentifier i b = [(i', b) | i' <- shrinkIdentifier i] ++ [(i, b') | b' <- shrink b]
 
 testfile :: String
 testfile = "<testfile>"
@@ -146,7 +152,7 @@ instance Arbitrary TypedVariable where
 
 instance Arbitrary Signature where
   arbitrary = ParserTest.signature
-  shrink (Signature name args typ) = [Signature n a typ | (n, a) <- shrink (name, args)]
+  shrink (Signature name args typ) = [Signature n a typ | (n, a) <- shrinkWithIdentifier name args]
 
 instance Arbitrary ExpressionAst where
   arbitrary = expressionAst
@@ -157,10 +163,11 @@ instance Arbitrary Expression where
   shrink (Syntax.Boolean b)               = map Syntax.Boolean $ shrink b
   shrink (Syntax.Integer n)               = map Syntax.Integer $ shrink n
   shrink (Syntax.Double d)                = map Syntax.Double $ shrink d
+  shrink (Variable v)                     = map Variable $ shrinkIdentifier v
   shrink (BinaryOperation op left right)  = map astExp [left, right] ++ [BinaryOperation op l r | (l, r) <- shrink (left, right)]
   shrink (UnaryOperation op exp)          = map astExp [exp] ++ [UnaryOperation op e | e <- shrink exp]
   shrink (Conditional cond ifExp elseExp) = map astExp [cond, ifExp, elseExp] ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
-  shrink (Call name args)                 = (args >>= map astExp . shrink) ++ [Call n a | (n, a) <- shrink (name, args)]
+  shrink (Call name args)                 = (args >>= map astExp . shrink) ++ [Call n a | (n, a) <- shrinkWithIdentifier name args]
 
 instance Arbitrary DeclarationAst where
   arbitrary = declarationAst
