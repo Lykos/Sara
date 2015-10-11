@@ -28,10 +28,6 @@ data TypeError =
 instance Show TypeError where
   show err = show (errorPos err) ++ ":\n" ++ errorMsg err
 
-instance Functor TypeErrorOr where
-  fmap f (Error e)  = Error e
-  fmap f (Result a) = Result $ f a
-
 instance Monad TypeErrorOr where
   Error e >>= f  = Error e
   Result r >>= f = f r
@@ -40,7 +36,7 @@ instance Monad TypeErrorOr where
 typeCheck :: [DeclarationOrExpression] -> TypeErrorOr [DeclarationOrExpression]
 typeCheck asts = do
   funcs <- functions asts
-  conjunctErrors $ map (typeCheckOne funcs) asts
+  sequence $ map (typeCheckOne funcs) asts
 
 typeCheckOne :: FunctionMap -> DeclarationOrExpression -> TypeErrorOr DeclarationOrExpression
 typeCheckOne funcs (Left d)  = typeCheckDeclaration funcs d >>= return . Left
@@ -97,8 +93,8 @@ typeCheckExp funcs vars ast =
       addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType pos)
     Variable name -> addType e (varType name)
     Call name args -> do
-      typedArgs <- conjunctErrors $ map typedSubExp args
-      argTypes <- conjunctErrors $ map astType typedArgs
+      typedArgs <- sequence $ map typedSubExp args
+      argTypes <- sequence $ map astType typedArgs
       addType (Call name typedArgs) (funcType name argTypes)
     Conditional cond ifExp elseExp -> do
       typedCond <- typedSubExp cond
@@ -134,15 +130,6 @@ typeCheckExp funcs vars ast =
         funcType name argTypes = case (FunctionType name argTypes) `Map.lookup` funcs of
           Nothing -> unknownFunction name argTypes pos
           Just t  -> Result t
-
-conjunctErrors :: [TypeErrorOr a] -> TypeErrorOr [a]
-conjunctErrors = foldr conjunctTwoErrors (Result [])
-
-conjunctTwoErrors :: TypeErrorOr a -> TypeErrorOr [a] -> TypeErrorOr [a]
-conjunctTwoErrors a as = do
-  b <- a
-  bs <- as
-  return $ b : bs
 
 unOpType :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr Type
 unOpType op t pos = case (TypedUnOp op t) `Map.lookup` typedUnOps of
