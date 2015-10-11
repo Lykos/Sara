@@ -84,9 +84,7 @@ variable :: Gen Expression
 variable = liftM Variable identifier
 
 call :: Gen Expression
-call = sized call'
-  where call' 0 = error "Tried to generate a call for size 0."
-        call' n = liftM2 Call identifier (resize (n - 1) TestUtils.args)
+call = liftM2 Call identifier (scale (\n -> n - 1) TestUtils.args)
 
 args :: Gen [ExpressionAst]
 args = sized args'
@@ -95,21 +93,15 @@ args = sized args'
         intRoot = round . sqrt . fromIntegral
 
 binaryOperation :: Gen Expression
-binaryOperation = sized binaryOperation'
-  where binaryOperation' 0 = error "Tried to generate a binary operation for size 0."
-        binaryOperation' n = liftM3 BinaryOperation arbitrary subtree subtree
-          where subtree = resize (n `div` 2) expressionAst
+binaryOperation = liftM3 BinaryOperation arbitrary subtree subtree
+  where subtree = scale (\n -> n `div` 2) expressionAst
                                  
 unaryOperation :: Gen Expression
-unaryOperation = sized unaryOperation'
-  where unaryOperation' 0 =  error "Tried to generate a unary operation for size 0."
-        unaryOperation' n = liftM2 UnaryOperation arbitrary (resize (n - 1) expressionAst)
+unaryOperation = liftM2 UnaryOperation arbitrary (scale (\n -> n - 1) expressionAst)
 
 conditional :: Gen Expression
-conditional = sized conditional'
-  where conditional' 0 =  error "Tried to generate a conditional for size 0."
-        conditional' n = liftM3 Conditional subtree subtree subtree
-          where subtree = resize (n `div` 3) expressionAst
+conditional = liftM3 Conditional subtree subtree subtree
+  where subtree = scale (\n -> n `div` 3) expressionAst
 
 expression :: Gen Expression
 expression = sized expression'
