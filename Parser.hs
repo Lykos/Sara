@@ -10,8 +10,6 @@ import Lexer
 import Syntax
 import Types
 
-type DeclarationOrExpression = Either Declaration ExpressionAst
-
 declarationOrExpression :: Parser DeclarationOrExpression
 declarationOrExpression = try topLevelDeclaration
                           <|> toplevelExpression
@@ -30,14 +28,14 @@ declaration = try function
 function :: Parser Declaration
 function = do
   reservedToken "function"
-  sig <- signature
+  sig <- Parser.signature
   body <- expressionAst
   return $ Function sig body
 
 extern :: Parser Declaration
 extern = do
   reservedToken "extern"
-  sig <- signature
+  sig <- Parser.signature
   return $ Extern sig
 
 signature :: Parser Signature

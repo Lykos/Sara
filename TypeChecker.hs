@@ -1,4 +1,4 @@
-module TypeChecker (TypeErrorOr
+module TypeChecker (TypeErrorOr(..)
                    , typeCheck) where
 
 
