@@ -147,6 +147,7 @@ simpleExpressionAst = do
 
 expression :: Parser Expression
 expression = try boolean
+             <|> try double
              <|> try integer
              <|> try call
              <|> try conditional

@@ -15,6 +15,8 @@ process line = do
     Left err -> print err
     Right asts -> do
       putStrLn "\nParsed AST:"
+      print asts
+      putStrLn "\nPretty AST:"
       putStrLn $ prettyRender asts
       let typed = typeCheck asts
       case typed of
