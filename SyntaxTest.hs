@@ -3,7 +3,7 @@
 module SyntaxTest (syntaxCheck) where
 
 import Syntax
-import CommonArbitraryInstances
+import TestUtils
 import Test.QuickCheck
 import Test.QuickCheck.All
 
