@@ -50,20 +50,24 @@ prettyType = text . show
 prettyExpressionAst :: ExpressionAst -> Doc
 prettyExpressionAst (ExpressionAst exp typ _) = case typ of
   Unknown -> prettyExpression exp
-  _       -> prettyTyped (prettyTypeTerm exp) typ
+  _       -> prettyTyped (prettyTerm exp) typ
+
+prettyBinaryTermAst :: ExpressionAst -> Doc
+prettyBinaryTermAst (ExpressionAst exp typ _) = prettyTyped (prettyBinaryTerm exp) typ
 
 prettyTermAst :: ExpressionAst -> Doc
 prettyTermAst (ExpressionAst exp typ _) = prettyTyped (prettyTerm exp) typ
 
-prettyTerm :: Expression -> Doc
-prettyTerm exp = case exp of
+prettyBinaryTerm :: Expression -> Doc
+prettyBinaryTerm exp = case exp of
   (BinaryOperation _ _ _) -> parens $ prettyExpression exp
+  (Conditional _ _ _)     -> parens $ prettyExpression exp
   _                       -> prettyExpression exp
 
-prettyTypeTerm :: Expression -> Doc
-prettyTypeTerm exp = case exp of
+prettyTerm :: Expression -> Doc
+prettyTerm exp = case exp of
   (UnaryOperation _ _) -> parens $ prettyExpression exp
-  _                    -> prettyTerm exp
+  _                    -> prettyBinaryTerm exp
 
 prettyExpression :: Expression -> Doc
 prettyExpression (Syntax.Boolean True)            = text "true"
@@ -72,9 +76,9 @@ prettyExpression (Syntax.Integer n)               = integer n
 prettyExpression (Syntax.Double d)                = double d
 prettyExpression (UnaryOperation op exp)          = (text . unarySymbol $ op)
                                                     <> prettyTermAst exp
-prettyExpression (BinaryOperation op left right)  = prettyTermAst left
+prettyExpression (BinaryOperation op left right)  = prettyBinaryTermAst left
                                                     <+> (text . binarySymbol $ op)
-                                                    <+> prettyTermAst right
+                                                    <+> prettyBinaryTermAst right
 prettyExpression (Variable var)                   = text var
 prettyExpression (Call name args)                 = text name
                                                     <> (parens . hsep . punctuate comma . map prettyExpressionAst) args
