@@ -123,7 +123,7 @@ expression = sized expression'
           expression' n | n > 0 = oneof $ leaves ++ innerNodes
 
 clearPosDeclarationOrExpression :: DeclarationOrExpression -> DeclarationOrExpression
-clearPosDeclarationOrExpression (Left e)  = Left $ clearPosDeclaration e
+clearPosDeclarationOrExpression (Left e)  = Left $ clearPosDeclarationAst e
 clearPosDeclarationOrExpression (Right e) = Right $ clearPosExpressionAst e
 
 clearPosExpressionAst :: ExpressionAst -> ExpressionAst
@@ -136,8 +136,12 @@ clearPosExpression (Conditional cond ifExp elseExp) = Conditional (clearPosExpre
 clearPosExpression (Call name args)                 = Call name (map clearPosExpressionAst args)
 clearPosExpression e                                = e
 
-clearPosDeclaration :: DeclarationAst -> DeclarationAst
-clearPosDeclaration (DeclarationAst decl _) = DeclarationAst decl pos
+clearPosDeclarationAst :: DeclarationAst -> DeclarationAst
+clearPosDeclarationAst (DeclarationAst decl _) = DeclarationAst (clearPosDeclaration decl) pos
+
+clearPosDeclaration :: Declaration -> Declaration
+clearPosDeclaration (Function sig body) = Function sig $ clearPosExpressionAst body
+clearPosDeclaration decl                = decl
 
 clearPosDeclarationsOrExpressions :: [DeclarationOrExpression] -> [DeclarationOrExpression]
 clearPosDeclarationsOrExpressions = map clearPosDeclarationOrExpression
@@ -178,8 +182,14 @@ instance Arbitrary Declaration where
   shrink (Function sig body) = [Function s b | (s, b) <- shrink (sig, body)]
   shrink _                   = []
 
-prop_prettyInv xs = show parsed `counterexample` (code `counterexample` liftBool (parsed == Right xs))
-  where code = prettyRender xs
-        parsed = clearPos (Parser.parse testfile code)
+prop_prettyInv :: [DeclarationOrExpression] -> Property
+prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
+  where example = "\nExpected:\n" ++ show expected
+                  ++ "\nActual:\n" ++ show actual
+                  ++ "\nInput:\n" ++ code
+        expected :: Either ParseError [DeclarationOrExpression]
+        expected = Right xs
+        code = prettyRender xs
+        actual = clearPos (Parser.parse testfile code)
 
 parserCheck = $quickCheckAll
