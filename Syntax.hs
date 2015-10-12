@@ -3,77 +3,9 @@ module Syntax where
 import Data.Bifunctor
 import Types
 import Text.Parsec.Pos
+import Operators
 
 type Name = String
-data UnaryOperator
-  = UnaryPlus
-  | UnaryMinus
-  | BitwiseNot
-  | LogicalNot
-  deriving (Eq, Ord, Show, Enum)
-
-unarySymbol :: UnaryOperator -> String
-unarySymbol UnaryPlus  = "+"
-unarySymbol UnaryMinus = "-"
-unarySymbol BitwiseNot = "~"
-unarySymbol LogicalNot = "!"
-
-unaryOperators :: [UnaryOperator]
-unaryOperators = enumFrom $ toEnum 0
-
-data BinaryOperator
-  = Times
-  | DividedBy
-  | Modulo
-  | Plus
-  | Minus
-  | LeftShift
-  | RightShift
-  | LessThan
-  | AtMost
-  | GreaterThan
-  | AtLeast
-  | EqualTo
-  | NotEqualTo
-  | BitwiseAnd
-  | BitwiseXor
-  | BitwiseOr
-  | LogicalAnd
-  | LogicalXor
-  | LogicalOr
-  | Implies
-  | ImpliedBy
-  | EquivalentTo
-  | NotEquivalentTo
-  deriving (Eq, Ord, Show, Enum)
-
-binarySymbol :: BinaryOperator -> String
-binarySymbol Times           = "*"
-binarySymbol DividedBy       = "/"
-binarySymbol Modulo          = "%"
-binarySymbol Plus            = "+"
-binarySymbol Minus           = "-"
-binarySymbol LeftShift       = "<<"
-binarySymbol RightShift      = ">>"
-binarySymbol LessThan        = "<"
-binarySymbol AtMost          = "<="
-binarySymbol GreaterThan     = ">"
-binarySymbol AtLeast         = ">="
-binarySymbol EqualTo         = "=="
-binarySymbol NotEqualTo      = "!="
-binarySymbol BitwiseAnd      = "&"
-binarySymbol BitwiseXor      = "^"
-binarySymbol BitwiseOr       = "|"
-binarySymbol LogicalAnd      = "&&"
-binarySymbol LogicalXor      = "^^"
-binarySymbol LogicalOr       = "||"
-binarySymbol Implies         = "==>"
-binarySymbol ImpliedBy       = "<=="
-binarySymbol EquivalentTo    = "<==>"
-binarySymbol NotEquivalentTo = "<!=>"
-
-binaryOperators :: [BinaryOperator]
-binaryOperators = enumFrom $ toEnum 0
 
 -- Declaration AST node that contains the declaration and some metadata.
 data DeclarationAst
@@ -110,21 +42,21 @@ data ExpressionAst
 
 mapExpressionAstExpressionAst :: (ExpressionAst -> ExpressionAst) -> ExpressionAst -> ExpressionAst
 mapExpressionAstExpressionAst f (ExpressionAst exp typ pos) = f (ExpressionAst mappedExp typ pos)
-  where mappedExp = case exp of
-          BinaryOperation op left right  -> BinaryOperation op (mapExpressionAstExpressionAst f left) (mapExpressionAstExpressionAst f right)
-          UnaryOperation op exp          -> UnaryOperation op (mapExpressionAstExpressionAst f exp)
-          Conditional cond ifExp elseExp -> Conditional (mapExpressionAstExpressionAst f cond)
-                                            (mapExpressionAstExpressionAst f ifExp) (mapExpressionAstExpressionAst f elseExp)
-          Call name args                 -> Call name (map (mapExpressionAstExpressionAst f) args)
-          e                              -> e
+    where mapSubExp = mapExpressionAstExpressionAst f
+          mappedExp = case exp of
+            BinaryOperation op left right  -> BinaryOperation op (mapSubExp left) (mapSubExp right)
+            UnaryOperation op exp          -> UnaryOperation op (mapSubExp exp)
+            Conditional cond ifExp elseExp -> Conditional (mapSubExp cond) (mapSubExp ifExp) (mapSubExp elseExp)
+            Call name args                 -> Call name (map (mapSubExp) args)
+            e                              -> e
 
-mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> [DeclarationOrExpression] -> [DeclarationOrExpression]
-mapExpressionAst f = map (second (mapExpressionAstExpressionAst f) . first mapExpressionAstFunction)
+mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> Program -> Program
+mapExpressionAst f (Program p) = Program $ map (second (mapExpressionAstExpressionAst f) . first mapExpressionAstFunction) p
   where mapExpressionAstFunction (DeclarationAst (Function sig body) pos) = DeclarationAst (Function sig (mapExpressionAstExpressionAst f body)) pos
         mapExpressionAstFunction d                                        = d
 
-mapDeclarationAst :: (DeclarationAst -> DeclarationAst) -> [DeclarationOrExpression] -> [DeclarationOrExpression]
-mapDeclarationAst = map . first
+mapDeclarationAst :: (DeclarationAst -> DeclarationAst) -> Program -> Program
+mapDeclarationAst f = (Program . ((map . first) f)) . program
 
 data Expression
   = Boolean Bool
@@ -138,3 +70,7 @@ data Expression
   deriving (Eq, Ord, Show)
 
 type DeclarationOrExpression = Either DeclarationAst ExpressionAst
+
+newtype Program
+  = Program { program :: [DeclarationOrExpression] }
+  deriving (Eq, Ord, Show)

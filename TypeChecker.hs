@@ -39,16 +39,16 @@ typeCheck asts = do
   sequence $ map (typeCheckOne funcs) asts
 
 typeCheckOne :: FunctionMap -> DeclarationOrExpression -> TypeErrorOr DeclarationOrExpression
-typeCheckOne funcs (Left d)  = typeCheckDeclaration funcs d >>= return . Left
+typeCheckOne funcs (Left d)  = typeCheckDeclarationAst funcs d >>= return . Left
 typeCheckOne funcs (Right e) = typeCheckExp funcs Map.empty e >>= return . Right
 
-typeCheckDeclaration :: FunctionMap -> DeclarationAst -> TypeErrorOr DeclarationAst
-typeCheckDeclaration funcs declAst = do
-  typedDecl <- typeCheckDeclarationAst funcs $ decl declAst
+typeCheckDeclarationAst :: FunctionMap -> DeclarationAst -> TypeErrorOr DeclarationAst
+typeCheckDeclarationAst funcs declAst = do
+  typedDecl <- typeCheckDeclaration funcs $ decl declAst
   return declAst { decl = typedDecl }
 
-typeCheckDeclarationAst :: FunctionMap -> Declaration -> TypeErrorOr Declaration
-typeCheckDeclarationAst funcs (Function sig body) =
+typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
+typeCheckDeclaration funcs (Function sig body) =
   let var (TypedVariable varName varType) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
   in typeCheckExp funcs vars body >>= return . Function sig
@@ -136,45 +136,10 @@ unOpType op t pos = case (TypedUnOp op t) `Map.lookup` typedUnOps of
   Nothing -> unknownUnOp op t pos
   Just t  -> Result t
 
-data TypedUnOp = TypedUnOp UnaryOperator Type
-               deriving (Eq, Ord, Show)
-
-typedUnOps :: Map.Map TypedUnOp Type
-typedUnOps = Map.fromList [ (TypedUnOp UnaryPlus Types.Integer, Types.Integer)
-                          , (TypedUnOp UnaryPlus Types.Double, Types.Double)
-                          , (TypedUnOp UnaryMinus Types.Integer, Types.Integer)
-                          , (TypedUnOp UnaryMinus Types.Double, Types.Double)
-                          , (TypedUnOp BitwiseNot Types.Integer, Types.Integer)
-                          , (TypedUnOp LogicalNot Types.Boolean, Types.Boolean)]
-
-data TypedBinOp = TypedBinOp BinaryOperator Type Type
-                deriving (Eq, Ord, Show)
-
 binOpType :: BinaryOperator -> Type -> Type -> SourcePos -> TypeErrorOr Type
 binOpType op s t pos = case (TypedBinOp op s t) `Map.lookup` typedBinOps of
   Nothing -> unknownBinOp op s t pos
   Just t  -> Result t
-
-typedBinOps :: Map.Map TypedBinOp Type
-typedBinOps = Map.fromList $
-              map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Integer)) intBinOps
-              ++ (map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Integer)) intDoubleBinOps)
-              ++ (map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Double)) intDoubleBinOps)
-              ++ (map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Boolean)) relOps)
-              ++ (map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Boolean)) relOps)
-              ++ (map (\op -> (TypedBinOp op Types.Boolean Types.Boolean, Types.Boolean)) boolOps)
-
-intBinOps :: [BinaryOperator]
-intBinOps = [Modulo, LeftShift, RightShift, BitwiseAnd, BitwiseXor, BitwiseOr]
-
-intDoubleBinOps :: [BinaryOperator]
-intDoubleBinOps = [Times, DividedBy, Plus, Minus]
-
-relOps :: [BinaryOperator]
-relOps = [LessThan, AtMost, GreaterThan, AtLeast, EqualTo, NotEqualTo]
-
-boolOps :: [BinaryOperator]
-boolOps = [LogicalAnd, LogicalXor, LogicalOr, Implies, ImpliedBy, EquivalentTo, NotEquivalentTo]
 
 unknownUnOp :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr a
 unknownUnOp op t =

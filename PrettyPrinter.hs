@@ -4,13 +4,14 @@ module PrettyPrinter (
 
 import Text.PrettyPrint
 import Types
+import Operators
 import Syntax
 
-prettyRender :: [DeclarationOrExpression] -> String
+prettyRender :: Program -> String
 prettyRender = render . pretty
 
-pretty :: [DeclarationOrExpression] -> Doc
-pretty = vsep . punctuate semi . map prettyDeclarationOrExpression
+pretty :: Program -> Doc
+pretty = vsep . punctuate semi . map prettyDeclarationOrExpression . program
 
 indentation :: Int
 indentation = 2

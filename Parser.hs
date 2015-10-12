@@ -9,6 +9,7 @@ import qualified Text.Parsec.Token as Token
 import Lexer
 import Syntax
 import Types
+import Operators
 
 declarationOrExpression :: Parser DeclarationOrExpression
 declarationOrExpression = try topLevelDeclaration
@@ -195,8 +196,10 @@ contents p = do
   eof
   return r
 
-toplevel :: Parser [DeclarationOrExpression]
-toplevel = semiSep declarationOrExpression
+toplevel :: Parser Program
+toplevel = do
+  program <- semiSep declarationOrExpression
+  return $ Program program
 
-parse :: String -> String -> Either ParseError [DeclarationOrExpression]
+parse :: String -> String -> Either ParseError Program
 parse source s = Text.Parsec.parse (contents toplevel) source s

@@ -4,6 +4,8 @@ module SyntaxTest (syntaxCheck) where
 
 import Syntax
 import TestUtils
+import Operators
+
 import Test.QuickCheck
 import Test.QuickCheck.All
 
