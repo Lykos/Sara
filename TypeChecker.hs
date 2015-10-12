@@ -1,6 +1,6 @@
 module TypeChecker (
   TypeErrorOr(..)
-  , TypeError
+  , TypeError(..)
   , typeCheck) where
 
 import Text.Parsec.Pos
@@ -8,6 +8,7 @@ import Control.Monad
 import Data.Either
 import Types
 import Syntax
+import Operators
 import qualified Data.Map.Strict as Map
 
 data FunctionType =
@@ -20,11 +21,13 @@ type VariableMap = Map.Map Name Type
 data TypeErrorOr a
   = Error TypeError
   | Result a
+  deriving (Eq, Ord, Show)
 
 data TypeError =
   TypeError { errorPos :: SourcePos
             , errorMsg :: String }
   deriving (Eq, Ord)
+
 instance Show TypeError where
   show err = show (errorPos err) ++ ":\n" ++ errorMsg err
 
@@ -33,10 +36,10 @@ instance Monad TypeErrorOr where
   Result r >>= f = f r
   return         = Result
 
-typeCheck :: [DeclarationOrExpression] -> TypeErrorOr [DeclarationOrExpression]
-typeCheck asts = do
-  funcs <- functions asts
-  sequence $ map (typeCheckOne funcs) asts
+typeCheck :: Program -> TypeErrorOr Program
+typeCheck (Program prog) = do
+  funcs <- functions $ Program prog
+  liftM Program $ sequence $ map (typeCheckOne funcs) prog
 
 typeCheckOne :: FunctionMap -> DeclarationOrExpression -> TypeErrorOr DeclarationOrExpression
 typeCheckOne funcs (Left d)  = typeCheckDeclarationAst funcs d >>= return . Left
@@ -52,10 +55,10 @@ typeCheckDeclaration funcs (Function sig body) =
   let var (TypedVariable varName varType) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
   in typeCheckExp funcs vars body >>= return . Function sig
-typeCheckDeclarationAst funcs e@(Extern _)        =  return e
+typeCheckDeclaration funcs e@(Extern _)        =  return e
 
-functions :: [DeclarationOrExpression] -> TypeErrorOr FunctionMap
-functions = functionsFromDecls . lefts
+functions :: Program -> TypeErrorOr FunctionMap
+functions = functionsFromDecls . lefts . program
 
 functionsFromDecls :: [DeclarationAst] -> TypeErrorOr FunctionMap
 functionsFromDecls d = foldr addOneFunction (Result Map.empty) d
@@ -105,8 +108,8 @@ typeCheckExp funcs vars ast =
       elseType <- astType typedElseExp
       case (condType, ifType, elseType) of
         (Types.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (Result ifType)
-                                          | otherwise             -> mismatchingCondTypes ifType elseType pos
-        (condType, _, _)                                          -> invalidCondType condType pos
+                                          | otherwise             -> mismatchingCondTypes typedIfExp typedElseExp pos
+        (condType, _, _)                                          -> invalidCondType cond
   where pos = expPos ast
         typedSubExp = typeCheckExp funcs vars
         checkNotUnknown :: Type -> SourcePos -> TypeErrorOr Type
@@ -157,13 +160,13 @@ unknownFunction :: Name -> [Type] -> SourcePos -> TypeErrorOr a
 unknownFunction name argTypes =
   typeError $ "Unknown function " ++ name ++ " for argument types " ++ show argTypes ++ "."
 
-invalidCondType :: Type -> SourcePos -> TypeErrorOr a
-invalidCondType condType =
-  typeError $ "Conditions of conditionals have to have type " ++ show Types.Boolean ++ ", found " ++ show condType
+invalidCondType :: ExpressionAst -> TypeErrorOr a
+invalidCondType cond =
+  typeError ("Conditions of conditionals have to have type " ++ show Types.Boolean ++ ", found " ++ show cond ++ ".") (expPos cond)
 
-mismatchingCondTypes :: Type -> Type -> SourcePos -> TypeErrorOr a
-mismatchingCondTypes ifType elseType =
-  typeError $ "If and Else branch of conditionals have to have the same types, found " ++ show ifType ++ " and " ++ show elseType ++ "."
+mismatchingCondTypes :: ExpressionAst -> ExpressionAst -> SourcePos -> TypeErrorOr a
+mismatchingCondTypes ifExp elseExp =
+  typeError $ "If and Else branch of conditionals have to have the same types, found " ++ show ifExp ++ " and " ++ show elseExp ++ "."
 
 ambiguousFunction :: Signature -> SourcePos -> TypeErrorOr a
 ambiguousFunction sig =

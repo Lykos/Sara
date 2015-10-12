@@ -205,13 +205,23 @@ arbitraryExtern (FunctionType name argTypes retType) = do
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
   prog <- listOf arbitrary
-  let free = freeFunctions $ Program prog
+  let fixedProg = map (second removeFreeVars) prog
+  let free = freeFunctions $ Program fixedProg
   externs <- sequence $ map (lol . arbitraryExtern) free
-  return $ Program $ prog ++ externs
+  return $ Program $ fixedProg ++ externs
     where lol :: Gen Declaration -> Gen DeclarationOrExpression
           lol decl = do
             d <- decl
             return $ Left $ DeclarationAst d pos
+          removeFreeVars :: ExpressionAst -> ExpressionAst
+          removeFreeVars = mapExpressionAstExpressionAst varsToConsts
+          varsToConsts :: ExpressionAst -> ExpressionAst
+          varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (const typ) typ pos
+          varsToConsts e                                    = e
+          const :: Type -> Expression
+          const Types.Boolean = Syntax.Boolean False
+          const Types.Integer = Syntax.Integer 0
+          const Types.Double  = Syntax.Double 0.0
 
 instance Arbitrary UnaryOperator where
   arbitrary = elements unaryOperators
@@ -251,12 +261,20 @@ instance Arbitrary Declaration where
 
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
-  shrink (Program []) = []
-  shrink (Program (x:xs)) = map appendTail headShrinks ++ map appendHead tailShrinks
-    where headShrinks = shrink x
-          appendTail y = Program (y:xs)
-          tailShrinks = shrink $ Program xs
-          appendHead (Program ys) = Program (x:ys)
+  shrink p = shrink' (freeFunctions p) p
+    where shrink' free (Program [])     = []
+          shrink' free (Program (x:xs)) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
+            where headShrinks = shrink x
+                  headRemovals = if isRemovable x then [Program xs] else []
+                  isRemovable :: DeclarationOrExpression -> Bool
+                  isRemovable (Right _) = True
+                  isRemovable (Left (DeclarationAst d _)) = case d of
+                    Function s _ -> isRemovableSignature s
+                    Extern s -> isRemovableSignature s
+                  isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` free)
+                  appendTail y = Program (y:xs)
+                  tailShrinks = shrink' free $ Program xs
+                  appendHead (Program ys) = Program (x:ys)
 
 clearPositions :: Program -> Program
 clearPositions = mapDeclarationAst clearPosDeclarationAst . mapExpressionAst clearPosExpressionAst
