@@ -202,10 +202,14 @@ arbitraryExtern (FunctionType name argTypes retType) = do
   args <- sequence $ map arbitraryTypedVariable argTypes
   return $ Extern (Signature name args retType)
 
+fixName :: [Name] -> Name -> Name
+fixName names name | name `elem` names = fixName names (name ++ "0")
+                   | otherwise         = name
+
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
   prog <- listOf arbitrary
-  let fixedProg = map (second removeFreeVars) prog
+  let fixedProg = fixFunctionNameClashes [] $ map (second removeFreeVars) prog
   let free = calledFunctions $ Program fixedProg
   externs <- sequence $ map (lol . arbitraryExtern) free
   return $ Program $ fixedProg ++ externs
@@ -218,6 +222,16 @@ arbitraryProgram = do
           varsToConsts :: ExpressionAst -> ExpressionAst
           varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (trivial typ) typ pos
           varsToConsts e                                    = e
+          fixFunctionNameClashes :: [Name] -> [DeclarationOrExpression] -> [DeclarationOrExpression]
+          fixFunctionNameClashes names []                                  = []
+          fixFunctionNameClashes names (Right x : xs)                      = Right x : fixFunctionNameClashes names xs
+          fixFunctionNameClashes names (Left (DeclarationAst x pos) : xs)  = Left (DeclarationAst x' pos)
+                                                                             : fixFunctionNameClashes (funcName (signature x') : names) xs
+            where x' :: Declaration
+                  x' = case x of
+                    Function sig body -> Function (fixSignature sig) body
+                    Extern sig        -> Extern (fixSignature sig)
+                  fixSignature (Signature name argTypes typ) = Signature (fixName names name) argTypes typ
   
 trivial :: Type -> Expression
 trivial Types.Boolean = Syntax.Boolean False
@@ -259,7 +273,6 @@ shrinkTypedVariable (TypedVariable var typ) = [TypedVariable v typ | v <- shrink
 
 shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
 shrinkSignature free (Signature name args typ) = [Signature name a typ | a <- shrinkArgTypes args]
-                                                 ++ [Signature n args typ | n <- shrinkIdentifier name]
   where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
         shrinkArgTypes []                     = []
         shrinkArgTypes (x:xs) | x `elem` free = [(x:ys) | ys <- shrinkArgTypes xs]
@@ -280,9 +293,7 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
                 isRemovable :: DeclarationOrExpression -> Bool
                 isRemovable (Right _) = True
-                isRemovable (Left (DeclarationAst d _)) = case d of
-                  Function s _ -> isRemovableSignature s
-                  Extern s -> isRemovableSignature s
+                isRemovable (Left (DeclarationAst d _)) = isRemovableSignature $ signature d
                 isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` funcs)
                 appendTail y = Program (y:xs)
                 tailShrinks = shrinkProgram' funcs $ Program xs
