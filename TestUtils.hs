@@ -72,31 +72,31 @@ data FunctionType =
                , retType :: Type }
   deriving (Eq, Ord, Show)
 
-freeFunctions :: Program -> [FunctionType]
-freeFunctions = concat . map (flattenEither . first freeFunctionsDeclarationAst . second freeFunctionsExpressionAst) . program
+calledFunctions :: Program -> [FunctionType]
+calledFunctions = concat . map (flattenEither . first calledFunctionsDeclarationAst . second calledFunctionsExpressionAst) . program
   where flattenEither :: Either a a -> a
         flattenEither (Left a)  = a
         flattenEither (Right a) = a
 
-freeFunctionsDeclarationAst :: DeclarationAst -> [FunctionType]
-freeFunctionsDeclarationAst = freeFunctionsDeclaration . decl
+calledFunctionsDeclarationAst :: DeclarationAst -> [FunctionType]
+calledFunctionsDeclarationAst = calledFunctionsDeclaration . decl
 
-freeFunctionsDeclaration :: Declaration -> [FunctionType]
-freeFunctionsDeclaration (Function s body) = freeFunctionsExpressionAst body
-freeFunctionsDeclaration _                 = []
+calledFunctionsDeclaration :: Declaration -> [FunctionType]
+calledFunctionsDeclaration (Function s body) = calledFunctionsExpressionAst body
+calledFunctionsDeclaration _                 = []
 
-freeFunctionsExpressionAst :: ExpressionAst -> [FunctionType]
-freeFunctionsExpressionAst (ExpressionAst exp t _) = freeFunctionsExpressionAst' exp
-  where freeFunctionsExpressionAst' :: Expression -> [FunctionType]
-        freeFunctionsExpressionAst' (BinaryOperation _ left right)   = freeFunctionsExpressionAst left
-                                                                       ++ freeFunctionsExpressionAst right
-        freeFunctionsExpressionAst' (UnaryOperation _ exp)           = freeFunctionsExpressionAst exp
-        freeFunctionsExpressionAst' (Conditional cond ifExp elseExp) = freeFunctionsExpressionAst cond
-                                                                       ++ freeFunctionsExpressionAst ifExp
-                                                                       ++ freeFunctionsExpressionAst elseExp
-        freeFunctionsExpressionAst' (Call name args)                 = [FunctionType name (map expType args) t]
-                                                                       ++ concat (map freeFunctionsExpressionAst args)
-        freeFunctionsExpressionAst' _                                = []
+calledFunctionsExpressionAst :: ExpressionAst -> [FunctionType]
+calledFunctionsExpressionAst (ExpressionAst exp t _) = calledFunctionsExpressionAst' exp
+  where calledFunctionsExpressionAst' :: Expression -> [FunctionType]
+        calledFunctionsExpressionAst' (BinaryOperation _ left right)   = calledFunctionsExpressionAst left
+                                                                         ++ calledFunctionsExpressionAst right
+        calledFunctionsExpressionAst' (UnaryOperation _ exp)           = calledFunctionsExpressionAst exp
+        calledFunctionsExpressionAst' (Conditional cond ifExp elseExp) = calledFunctionsExpressionAst cond
+                                                                         ++ calledFunctionsExpressionAst ifExp
+                                                                         ++ calledFunctionsExpressionAst elseExp
+        calledFunctionsExpressionAst' (Call name args)                 = [FunctionType name (map expType args) t]
+                                                                         ++ concat (map calledFunctionsExpressionAst args)
+        calledFunctionsExpressionAst' _                                = []
 
 inferSignature :: Name -> ExpressionAst -> Signature
 inferSignature name exp = Signature name (freeVariables exp) (expType exp)
@@ -206,7 +206,7 @@ arbitraryProgram :: Gen Program
 arbitraryProgram = do
   prog <- listOf arbitrary
   let fixedProg = map (second removeFreeVars) prog
-  let free = freeFunctions $ Program fixedProg
+  let free = calledFunctions $ Program fixedProg
   externs <- sequence $ map (lol . arbitraryExtern) free
   return $ Program $ fixedProg ++ externs
     where lol :: Gen Declaration -> Gen DeclarationOrExpression
@@ -216,12 +216,13 @@ arbitraryProgram = do
           removeFreeVars :: ExpressionAst -> ExpressionAst
           removeFreeVars = mapExpressionAstExpressionAst varsToConsts
           varsToConsts :: ExpressionAst -> ExpressionAst
-          varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (const typ) typ pos
+          varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (trivial typ) typ pos
           varsToConsts e                                    = e
-          const :: Type -> Expression
-          const Types.Boolean = Syntax.Boolean False
-          const Types.Integer = Syntax.Integer 0
-          const Types.Double  = Syntax.Double 0.0
+  
+trivial :: Type -> Expression
+trivial Types.Boolean = Syntax.Boolean False
+trivial Types.Integer = Syntax.Integer 0
+trivial Types.Double  = Syntax.Double 0.0
 
 instance Arbitrary UnaryOperator where
   arbitrary = elements unaryOperators
@@ -237,7 +238,7 @@ shrinkExpression :: Type -> Expression -> [Expression]
 shrinkExpression _ (Syntax.Boolean b)               = map Syntax.Boolean $ shrink b
 shrinkExpression _ (Syntax.Integer n)               = map Syntax.Integer $ shrink n
 shrinkExpression _ (Syntax.Double d)                = map Syntax.Double $ shrink d
-shrinkExpression _ (Variable v)                     = []
+shrinkExpression t (Variable v)                     = [trivial t]
 shrinkExpression t (BinaryOperation op left right)  = childrenWithType t [left, right]
                                                       ++ [BinaryOperation op l r | (l, r) <- shrink (left, right)]
 shrinkExpression t (UnaryOperation op exp)          = childrenWithType t [exp]
@@ -245,10 +246,47 @@ shrinkExpression t (UnaryOperation op exp)          = childrenWithType t [exp]
 shrinkExpression t (Conditional cond ifExp elseExp) = childrenWithType t [cond, ifExp, elseExp]
                                                       ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
 shrinkExpression t (Call name args)                 = childrenWithType t args
-                                                      ++ [Call n a | (n, a) <- shrinkWithIdentifier name args]
+                                                      ++ [Call name a | a <- shrinkArgs args]
+  where shrinkArgs :: [ExpressionAst] -> [[ExpressionAst]]
+        shrinkArgs []     = []
+        shrinkArgs (x:xs) = [y : xs | y <- shrink x] ++ [x:ys | ys <- shrinkArgs xs]
 
 childrenWithType :: Type -> [ExpressionAst] -> [Expression]
 childrenWithType t = map astExp . filter (\c -> expType c == t)
+
+shrinkTypedVariable :: TypedVariable -> [TypedVariable]
+shrinkTypedVariable (TypedVariable var typ) = [TypedVariable v typ | v <- shrinkIdentifier var]
+
+shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
+shrinkSignature free (Signature name args typ) = [Signature name a typ | a <- shrinkArgTypes args]
+                                                 ++ [Signature n args typ | n <- shrinkIdentifier name]
+  where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
+        shrinkArgTypes []                     = []
+        shrinkArgTypes (x:xs) | x `elem` free = [(x:ys) | ys <- shrinkArgTypes xs]
+                              | otherwise     = xs : [y : xs | y <- shrinkTypedVariable x]
+                                                ++ [(x:ys) | ys <- shrinkArgTypes xs]
+
+shrinkProgram :: Program -> [Program]
+shrinkProgram p = shrinkProgram' (calledFunctions p) p
+  where shrinkProgram' funcs (Program [])     = []
+        shrinkProgram' funcs (Program (x:xs)) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
+          where headShrinks = shrink x
+                headRemovals = if isRemovable x then [Program xs] ++ [Program (d : xs) | d <- shrinkSig x] else []
+                shrinkSig :: DeclarationOrExpression -> [DeclarationOrExpression]
+                shrinkSig (Left (DeclarationAst decl pos)) = [Left (DeclarationAst d pos) | d <- shrinkSig' decl]
+                shrinkSig e                                = []
+                shrinkSig' :: Declaration -> [Declaration]
+                shrinkSig' (Function sig body) = [Function s body | s <- shrinkSignature (freeVariables body) sig]
+                shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
+                isRemovable :: DeclarationOrExpression -> Bool
+                isRemovable (Right _) = True
+                isRemovable (Left (DeclarationAst d _)) = case d of
+                  Function s _ -> isRemovableSignature s
+                  Extern s -> isRemovableSignature s
+                isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` funcs)
+                appendTail y = Program (y:xs)
+                tailShrinks = shrinkProgram' funcs $ Program xs
+                appendHead (Program ys) = Program (x:ys)
 
 instance Arbitrary DeclarationAst where
   arbitrary = declarationAst
@@ -261,20 +299,7 @@ instance Arbitrary Declaration where
 
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
-  shrink p = shrink' (freeFunctions p) p
-    where shrink' free (Program [])     = []
-          shrink' free (Program (x:xs)) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
-            where headShrinks = shrink x
-                  headRemovals = if isRemovable x then [Program xs] else []
-                  isRemovable :: DeclarationOrExpression -> Bool
-                  isRemovable (Right _) = True
-                  isRemovable (Left (DeclarationAst d _)) = case d of
-                    Function s _ -> isRemovableSignature s
-                    Extern s -> isRemovableSignature s
-                  isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` free)
-                  appendTail y = Program (y:xs)
-                  tailShrinks = shrink' free $ Program xs
-                  appendHead (Program ys) = Program (x:ys)
+  shrink = shrinkProgram
 
 clearPositions :: Program -> Program
 clearPositions = mapDeclarationAst clearPosDeclarationAst . mapExpressionAst clearPosExpressionAst
