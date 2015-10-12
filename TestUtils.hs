@@ -5,6 +5,7 @@ import Types
 import Lexer
 import Operators
 
+import qualified Data.Set as Set
 import Data.Bifunctor
 import Control.Monad
 import Test.QuickCheck
@@ -127,8 +128,11 @@ double :: Gen Expression
 double = liftM Syntax.Double $ elements niceDoubles
   where niceDoubles = [0.0, 0.1, 1.0, 1.1, 1e10, 1.1e10]
 
-variable :: Gen Expression
-variable = liftM Variable identifier
+-- We add the type to the variable name in order to avoid name clashes.
+variable :: Type -> Gen Expression
+variable t = do
+  id <- identifier
+  return $ Variable $ id ++ show t
 
 call :: Gen Expression
 call = liftM2 Call identifier (scale pred TestUtils.args)
@@ -166,7 +170,7 @@ conditional t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree 
   where subtree t = scale (\n -> n `div` 3) $ expressionAst t
 
 leafExpression :: Type -> Gen Expression
-leafExpression t = oneof [constant t, variable]
+leafExpression t = oneof [constant t, variable t]
   where constant Types.Boolean = boolean
         constant Types.Integer = integer
         constant Types.Double  = double
@@ -224,15 +228,40 @@ arbitraryProgram = do
           varsToConsts e                                    = e
           fixFunctionNameClashes :: [Name] -> [DeclarationOrExpression] -> [DeclarationOrExpression]
           fixFunctionNameClashes names []                                  = []
-          fixFunctionNameClashes names (Right x : xs)                      = Right x : fixFunctionNameClashes names xs
+          fixFunctionNameClashes names (Right x : xs)                      = Right x' : fixFunctionNameClashes names' xs
+            where (x', names') = fixExpressionAst x names
           fixFunctionNameClashes names (Left (DeclarationAst x pos) : xs)  = Left (DeclarationAst x' pos)
-                                                                             : fixFunctionNameClashes (funcName (signature x') : names) xs
-            where x' :: Declaration
-                  x' = case x of
-                    Function sig body -> Function (fixSignature sig) body
-                    Extern sig        -> Extern (fixSignature sig)
-                  fixSignature (Signature name argTypes typ) = Signature (fixName names name) argTypes typ
-  
+                                                                             : fixFunctionNameClashes (names') xs
+            where (x', names') = case x of
+                    Function sig body -> (Function sig' body', names'')
+                      where (sig', names') = fixSignature sig names
+                            (body', names'') = fixExpressionAst body names'
+                    Extern sig        -> (Extern sig', names')
+                      where (sig', names') = fixSignature sig names
+          fixSignature :: Signature -> [Name] -> (Signature, [Name])
+          fixSignature (Signature name argTypes typ) names = (Signature name' argTypes typ, name' : names)
+            where name' = (fixName names name)
+          fixExpressionAst :: ExpressionAst -> [Name] -> (ExpressionAst, [Name])
+          fixExpressionAst (ExpressionAst e typ pos) names     = (ExpressionAst e' typ pos, names')
+            where (e', names') = fixExpression e names
+          fixExpression :: Expression -> [Name] -> (Expression, [Name])
+          fixExpression (BinaryOperation op left right) names  = (BinaryOperation op left' right', names'')
+            where (left', names') = fixExpressionAst left names
+                  (right', names'') = fixExpressionAst right names'
+          fixExpression (UnaryOperation op exp) names          = (UnaryOperation op exp', names')
+            where (exp', names') = fixExpressionAst exp names
+          fixExpression (Conditional cond ifExp elseExp) names = (Conditional cond' ifExp' elseExp', names''')
+            where (cond', names') = fixExpressionAst cond names
+                  (ifExp', names'') = fixExpressionAst ifExp names'
+                  (elseExp', names''') = fixExpressionAst elseExp names''
+          fixExpression (Call name args) names                 = (Call name' args', name' : names')
+            where name' = fixName names' name
+                  (args', names') = foldr addFixedArg ([], names) args
+                  addFixedArg :: ExpressionAst -> ([ExpressionAst], [Name]) -> ([ExpressionAst], [Name])
+                  addFixedArg arg (as, n) = ((a':as), n')
+                    where (a', n') = fixExpressionAst arg n
+          fixExpression e n                                    = (e, n)
+
 trivial :: Type -> Expression
 trivial Types.Boolean = Syntax.Boolean False
 trivial Types.Integer = Syntax.Integer 0
@@ -310,7 +339,6 @@ instance Arbitrary Declaration where
 
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
-  shrink = shrinkProgram
 
 clearPositions :: Program -> Program
 clearPositions = mapDeclarationAst clearPosDeclarationAst . mapExpressionAst clearPosExpressionAst
