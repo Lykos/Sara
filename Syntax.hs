@@ -40,24 +40,6 @@ data ExpressionAst
                   , expPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
-mapExpressionAstExpressionAst :: (ExpressionAst -> ExpressionAst) -> ExpressionAst -> ExpressionAst
-mapExpressionAstExpressionAst f (ExpressionAst exp typ pos) = f (ExpressionAst mappedExp typ pos)
-    where mapSubExp = mapExpressionAstExpressionAst f
-          mappedExp = case exp of
-            BinaryOperation op left right  -> BinaryOperation op (mapSubExp left) (mapSubExp right)
-            UnaryOperation op exp          -> UnaryOperation op (mapSubExp exp)
-            Conditional cond ifExp elseExp -> Conditional (mapSubExp cond) (mapSubExp ifExp) (mapSubExp elseExp)
-            Call name args                 -> Call name (map (mapSubExp) args)
-            e                              -> e
-
-mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> Program -> Program
-mapExpressionAst f = Program . map mapExpressionAstFunction . program
-  where mapExpressionAstFunction (DeclarationAst (Function sig body) pos) = DeclarationAst (Function sig (mapExpressionAstExpressionAst f body)) pos
-        mapExpressionAstFunction d                                        = d
-
-mapDeclarationAst :: (DeclarationAst -> DeclarationAst) -> Program -> Program
-mapDeclarationAst f = (Program . (map f)) . program
-
 data Expression
   = Boolean Bool
   | Integer Integer

@@ -4,6 +4,7 @@ import Syntax
 import Types
 import Lexer
 import Operators
+import AstUtils
 
 import qualified Data.Set as Set
 import Data.Bifunctor
@@ -216,11 +217,6 @@ arbitraryProgram = do
   return $ Program $ fixedProg ++ externs
     where addPosition :: Gen Declaration -> Gen DeclarationAst
           addPosition decl = liftM2 DeclarationAst decl position
-          removeFreeVars :: ExpressionAst -> ExpressionAst
-          removeFreeVars = mapExpressionAstExpressionAst varsToConsts
-          varsToConsts :: ExpressionAst -> ExpressionAst
-          varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (trivial typ) typ pos
-          varsToConsts e                                    = e
           fixFunctionNameClashes :: [Name] -> [DeclarationAst] -> [DeclarationAst]
           fixFunctionNameClashes names []                             = []
           fixFunctionNameClashes names ((DeclarationAst x pos) : xs)  = (DeclarationAst x' pos)
@@ -333,10 +329,10 @@ instance Arbitrary Program where
   arbitrary = arbitraryProgram
 
 clearPositions :: Program -> Program
-clearPositions = mapDeclarationAst clearPosDeclarationAst . mapExpressionAst clearPosExpressionAst
+clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts clearPosExpressionAst
   where clearPosDeclarationAst (DeclarationAst decl _) = DeclarationAst decl pos
         clearPosExpressionAst (ExpressionAst exp typ _) = ExpressionAst exp typ pos
 
 clearTypes :: Program -> Program
-clearTypes = mapExpressionAst clearTypesExpressionAst
-  where clearTypesExpressionAst (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos
+clearTypes = mapExpressionAsts clearTypes
+  where clearTypes (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos
