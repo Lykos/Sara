@@ -6,6 +6,7 @@ import Lexer
 import Operators
 import AstUtils
 
+import Control.Monad.State
 import qualified Data.Set as Set
 import Data.Bifunctor
 import Control.Monad
@@ -210,46 +211,42 @@ fixName names name | name `elem` names = fixName names (name ++ "0")
 
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
-  prog <- listOf arbitrary
-  let fixedProg = fixFunctionNameClashes [] prog
-  let free = calledFunctions $ Program fixedProg
+  decls <- listOf arbitrary
+  let prog = Program decls
+  let (prog', names) = runState (transformDeclarationAsts fixDeclarationAst prog) []
+  let (prog'', _) = runState (transformExpressionAsts fixExpressionAst prog') names
+  let free = calledFunctions prog''
   externs <- sequence $ map (addPosition . arbitraryExtern) free
-  return $ Program $ fixedProg ++ externs
+  return $ Program $ program prog'' ++ externs
     where addPosition :: Gen Declaration -> Gen DeclarationAst
           addPosition decl = liftM2 DeclarationAst decl position
-          fixFunctionNameClashes :: [Name] -> [DeclarationAst] -> [DeclarationAst]
-          fixFunctionNameClashes names []                             = []
-          fixFunctionNameClashes names ((DeclarationAst x pos) : xs)  = (DeclarationAst x' pos)
-                                                                        : fixFunctionNameClashes (names') xs
-            where (x', names') = case x of
-                    Function sig body -> (Function sig' body', names'')
-                      where (sig', names') = fixSignature sig names
-                            (body', names'') = fixExpressionAst body names'
-                    Extern sig        -> (Extern sig', names')
-                      where (sig', names') = fixSignature sig names
-          fixSignature :: Signature -> [Name] -> (Signature, [Name])
-          fixSignature (Signature name argTypes typ) names = (Signature name' argTypes typ, name' : names)
-            where name' = (fixName names name)
-          fixExpressionAst :: ExpressionAst -> [Name] -> (ExpressionAst, [Name])
-          fixExpressionAst (ExpressionAst e typ pos) names     = (ExpressionAst e' typ pos, names')
-            where (e', names') = fixExpression e names
-          fixExpression :: Expression -> [Name] -> (Expression, [Name])
-          fixExpression (BinaryOperation op left right) names  = (BinaryOperation op left' right', names'')
-            where (left', names') = fixExpressionAst left names
-                  (right', names'') = fixExpressionAst right names'
-          fixExpression (UnaryOperation op exp) names          = (UnaryOperation op exp', names')
-            where (exp', names') = fixExpressionAst exp names
-          fixExpression (Conditional cond ifExp elseExp) names = (Conditional cond' ifExp' elseExp', names''')
-            where (cond', names') = fixExpressionAst cond names
-                  (ifExp', names'') = fixExpressionAst ifExp names'
-                  (elseExp', names''') = fixExpressionAst elseExp names''
-          fixExpression (Call name args) names                 = (Call name' args', name' : names')
-            where name' = fixName names' name
-                  (args', names') = foldr addFixedArg ([], names) args
-                  addFixedArg :: ExpressionAst -> ([ExpressionAst], [Name]) -> ([ExpressionAst], [Name])
-                  addFixedArg arg (as, n) = ((a':as), n')
-                    where (a', n') = fixExpressionAst arg n
-          fixExpression e n                                    = (e, n)
+          fixDeclarationAst :: DeclarationAst -> State [Name] DeclarationAst
+          fixDeclarationAst (DeclarationAst decl pos) = do
+            decl' <- fixDeclaration decl
+            return $ DeclarationAst decl' pos
+          fixDeclaration :: Declaration -> State [Name] Declaration
+          fixDeclaration (Function sig body) = do
+            sig' <- fixSignature sig
+            return $ Function sig' body
+          fixDeclaration (Extern sig) = do
+            sig' <- fixSignature sig
+            return $ Extern sig'
+          fixSignature (Signature name argTypes typ) = do
+            names <- get
+            let name' = fixName names name
+            put (name':names)
+            return $ Signature name' argTypes typ
+          fixExpressionAst :: ExpressionAst -> State [Name] ExpressionAst
+          fixExpressionAst (ExpressionAst e typ pos) = do
+            e' <- fixExpression e
+            return $ ExpressionAst e' typ pos
+          fixExpression :: Expression -> State [Name] Expression
+          fixExpression (Call name args) = do
+            names <- get
+            let name' = fixName names name
+            put (name':names)
+            return $ Call name' args
+          fixExpression e                = return e
 
 trivial :: Type -> Expression
 trivial Types.Boolean = Syntax.Boolean False
