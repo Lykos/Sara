@@ -11,14 +11,6 @@ import Syntax
 import Types
 import Operators
 
-declarationOrExpression :: Parser DeclarationOrExpression
-declarationOrExpression = try topLevelDeclaration
-                          <|> toplevelExpression
-                          <?> "declaration or expression"
-
-topLevelDeclaration :: Parser DeclarationOrExpression
-topLevelDeclaration = declarationAst >>= return . Left
-
 declarationAst :: Parser DeclarationAst
 declarationAst = do
   decl <- declaration
@@ -77,11 +69,6 @@ doubleType :: Parser Type
 doubleType = do
   reservedToken "Double"
   return Types.Double
-
-toplevelExpression :: Parser DeclarationOrExpression
-toplevelExpression = do
-  expr <- expressionAst
-  return $ Right expr
 
 expressionAst :: Parser ExpressionAst
 expressionAst = Expr.buildExpressionParser operatorTable term
@@ -198,7 +185,7 @@ contents p = do
 
 toplevel :: Parser Program
 toplevel = do
-  program <- semiSep declarationOrExpression
+  program <- semiSep declarationAst
   return $ Program program
 
 parse :: String -> String -> Either ParseError Program

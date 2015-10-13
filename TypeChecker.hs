@@ -39,11 +39,7 @@ instance Monad TypeErrorOr where
 typeCheck :: Program -> TypeErrorOr Program
 typeCheck (Program prog) = do
   funcs <- functions $ Program prog
-  liftM Program $ sequence $ map (typeCheckOne funcs) prog
-
-typeCheckOne :: FunctionMap -> DeclarationOrExpression -> TypeErrorOr DeclarationOrExpression
-typeCheckOne funcs (Left d)  = typeCheckDeclarationAst funcs d >>= return . Left
-typeCheckOne funcs (Right e) = typeCheckExp funcs Map.empty e >>= return . Right
+  liftM Program $ sequence $ map (typeCheckDeclarationAst funcs) prog
 
 typeCheckDeclarationAst :: FunctionMap -> DeclarationAst -> TypeErrorOr DeclarationAst
 typeCheckDeclarationAst funcs declAst = do
@@ -58,7 +54,7 @@ typeCheckDeclaration funcs (Function sig body) =
 typeCheckDeclaration funcs e@(Extern _)        =  return e
 
 functions :: Program -> TypeErrorOr FunctionMap
-functions = functionsFromDecls . lefts . program
+functions = functionsFromDecls . program
 
 functionsFromDecls :: [DeclarationAst] -> TypeErrorOr FunctionMap
 functionsFromDecls d = foldr addOneFunction (Result Map.empty) d

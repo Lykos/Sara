@@ -51,12 +51,12 @@ mapExpressionAstExpressionAst f (ExpressionAst exp typ pos) = f (ExpressionAst m
             e                              -> e
 
 mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> Program -> Program
-mapExpressionAst f (Program p) = Program $ map (second (mapExpressionAstExpressionAst f) . first mapExpressionAstFunction) p
+mapExpressionAst f = Program . map mapExpressionAstFunction . program
   where mapExpressionAstFunction (DeclarationAst (Function sig body) pos) = DeclarationAst (Function sig (mapExpressionAstExpressionAst f body)) pos
         mapExpressionAstFunction d                                        = d
 
 mapDeclarationAst :: (DeclarationAst -> DeclarationAst) -> Program -> Program
-mapDeclarationAst f = (Program . ((map . first) f)) . program
+mapDeclarationAst f = (Program . (map f)) . program
 
 data Expression
   = Boolean Bool
@@ -69,8 +69,6 @@ data Expression
   | Conditional ExpressionAst ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
 
-type DeclarationOrExpression = Either DeclarationAst ExpressionAst
-
 newtype Program
-  = Program { program :: [DeclarationOrExpression] }
+  = Program { program :: [DeclarationAst] }
   deriving (Eq, Ord, Show)

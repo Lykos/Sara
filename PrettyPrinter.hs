@@ -11,17 +11,13 @@ prettyRender :: Program -> String
 prettyRender = render . pretty
 
 pretty :: Program -> Doc
-pretty = vsep . punctuate semi . map prettyDeclarationOrExpression . program
+pretty = vsep . punctuate semi . map prettyDeclarationAst . program
 
 indentation :: Int
 indentation = 2
 
 vsep :: [Doc] -> Doc
 vsep = foldl ($+$) empty
-
-prettyDeclarationOrExpression :: DeclarationOrExpression -> Doc
-prettyDeclarationOrExpression (Left d)  = prettyDeclarationAst d
-prettyDeclarationOrExpression (Right e) = prettyExpressionAst e
 
 prettyDeclarationAst :: DeclarationAst -> Doc
 prettyDeclarationAst = prettyDeclaration . decl

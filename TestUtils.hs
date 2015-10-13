@@ -74,10 +74,7 @@ data FunctionType =
   deriving (Eq, Ord, Show)
 
 calledFunctions :: Program -> [FunctionType]
-calledFunctions = concat . map (flattenEither . first calledFunctionsDeclarationAst . second calledFunctionsExpressionAst) . program
-  where flattenEither :: Either a a -> a
-        flattenEither (Left a)  = a
-        flattenEither (Right a) = a
+calledFunctions = concat . map calledFunctionsDeclarationAst . program
 
 calledFunctionsDeclarationAst :: DeclarationAst -> [FunctionType]
 calledFunctionsDeclarationAst = calledFunctionsDeclaration . decl
@@ -213,25 +210,21 @@ fixName names name | name `elem` names = fixName names (name ++ "0")
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
   prog <- listOf arbitrary
-  let fixedProg = fixFunctionNameClashes [] $ map (second removeFreeVars) prog
+  let fixedProg = fixFunctionNameClashes [] prog
   let free = calledFunctions $ Program fixedProg
-  externs <- sequence $ map (lol . arbitraryExtern) free
+  externs <- sequence $ map (addPosition . arbitraryExtern) free
   return $ Program $ fixedProg ++ externs
-    where lol :: Gen Declaration -> Gen DeclarationOrExpression
-          lol decl = do
-            d <- decl
-            return $ Left $ DeclarationAst d pos
+    where addPosition :: Gen Declaration -> Gen DeclarationAst
+          addPosition decl = liftM2 DeclarationAst decl position
           removeFreeVars :: ExpressionAst -> ExpressionAst
           removeFreeVars = mapExpressionAstExpressionAst varsToConsts
           varsToConsts :: ExpressionAst -> ExpressionAst
           varsToConsts (ExpressionAst (Variable _) typ pos) = ExpressionAst (trivial typ) typ pos
           varsToConsts e                                    = e
-          fixFunctionNameClashes :: [Name] -> [DeclarationOrExpression] -> [DeclarationOrExpression]
-          fixFunctionNameClashes names []                                  = []
-          fixFunctionNameClashes names (Right x : xs)                      = Right x' : fixFunctionNameClashes names' xs
-            where (x', names') = fixExpressionAst x names
-          fixFunctionNameClashes names (Left (DeclarationAst x pos) : xs)  = Left (DeclarationAst x' pos)
-                                                                             : fixFunctionNameClashes (names') xs
+          fixFunctionNameClashes :: [Name] -> [DeclarationAst] -> [DeclarationAst]
+          fixFunctionNameClashes names []                             = []
+          fixFunctionNameClashes names ((DeclarationAst x pos) : xs)  = (DeclarationAst x' pos)
+                                                                        : fixFunctionNameClashes (names') xs
             where (x', names') = case x of
                     Function sig body -> (Function sig' body', names'')
                       where (sig', names') = fixSignature sig names
@@ -313,16 +306,15 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
   where shrinkProgram' funcs (Program [])     = []
         shrinkProgram' funcs (Program (x:xs)) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
           where headShrinks = shrink x
-                headRemovals = if isRemovable x then [Program xs] ++ [Program (d : xs) | d <- shrinkSig x] else []
-                shrinkSig :: DeclarationOrExpression -> [DeclarationOrExpression]
-                shrinkSig (Left (DeclarationAst decl pos)) = [Left (DeclarationAst d pos) | d <- shrinkSig' decl]
-                shrinkSig e                                = []
+                headRemovals :: [Program]
+                headRemovals = if isRemovable x then Program xs : [Program (d : xs) | d <- shrinkSig x] else []
+                shrinkSig :: DeclarationAst -> [DeclarationAst]
+                shrinkSig (DeclarationAst decl pos) = [DeclarationAst d pos | d <- shrinkSig' decl]
                 shrinkSig' :: Declaration -> [Declaration]
                 shrinkSig' (Function sig body) = [Function s body | s <- shrinkSignature (freeVariables body) sig]
                 shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
-                isRemovable :: DeclarationOrExpression -> Bool
-                isRemovable (Right _) = True
-                isRemovable (Left (DeclarationAst d _)) = isRemovableSignature $ signature d
+                isRemovable :: DeclarationAst -> Bool
+                isRemovable (DeclarationAst d _) = isRemovableSignature $ signature d
                 isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` funcs)
                 appendTail y = Program (y:xs)
                 tailShrinks = shrinkProgram' funcs $ Program xs
