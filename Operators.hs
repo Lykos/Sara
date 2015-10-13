@@ -5,7 +5,7 @@ data UnaryOperator
   | UnaryMinus
   | BitwiseNot
   | LogicalNot
-  deriving (Eq, Ord, Show, Enum)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 unarySymbol :: UnaryOperator -> String
 unarySymbol UnaryPlus  = "+"
@@ -14,7 +14,7 @@ unarySymbol BitwiseNot = "~"
 unarySymbol LogicalNot = "!"
 
 unaryOperators :: [UnaryOperator]
-unaryOperators = enumFrom $ toEnum 0
+unaryOperators = enumFrom minBound
 
 data BinaryOperator
   = Times
@@ -40,7 +40,7 @@ data BinaryOperator
   | ImpliedBy
   | EquivalentTo
   | NotEquivalentTo
-  deriving (Eq, Ord, Show, Enum)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 binarySymbol :: BinaryOperator -> String
 binarySymbol Times           = "*"
@@ -68,4 +68,4 @@ binarySymbol EquivalentTo    = "<==>"
 binarySymbol NotEquivalentTo = "<!=>"
 
 binaryOperators :: [BinaryOperator]
-binaryOperators = enumFrom $ toEnum 0
+binaryOperators = enumFrom minBound

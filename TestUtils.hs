@@ -60,14 +60,10 @@ declaration :: Gen Declaration
 declaration = function
 
 freeVariables :: ExpressionAst -> [TypedVariable]
-freeVariables (ExpressionAst exp t _) = freeVariables' exp
-  where freeVariables' :: Expression -> [TypedVariable]
-        freeVariables' (BinaryOperation _ left right)   = freeVariables left ++ freeVariables right
-        freeVariables' (UnaryOperation _ exp)           = freeVariables exp
-        freeVariables' (Conditional cond ifExp elseExp) = freeVariables cond ++ freeVariables ifExp ++ freeVariables elseExp
-        freeVariables' (Call _ args)                    = concat $ map freeVariables args
-        freeVariables' (Variable a)                     = [TypedVariable a t]
-        freeVariables' _                                = []
+freeVariables = foldMapExpressionAst freeVariable
+  where freeVariable :: ExpressionAst -> [TypedVariable]
+        freeVariable (ExpressionAst (Variable a) t _)  = [TypedVariable a t]
+        freeVariable _                                = []
 
 data FunctionType =
   FunctionType { name :: Name
@@ -76,27 +72,11 @@ data FunctionType =
   deriving (Eq, Ord, Show)
 
 calledFunctions :: Program -> [FunctionType]
-calledFunctions = concat . map calledFunctionsDeclarationAst . program
-
-calledFunctionsDeclarationAst :: DeclarationAst -> [FunctionType]
-calledFunctionsDeclarationAst = calledFunctionsDeclaration . decl
-
-calledFunctionsDeclaration :: Declaration -> [FunctionType]
-calledFunctionsDeclaration (Function s body) = calledFunctionsExpressionAst body
-calledFunctionsDeclaration _                 = []
-
-calledFunctionsExpressionAst :: ExpressionAst -> [FunctionType]
-calledFunctionsExpressionAst (ExpressionAst exp t _) = calledFunctionsExpressionAst' exp
-  where calledFunctionsExpressionAst' :: Expression -> [FunctionType]
-        calledFunctionsExpressionAst' (BinaryOperation _ left right)   = calledFunctionsExpressionAst left
-                                                                         ++ calledFunctionsExpressionAst right
-        calledFunctionsExpressionAst' (UnaryOperation _ exp)           = calledFunctionsExpressionAst exp
-        calledFunctionsExpressionAst' (Conditional cond ifExp elseExp) = calledFunctionsExpressionAst cond
-                                                                         ++ calledFunctionsExpressionAst ifExp
-                                                                         ++ calledFunctionsExpressionAst elseExp
-        calledFunctionsExpressionAst' (Call name args)                 = [FunctionType name (map expType args) t]
-                                                                         ++ concat (map calledFunctionsExpressionAst args)
-        calledFunctionsExpressionAst' _                                = []
+calledFunctions = foldMapExpressionAsts calledFunctionsExpression
+  where calledFunctionsExpression :: ExpressionAst -> [FunctionType]
+        calledFunctionsExpression (ExpressionAst (Call name args) typ _) =
+          [FunctionType name (map expType args) typ]
+        calledFunctionsExpression _                                      = []
 
 inferSignature :: Name -> ExpressionAst -> Signature
 inferSignature name exp = Signature name (freeVariables exp) (expType exp)

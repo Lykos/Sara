@@ -4,6 +4,9 @@ module AstUtils (
   , transformExpressionAsts
   , mapExpressionAsts
   , mapDeclarationAsts
+  , foldMapExpressionAst
+  , foldMapExpressionAsts
+  , foldMapExpressions
   , transformDeclarationAsts
   , transformExpressions
   , transformSignatures) where
@@ -11,7 +14,9 @@ module AstUtils (
 import Operators
 import Syntax
 import Control.Monad
+import Control.Monad.State
 import Control.Monad.Identity
+import Data.Monoid
 
 transformExpressionAst :: Monad m => (ExpressionAst -> m ExpressionAst) -> ExpressionAst -> m ExpressionAst
 transformExpressionAst f (ExpressionAst exp typ pos) = do
@@ -24,6 +29,13 @@ transformExpressionAst f (ExpressionAst exp typ pos) = do
             Conditional cond ifExp elseExp -> liftM3 Conditional (transformSubExp cond) (transformSubExp ifExp) (transformSubExp elseExp)
             Call name args                 -> liftM (Call name) (sequence $ map transformSubExp args)
             e                              -> return e
+
+foldMapExpressionAst :: Monoid m => (ExpressionAst -> m) -> ExpressionAst -> m
+foldMapExpressionAst = transformToFoldMap transformExpressionAst
+
+transformToFoldMap :: Monoid m => ((a -> State m a) -> (b -> State m b)) -> (a -> m) -> b -> m
+transformToFoldMap transform f e = execState (transform accumulate e) mempty
+  where accumulate e = (modify . mappend . f) e >> return e
 
 transformToMap :: ((a -> Identity a) -> (b -> Identity b)) -> (a -> a) -> b -> b
 transformToMap transform f = runIdentity . transform (Identity . f)
@@ -39,6 +51,12 @@ transformExpressions f = transformExpressionAsts transformExpressionAst
   where transformExpressionAst (ExpressionAst exp typ pos) = do
           exp' <- f exp
           return $ ExpressionAst exp' typ pos
+
+foldMapExpressions :: Monoid m => (Expression -> m) -> Program -> m
+foldMapExpressions = transformToFoldMap transformExpressions
+
+foldMapExpressionAsts :: Monoid m => (ExpressionAst -> m) -> Program -> m
+foldMapExpressionAsts = transformToFoldMap transformExpressionAsts
 
 mapExpressionAsts :: (ExpressionAst -> ExpressionAst) -> Program -> Program
 mapExpressionAsts = transformToMap transformExpressionAsts
