@@ -1,4 +1,12 @@
-module AstUtils where
+module AstUtils (
+  transformExpressionAst
+  , mapExpressionAst
+  , transformExpressionAsts
+  , mapExpressionAsts
+  , mapDeclarationAsts
+  , transformDeclarationAsts
+  , transformExpressions
+  , transformSignatures) where
 
 import Operators
 import Syntax
@@ -26,6 +34,12 @@ mapExpressionAst = transformToMap transformExpressionAst
 transformExpressionAsts :: Monad m => (ExpressionAst -> m ExpressionAst) -> Program -> m Program
 transformExpressionAsts = transformDeclarationAsts . liftDeclaration
 
+transformExpressions :: Monad m => (Expression -> m Expression) -> Program -> m Program
+transformExpressions f = transformExpressionAsts transformExpressionAst
+  where transformExpressionAst (ExpressionAst exp typ pos) = do
+          exp' <- f exp
+          return $ ExpressionAst exp' typ pos
+
 mapExpressionAsts :: (ExpressionAst -> ExpressionAst) -> Program -> Program
 mapExpressionAsts = transformToMap transformExpressionAsts
 
@@ -41,3 +55,16 @@ transformDeclarationAsts f = liftM Program . ((sequence . map f) . program)
 
 mapDeclarationAsts :: (DeclarationAst -> DeclarationAst) -> Program -> Program
 mapDeclarationAsts = transformToMap transformDeclarationAsts
+
+transformSignatures :: Monad m => (Signature -> m Signature) -> Program -> m Program
+transformSignatures f = transformDeclarationAsts transformDeclarationAst
+  where transformDeclarationAst (DeclarationAst decl pos) = do
+          decl' <- transformDeclaration decl
+          return $ DeclarationAst decl' pos
+        transformDeclaration (Function sig body) = do
+          sig' <- f sig
+          return $ Function sig' body
+        transformDeclaration (Extern sig) = do
+          sig' <- f sig
+          return $ Extern sig'
+

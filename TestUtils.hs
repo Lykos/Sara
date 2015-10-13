@@ -211,26 +211,20 @@ fixName names name | name `elem` names = fixName names (name ++ "0")
 
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
-  decls <- listOf arbitrary
-  let prog = Program decls
-  let (prog', names) = runState (transformDeclarationAsts fixDeclarationAst prog) []
-  let (prog'', _) = runState (transformExpressionAsts fixExpressionAst prog') names
-  let free = calledFunctions prog''
+  prog <- liftM Program $ listOf arbitrary
+  let prog' = fixFunctionNameClashes prog
+  let free = calledFunctions prog'
   externs <- sequence $ map (addPosition . arbitraryExtern) free
-  return $ Program $ program prog'' ++ externs
+  return $ Program $ program prog' ++ externs
     where addPosition :: Gen Declaration -> Gen DeclarationAst
           addPosition decl = liftM2 DeclarationAst decl position
-          fixDeclarationAst :: DeclarationAst -> State [Name] DeclarationAst
-          fixDeclarationAst (DeclarationAst decl pos) = do
-            decl' <- fixDeclaration decl
-            return $ DeclarationAst decl' pos
-          fixDeclaration :: Declaration -> State [Name] Declaration
-          fixDeclaration (Function sig body) = do
-            sig' <- fixSignature sig
-            return $ Function sig' body
-          fixDeclaration (Extern sig) = do
-            sig' <- fixSignature sig
-            return $ Extern sig'
+          fixFunctionNameClashes :: Program -> Program
+          fixFunctionNameClashes prog = evalState (fixFunctionNameClashes' prog) []
+          fixFunctionNameClashes' :: Program -> State [Name] Program
+          fixFunctionNameClashes' prog = do
+            prog' <- transformSignatures fixSignature prog
+            prog'' <- transformExpressionAsts fixExpressionAst prog'
+            return prog''
           fixSignature (Signature name argTypes typ) = do
             names <- get
             let name' = fixName names name
@@ -324,6 +318,7 @@ instance Arbitrary Declaration where
 
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
+  shrink = shrinkProgram
 
 clearPositions :: Program -> Program
 clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts clearPosExpressionAst
