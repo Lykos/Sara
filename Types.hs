@@ -34,7 +34,7 @@ typedBinOps = Map.fromList $
               ++ (map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Boolean)) relOps)
               ++ (map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Boolean)) relOps)
               ++ (map (\op -> (TypedBinOp op Types.Boolean Types.Boolean, Types.Boolean)) boolOps)
-  where intBinOps = [Modulo, LeftShift, RightShift, BitwiseAnd, BitwiseXor, BitwiseOr]
-        intDoubleBinOps = [Times, DividedBy, Plus, Minus]
+  where intBinOps = [LeftShift, RightShift, BitwiseAnd, BitwiseXor, BitwiseOr]
+        intDoubleBinOps = [Times, DividedBy, Modulo, Plus, Minus]
         relOps = [LessThan, AtMost, GreaterThan, AtLeast, EqualTo, NotEqualTo]
         boolOps = [LogicalAnd, LogicalXor, LogicalOr, Implies, ImpliedBy, EquivalentTo, NotEquivalentTo]

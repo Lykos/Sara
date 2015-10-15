@@ -4,15 +4,23 @@ import Parser
 import TypeChecker
 import PrettyPrinter
 
+
 import Control.Monad.Trans
 
-outputStrLn = putStrLn
+import System.IO
+import System.Environment
+import System.Console.Haskeline
 
-process :: String -> IO ()
+import qualified LLVM.General.AST
+
+initModule :: Module
+initModule = emptyModule "my cool jit"
+
+process :: Module -> String -> IO (Maybe Module)
 process contents = do
   let parsed = parse "<stdin>" contents
   case parsed of
-    Left err -> print err
+    Left err -> print err >> return Nothing
     Right asts -> do
       putStrLn "\nParsed AST:"
       print asts
@@ -20,10 +28,32 @@ process contents = do
       putStrLn $ prettyRender asts
       let typed = typeCheck asts
       case typed of
-        Error err        -> print err
+        Error err        -> print err >> return Nothing
         Result typedAsts -> do
           putStrLn "\nTyped AST:"
           putStrLn $ prettyRender typedAsts
+          ast <- codegen modo typedAsts
+          return $ Just ast
+
+processFile :: String -> IO (Maybe AST.Module)
+processFile fname = readFile fname >>= process initModule
+
+repl :: IO ()
+repl = runInputT defaultSettings (loop initModule)
+  where
+  loop mod = do
+    minput <- getInputLine "ready> "
+    case minput of
+      Nothing -> outputStrLn "Goodbye."
+      Just input -> do
+        modn <- liftIO $ process mod input
+        case modn of
+          Just modn -> loop modn
+          Nothing -> loop mod
 
 main :: IO ()
-main = getContents >>= process
+main = do
+  args <- getArgs
+  case args of
+    []      -> repl
+    [fname] -> processFile fname >> return ()
