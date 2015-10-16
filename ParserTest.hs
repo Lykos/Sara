@@ -14,7 +14,7 @@ import Text.Parsec
 import Data.Bifunctor
 
 prop_prettyInv :: Program -> Property
-prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
+prop_prettyInv xs = example `counterexample` liftBool (equalPrograms actual expected)
   where example = "\nExpected:\n" ++ show expected
                   ++ "\nActual:\n" ++ show actual
                   ++ "\nInput:\n" ++ input
@@ -23,5 +23,12 @@ prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
         expected = Right untyped
         input = prettyRender untyped
         actual = second clearPositions $ Parser.parse testfile input
+
+equalPrograms :: Either ParseError Program -> Either ParseError Program -> Bool
+equalPrograms (Left _) _          = False
+equalPrograms _ (Left _)          = False
+equalPrograms (Right a) (Right b) = a == b
+
+return []
 
 parserCheck = $quickCheckAll

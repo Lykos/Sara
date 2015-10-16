@@ -5,6 +5,8 @@ module TypeChecker (
 
 import Text.Parsec.Pos
 import Control.Monad
+import Control.Applicative
+import Data.Functor
 import Data.Either
 import Types
 import Syntax
@@ -15,7 +17,7 @@ data FunctionType =
   FunctionType { name :: Name
                , argTypes :: [Type] }
   deriving (Eq, Ord, Show)
-           
+
 type FunctionMap = Map.Map FunctionType Type
 type VariableMap = Map.Map Name Type
 data TypeErrorOr a
@@ -35,6 +37,13 @@ instance Monad TypeErrorOr where
   Error e >>= f  = Error e
   Result r >>= f = f r
   return         = Result
+
+instance Applicative TypeErrorOr where
+  pure  = return
+  (<*>) = ap
+
+instance Functor TypeErrorOr where
+  fmap f xs = xs >>= return . f
 
 typeCheck :: Program -> TypeErrorOr Program
 typeCheck (Program prog) = do

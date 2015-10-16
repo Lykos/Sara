@@ -17,15 +17,14 @@ lexer = Token.makeTokenParser style
   where
     style = emptyDef {
                Token.commentStart = "/*"
-	     , Token.commentEnd = "*/"
-             , Token.commentLine = "//"
-             , Token.nestedComments = True
-             , Token.identStart = letter <|> char '_'
-             , Token.identLetter = alphaNum <|> char '_'
-             , Token.reservedOpNames = reservedOpNames
-             , Token.reservedNames = reservedNames
-	     , Token.caseSensitive = True
-             }
+               , Token.commentEnd = "*/"
+               , Token.commentLine = "//"
+               , Token.nestedComments = True
+               , Token.identStart = letter <|> char '_'
+               , Token.identLetter = alphaNum <|> char '_'
+               , Token.reservedOpNames = reservedOpNames
+               , Token.reservedNames = reservedNames
+               , Token.caseSensitive = True }
 
 integerToken :: Parser Integer
 integerToken = Token.integer lexer

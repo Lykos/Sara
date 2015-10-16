@@ -202,7 +202,8 @@ arbitraryProgram = do
           fixFunctionNameClashes prog = evalState (fixFunctionNameClashes' prog) []
           fixFunctionNameClashes' :: Program -> State [Name] Program
           fixFunctionNameClashes' prog =
-            transformSignatures fixSignature prog >>= transformExpressionAsts fixExpressionAst 
+            transformSignatures fixSignature prog >>= transformExpressionAsts fixExpressionAst
+          fixSignature :: Signature -> State [Name] Signature
           fixSignature (Signature name argTypes typ) = do
             names <- get
             let name' = fixName names name

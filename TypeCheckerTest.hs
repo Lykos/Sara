@@ -23,4 +23,6 @@ prop_addsTypes p = example `counterexample` liftBool (actual == expected)
         render (Error e)  = show e
         render (Result r) = prettyRender r
 
+return []
+
 typeCheckerCheck = $quickCheckAll
