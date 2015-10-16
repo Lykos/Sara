@@ -25,6 +25,7 @@ function :: Parser Declaration
 function = do
   reservedToken "function"
   sig <- Parser.signature
+  reservedOpToken "="
   body <- expressionAst
   return $ Function sig body
 

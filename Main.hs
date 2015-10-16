@@ -3,7 +3,7 @@ module Main where
 import Parser
 import TypeChecker
 import PrettyPrinter
-
+import CodeGenerator
 
 import Control.Monad.Trans
 
@@ -11,13 +11,13 @@ import System.IO
 import System.Environment
 import System.Console.Haskeline
 
-import qualified LLVM.General.AST
+import LLVM.General.AST
 
 initModule :: Module
 initModule = emptyModule "my cool jit"
 
 process :: Module -> String -> IO (Maybe Module)
-process contents = do
+process modo contents = do
   let parsed = parse "<stdin>" contents
   case parsed of
     Left err -> print err >> return Nothing
@@ -35,7 +35,7 @@ process contents = do
           ast <- codegen modo typedAsts
           return $ Just ast
 
-processFile :: String -> IO (Maybe AST.Module)
+processFile :: String -> IO (Maybe Module)
 processFile fname = readFile fname >>= process initModule
 
 repl :: IO ()

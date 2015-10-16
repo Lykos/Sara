@@ -17,11 +17,11 @@ import Control.Monad.Except
 import Control.Applicative
 import System.IO
 
-import LLVM.General.Module
 import LLVM.General.Context
 import LLVM.General.AST
 import LLVM.General.AST.Global
 
+import qualified LLVM.General.Module as M
 import qualified LLVM.General.AST.Constant as C
 import qualified LLVM.General.AST.Float as F
 import qualified LLVM.General.AST.Attribute as A
@@ -254,12 +254,13 @@ liftError = runExceptT >=> either fail return
 
 codegen :: Module -> S.Program -> IO Module
 codegen mod program = withContext $ \context ->
-  liftError $ withModuleFromAST context newast $ \m -> do
-    llstr <- moduleLLVMAssembly m
+  liftError $ M.withModuleFromAST context newAst $ \m -> do
+    llstr <- M.moduleLLVMAssembly m
     putStrLn llstr
     return newAst
   where
-    newAst  = runLLVM mod $ codegenProgram
+    newAst :: Module
+    newAst = runLLVM mod $ codegenProgram program
 
 cons :: C.Constant -> Operand
 cons = ConstantOperand
