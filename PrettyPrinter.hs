@@ -23,7 +23,7 @@ prettyDeclarationAst :: DeclarationAst -> Doc
 prettyDeclarationAst = prettyDeclaration . decl
 
 prettyDeclaration :: Declaration -> Doc
-prettyDeclaration (Function sig body) = text "function" <+> prettySignature sig
+prettyDeclaration (Function sig body) = text "function" <+> prettySignature sig <+> text "="
                                         $+$ nest indentation (prettyExpressionAst body)
 prettyDeclaration (Extern sig)        = text "extern" <+> prettySignature sig
 
