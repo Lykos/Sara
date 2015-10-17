@@ -79,11 +79,21 @@ typeCheckSignature (Signature "main" a Types.Integer) p  = invalidMainArgs a p
 typeCheckSignature _ _                                   = Result ()
 
 typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
-typeCheckDeclaration funcs (Function sig body) =
+typeCheckDeclaration funcs (Function sig body) = typeCheckFunction funcs sig body
+typeCheckDeclaration funcs (Method sig body)   = typeCheckMethod funcs sig body
+typeCheckDeclaration funcs e@(Extern _)        = return e
+
+typeCheckFunction :: FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
+typeCheckFunction = typeCheckFunctionOrMethod Function
+
+typeCheckMethod :: FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
+typeCheckMethod = typeCheckFunctionOrMethod Method
+
+typeCheckFunctionOrMethod :: FunctionOrMethodConstructor -> FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
+typeCheckFunctionOrMethod constructor funcs sig body =
   let var (TypedVariable varName varType _) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
-  in typeCheckExp funcs vars body >>= return . Function sig
-typeCheckDeclaration funcs e@(Extern _)        = return e
+  in typeCheckExp funcs vars body >>= return . constructor sig
 
 functions :: Program -> TypeErrorOr FunctionMap
 functions = functionsFromDecls . program

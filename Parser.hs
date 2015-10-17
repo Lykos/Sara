@@ -10,6 +10,7 @@ import Lexer
 import Syntax
 import Types
 import Operators
+import AstUtils
 
 declarationAst :: Parser DeclarationAst
 declarationAst = do
@@ -19,15 +20,22 @@ declarationAst = do
 declaration :: Parser Declaration
 declaration = try function
               <|> try extern
+              <|> try method
               <?> "declaration"
 
-function :: Parser Declaration
-function = do
-  reservedToken "function"
+functionOrMethod :: String -> FunctionOrMethodConstructor -> Parser Declaration
+functionOrMethod keyword constructor = do
+  reservedToken keyword
   sig <- Parser.signature
   reservedOpToken "="
   body <- expressionAst
-  return $ Function sig body
+  return $ constructor sig body
+
+function :: Parser Declaration
+function = functionOrMethod "function" Function
+
+method :: Parser Declaration
+method = functionOrMethod "method" Method
 
 extern :: Parser Declaration
 extern = do

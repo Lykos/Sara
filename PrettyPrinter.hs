@@ -4,6 +4,7 @@ module PrettyPrinter (
 
 import Text.PrettyPrint
 import Types
+import AstUtils
 import Operators
 import Syntax
 
@@ -23,9 +24,13 @@ prettyDeclarationAst :: DeclarationAst -> Doc
 prettyDeclarationAst = prettyDeclaration . decl
 
 prettyDeclaration :: Declaration -> Doc
-prettyDeclaration (Function sig body) = text "function" <+> prettySignature sig <+> text "="
-                                        $+$ nest indentation (prettyExpressionAst body)
+prettyDeclaration (Function sig body) = prettyFunctionOrMethod "function" sig body
+prettyDeclaration (Method sig body)   = prettyFunctionOrMethod "method" sig body
 prettyDeclaration (Extern sig)        = text "extern" <+> prettySignature sig
+
+prettyFunctionOrMethod :: String -> Signature -> ExpressionAst -> Doc
+prettyFunctionOrMethod keyword sig body = text keyword <+> prettySignature sig <+> text "="
+                                          $+$ nest indentation (prettyExpressionAst body)
 
 prettySignature :: Signature -> Doc
 prettySignature (Signature name args retType) = prettyTyped sig retType

@@ -57,7 +57,7 @@ declarationAst :: Gen DeclarationAst
 declarationAst = liftM2 DeclarationAst declaration position
 
 declaration :: Gen Declaration
-declaration = function
+declaration = functionOrMethod
 
 freeVariables :: ExpressionAst -> [TypedVariable]
 freeVariables = foldMapExpressionAst freeVariable
@@ -81,12 +81,13 @@ calledFunctions = foldMapExpressionAsts calledFunctionsExpression
 inferSignature :: Name -> ExpressionAst -> Signature
 inferSignature name exp = Signature name (freeVariables exp) (expType exp)
 
-function :: Gen Declaration
-function = do
+functionOrMethod :: Gen Declaration
+functionOrMethod = do
+  constructor <- elements [Function, Method]
   t <- typ
   name <- identifier
   exp <- expressionAst t
-  return $ Function (inferSignature name exp) exp
+  return $ constructor (inferSignature name exp) exp
 
 expressionAst :: Type -> Gen ExpressionAst
 expressionAst t = do
@@ -278,6 +279,7 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 shrinkSig (DeclarationAst decl pos) = [DeclarationAst d pos | d <- shrinkSig' decl]
                 shrinkSig' :: Declaration -> [Declaration]
                 shrinkSig' (Function sig body) = [Function s body | s <- shrinkSignature (freeVariables body) sig]
+                shrinkSig' (Method sig body)   = [Method s body | s <- shrinkSignature (freeVariables body) sig]
                 shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
                 isRemovable :: DeclarationAst -> Bool
                 isRemovable (DeclarationAst d _) = isRemovableSignature $ signature d

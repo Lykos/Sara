@@ -10,7 +10,7 @@ import qualified Text.Parsec.Token as Token
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
                   ++ [";", ":"]
-reservedNames = ["function", "extern", "if", "then", "else", "true", "false", "Boolean", "Integer", "Double"]
+reservedNames = ["function", "extern", "mehod", "if", "then", "else", "true", "false", "Boolean", "Integer", "Double"]
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style

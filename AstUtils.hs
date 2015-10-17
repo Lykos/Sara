@@ -1,5 +1,6 @@
 module AstUtils (
-  transformExpressionAst
+  FunctionOrMethodConstructor
+  , transformExpressionAst
   , mapExpressionAst
   , transformExpressionAsts
   , mapExpressionAsts
@@ -13,12 +14,16 @@ module AstUtils (
   , mapSignatures
   , foldMapSignatures) where
 
+
 import Operators
 import Syntax
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Identity
 import Data.Monoid
+import Text.Parsec.Pos
+
+type FunctionOrMethodConstructor = Signature -> ExpressionAst -> Declaration
 
 transformExpressionAst :: Monad m => (ExpressionAst -> m ExpressionAst) -> ExpressionAst -> m ExpressionAst
 transformExpressionAst f (ExpressionAst exp typ pos) = do
@@ -64,11 +69,15 @@ mapExpressionAsts :: (ExpressionAst -> ExpressionAst) -> Program -> Program
 mapExpressionAsts = transformToMap transformExpressionAsts
 
 liftDeclaration :: Monad m => (ExpressionAst -> m ExpressionAst) -> DeclarationAst -> m DeclarationAst
-liftDeclaration f (DeclarationAst (Function sig exp) pos) = do
+liftDeclaration f (DeclarationAst (Function sig exp) pos) = liftFunctionOrMethod Function f sig exp pos
+liftDeclaration f (DeclarationAst (Method sig exp) pos)   = liftFunctionOrMethod Method f sig exp pos
+liftDeclaration _ d                                       = return d
+
+liftFunctionOrMethod :: Monad m => FunctionOrMethodConstructor -> (ExpressionAst -> m ExpressionAst) -> Signature -> ExpressionAst -> SourcePos -> m DeclarationAst
+liftFunctionOrMethod constructor f sig exp pos = do
   exp' <- transformExpressionAst f exp
-  let func = Function sig exp'
+  let func = constructor sig exp'
   return $ DeclarationAst func pos
-liftDeclaration _ d                                        = return d
 
 transformDeclarationAsts :: Monad m => (DeclarationAst -> m DeclarationAst) -> Program -> m Program
 transformDeclarationAsts f = liftM Program . ((sequence . map f) . program)
@@ -84,6 +93,9 @@ transformSignatures f = transformDeclarationAsts transformDeclarationAst
         transformDeclaration (Function sig body) = do
           sig' <- f sig
           return $ Function sig' body
+        transformDeclaration (Method sig body) = do
+          sig' <- f sig
+          return $ Method sig' body
         transformDeclaration (Extern sig) = do
           sig' <- f sig
           return $ Extern sig'

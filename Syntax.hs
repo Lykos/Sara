@@ -16,13 +16,13 @@ data DeclarationAst
 data Declaration
   = Function Signature ExpressionAst
   | Extern Signature
---  | Method Signature StatementAst
+  | Method Signature ExpressionAst
   deriving (Eq, Ord, Show)
 
 signature :: Declaration -> Signature
 signature (Function sig _) = sig
 signature (Extern sig)     = sig
--- signature (Method sig _)   = sig
+signature (Method sig _)   = sig
 
 data Signature
   = Signature { funcName :: Name
@@ -52,19 +52,10 @@ data Expression
   | Variable Name
   | Call Name [ExpressionAst]
   | Conditional ExpressionAst ExpressionAst ExpressionAst
+--  | Block [ExpressionAst] ExpressionAst
+--  | While ExpressionAst ExpressionAst
+--  | Assignment ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
-
--- data StatementAst
---   = StatementAst { stmt :: Statement
---                  , stmtPos :: SourcePos }
---     deriving (Eq, Ord, Show)
-
--- data Statement
---   = Return ExpressionAst
---   | Block [StatementAst]
---   | Assignment TypedVariable ExpressionAst
---   | While ExpressionAst StatementAst
---     deriving (Eq, Ord, Show)
 
 newtype Program
   = Program { program :: [DeclarationAst] }
