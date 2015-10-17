@@ -338,21 +338,21 @@ binaryInstruction (T.TypedBinOp Minus T.Integer T.Integer) a b =
 binaryInstruction (T.TypedBinOp Minus T.Double T.Double) a b =
   instr $ FSub NoFastMathFlags a b []
 binaryInstruction (T.TypedBinOp LessThan T.Integer T.Integer) a b =
-  instr $ ICmp IP.SGT a b []
-binaryInstruction (T.TypedBinOp LessThan T.Double T.Double) a b =
-  instr $ FCmp FP.OGT a b []
-binaryInstruction (T.TypedBinOp AtMost T.Integer T.Integer) a b =
-  instr $ ICmp IP.SGE a b []
-binaryInstruction (T.TypedBinOp AtMost T.Double T.Double) a b =
-  instr $ FCmp FP.OGE a b []
-binaryInstruction (T.TypedBinOp GreaterThan T.Integer T.Integer) a b =
   instr $ ICmp IP.SLT a b []
-binaryInstruction (T.TypedBinOp GreaterThan T.Double T.Double) a b =
+binaryInstruction (T.TypedBinOp LessThan T.Double T.Double) a b =
   instr $ FCmp FP.OLT a b []
-binaryInstruction (T.TypedBinOp AtLeast T.Integer T.Integer) a b =
+binaryInstruction (T.TypedBinOp AtMost T.Integer T.Integer) a b =
   instr $ ICmp IP.SLE a b []
-binaryInstruction (T.TypedBinOp AtLeast T.Double T.Double) a b =
+binaryInstruction (T.TypedBinOp AtMost T.Double T.Double) a b =
   instr $ FCmp FP.OLE a b []
+binaryInstruction (T.TypedBinOp GreaterThan T.Integer T.Integer) a b =
+  instr $ ICmp IP.SGT a b []
+binaryInstruction (T.TypedBinOp GreaterThan T.Double T.Double) a b =
+  instr $ FCmp FP.OGT a b []
+binaryInstruction (T.TypedBinOp AtLeast T.Integer T.Integer) a b =
+  instr $ ICmp IP.SGE a b []
+binaryInstruction (T.TypedBinOp AtLeast T.Double T.Double) a b =
+  instr $ FCmp FP.OGE a b []
 binaryInstruction (T.TypedBinOp EqualTo T.Integer T.Integer) a b =
   instr $ ICmp IP.EQ a b []
 binaryInstruction (T.TypedBinOp EqualTo T.Double T.Double) a b =
