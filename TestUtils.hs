@@ -62,7 +62,7 @@ declaration = function
 freeVariables :: ExpressionAst -> [TypedVariable]
 freeVariables = foldMapExpressionAst freeVariable
   where freeVariable :: ExpressionAst -> [TypedVariable]
-        freeVariable (ExpressionAst (Variable a) t _)  = [TypedVariable a t]
+        freeVariable (ExpressionAst (Variable a) t _) = [TypedVariable a t pos]
         freeVariable _                                = []
 
 data FunctionType =
@@ -178,7 +178,7 @@ expression t = sized expression'
 arbitraryTypedVariable :: Type -> Gen TypedVariable
 arbitraryTypedVariable t = do
   name <- identifier
-  return $ TypedVariable name t
+  return $ TypedVariable name t pos
 
 arbitraryExtern :: FunctionType -> Gen Declaration
 arbitraryExtern (FunctionType name argTypes retType) = do
@@ -257,7 +257,7 @@ childrenWithType :: Type -> [ExpressionAst] -> [Expression]
 childrenWithType t = map astExp . filter (\c -> expType c == t)
 
 shrinkTypedVariable :: TypedVariable -> [TypedVariable]
-shrinkTypedVariable (TypedVariable var typ) = [TypedVariable v typ | v <- shrinkIdentifier var]
+shrinkTypedVariable (TypedVariable var typ _) = [TypedVariable v typ pos | v <- shrinkIdentifier var]
 
 shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
 shrinkSignature free (Signature name args typ) = [Signature name a typ | a <- shrinkArgTypes args]
@@ -300,9 +300,11 @@ instance Arbitrary Program where
   shrink = shrinkProgram
 
 clearPositions :: Program -> Program
-clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts clearPosExpressionAst
-  where clearPosDeclarationAst (DeclarationAst decl _) = DeclarationAst decl pos
-        clearPosExpressionAst (ExpressionAst exp typ _) = ExpressionAst exp typ pos
+clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts clearPosExpressionAst . mapSignatures clearPosSignature
+  where clearPosDeclarationAst (DeclarationAst decl _)      = DeclarationAst decl pos
+        clearPosExpressionAst (ExpressionAst exp typ _)     = ExpressionAst exp typ pos
+        clearPosSignature (Signature name argTypes retType) = Signature name (map clearPosTypedVariable argTypes) retType
+        clearPosTypedVariable (TypedVariable name typ _)    = TypedVariable name typ pos
 
 clearTypes :: Program -> Program
 clearTypes = mapExpressionAsts clearTypes

@@ -80,7 +80,7 @@ typeCheckSignature _ _                                   = Result ()
 
 typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
 typeCheckDeclaration funcs (Function sig body) =
-  let var (TypedVariable varName varType) = (varName, varType)
+  let var (TypedVariable varName varType _) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
   in typeCheckExp funcs vars body >>= return . Function sig
 typeCheckDeclaration funcs e@(Extern _)        = return e

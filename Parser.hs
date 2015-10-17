@@ -48,7 +48,7 @@ typedVariable = do
   name <- identifierToken
   reservedToken ":"
   varType <- typeExpression
-  return $ TypedVariable name varType
+  addPosition . return $ TypedVariable name varType
 
 typeExpression :: Parser Type
 typeExpression = try booleanType
@@ -125,8 +125,8 @@ term = do
 
 addPosition :: Parser (SourcePos -> a) -> Parser a
 addPosition parser = do
-  ast <- parser
   pos <- getPosition
+  ast <- parser
   return $ ast pos
 
 simpleExpressionAst :: Parser ExpressionAst

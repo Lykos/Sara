@@ -39,7 +39,7 @@ prettyTyped doc typ     = doc
                           <+> prettyType typ
 
 prettyTypedVariable :: TypedVariable -> Doc
-prettyTypedVariable (TypedVariable name typ) = prettyTyped (text name) typ
+prettyTypedVariable (TypedVariable name typ _) = prettyTyped (text name) typ
 
 prettyType :: Type -> Doc
 prettyType = text . show

@@ -16,11 +16,13 @@ data DeclarationAst
 data Declaration
   = Function Signature ExpressionAst
   | Extern Signature
+--  | Method Signature StatementAst
   deriving (Eq, Ord, Show)
 
 signature :: Declaration -> Signature
 signature (Function sig _) = sig
 signature (Extern sig)     = sig
+-- signature (Method sig _)   = sig
 
 data Signature
   = Signature { funcName :: Name
@@ -30,7 +32,8 @@ data Signature
 
 data TypedVariable
   = TypedVariable { varName :: Name
-                  , varType :: Type }
+                  , varType :: Type
+                  , varPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
 -- Expression AST node that contains the expression and some metadata.
@@ -50,6 +53,18 @@ data Expression
   | Call Name [ExpressionAst]
   | Conditional ExpressionAst ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
+
+-- data StatementAst
+--   = StatementAst { stmt :: Statement
+--                  , stmtPos :: SourcePos }
+--     deriving (Eq, Ord, Show)
+
+-- data Statement
+--   = Return ExpressionAst
+--   | Block [StatementAst]
+--   | Assignment TypedVariable ExpressionAst
+--   | While ExpressionAst StatementAst
+--     deriving (Eq, Ord, Show)
 
 newtype Program
   = Program { program :: [DeclarationAst] }

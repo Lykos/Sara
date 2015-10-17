@@ -10,6 +10,7 @@ module AstUtils (
   , transformDeclarationAsts
   , transformExpressions
   , transformSignatures
+  , mapSignatures
   , foldMapSignatures) where
 
 import Operators
@@ -86,6 +87,9 @@ transformSignatures f = transformDeclarationAsts transformDeclarationAst
         transformDeclaration (Extern sig) = do
           sig' <- f sig
           return $ Extern sig'
+
+mapSignatures :: (Signature -> Signature) -> Program -> Program
+mapSignatures = transformToMap transformSignatures
 
 foldMapSignatures :: Monoid m => (Signature -> m) -> Program -> m
 foldMapSignatures = transformToFoldMap transformSignatures
