@@ -84,7 +84,28 @@ typeCheckDeclaration funcs (Method sig body)   = typeCheckMethod funcs sig body
 typeCheckDeclaration funcs e@(Extern _)        = return e
 
 typeCheckFunction :: FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
-typeCheckFunction = typeCheckFunctionOrMethod Function
+typeCheckFunction funcs sig body = typeCheckFunctionOrMethod Function funcs sig body >>= checkPureFunction
+  where checkPureFunction :: Declaration -> TypeErrorOr Declaration
+        checkPureFunction (Function sig body) = do
+          body' <- checkPure body
+          return $ Function sig body
+
+checkPure :: ExpressionAst -> TypeErrorOr ExpressionAst
+checkPure e = transformExpressionAst checkPureExpressionAst e
+  where checkPureExpressionAst :: ExpressionAst -> TypeErrorOr ExpressionAst
+        checkPureExpressionAst ea@(ExpressionAst e _ _) | isPure e  = return ea
+                                                        | otherwise = impureExpression ea
+        isPure :: Expression -> Bool
+        isPure (Syntax.Boolean _)      = True
+        isPure (Syntax.Integer _)      = True
+        isPure (Syntax.Double _)       = True
+        isPure (UnaryOperation _ _)    = True
+        isPure (BinaryOperation _ _ _) = True
+        isPure (Variable _)            = True
+        isPure (Call _ _)              = True
+        isPure (Conditional _ _ _)     = True
+        -- isPure (Block _ _ _)           = True
+        isPure _                       = False
 
 typeCheckMethod :: FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
 typeCheckMethod = typeCheckFunctionOrMethod Method
@@ -223,6 +244,10 @@ invalidMainRetType t =
 
 noMain :: SourcePos -> TypeErrorOr a
 noMain = typeError "The program has no main funtion."
+
+impureExpression :: ExpressionAst -> TypeErrorOr a
+impureExpression e =
+  typeError ("Functions can only contain pure expressions, but expression " ++ show e ++ " is not pure.") (expPos e)
 
 typeError :: String -> SourcePos -> TypeErrorOr a
 typeError msg pos = Error $ TypeError pos msg
