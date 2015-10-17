@@ -36,7 +36,7 @@ identifier :: Gen Name
 identifier = ident `suchThat` isNotReserved
 
 isNotReserved :: Name -> Bool
-isNotReserved a = a `notElem` reservedNames
+isNotReserved a = a /= "main" && a `notElem` reservedNames
 
 shrinkIdentifier :: Name -> [Name]
 shrinkIdentifier = filter (\a -> not (null a) && isNotReserved a) . shrink
@@ -48,7 +48,7 @@ testfile :: String
 testfile = "<testfile>"
 
 pos :: SourcePos
-pos = (newPos testfile 0 0)
+pos = newPos testfile 0 0
 
 position :: Gen SourcePos
 position = return pos

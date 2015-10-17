@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module CodeGenerator (
   codegen
   , emptyModule) where
@@ -17,11 +19,9 @@ import Control.Monad.Except
 import Control.Applicative
 import System.IO
 
-import LLVM.General.Context
 import LLVM.General.AST
 import LLVM.General.AST.Global
 
-import qualified LLVM.General.Module as M
 import qualified LLVM.General.AST.Constant as C
 import qualified LLVM.General.AST.Float as F
 import qualified LLVM.General.AST.Attribute as A
@@ -249,18 +249,8 @@ codegenDeclaration (S.Extern sig) = extern sig
 codegenProgram :: S.Program -> LLVM ()
 codegenProgram (S.Program p) = (sequence $ map codegenDeclarationAst p) >> return ()
 
-liftError :: ExceptT String IO a -> IO a
-liftError = runExceptT >=> either fail return
-
-codegen :: Module -> S.Program -> IO Module
-codegen mod program = withContext $ \context ->
-  liftError $ M.withModuleFromAST context newAst $ \m -> do
-    llstr <- M.moduleLLVMAssembly m
-    putStrLn llstr
-    return newAst
-  where
-    newAst :: Module
-    newAst = runLLVM mod $ codegenProgram program
+codegen :: Module -> S.Program -> Module
+codegen mod program = runLLVM mod $ codegenProgram program
 
 cons :: C.Constant -> Operand
 cons = ConstantOperand

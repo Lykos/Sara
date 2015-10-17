@@ -1,7 +1,8 @@
 module TypeChecker (
   TypeErrorOr(..)
   , TypeError(..)
-  , typeCheck) where
+  , typeCheck
+  , typeCheckWithMain) where
 
 import Text.Parsec.Pos
 import Control.Monad
@@ -11,6 +12,8 @@ import Data.Either
 import Types
 import Syntax
 import Operators
+import AstUtils
+import Data.Monoid
 import qualified Data.Map.Strict as Map
 
 data FunctionType =
@@ -50,17 +53,37 @@ typeCheck (Program prog) = do
   funcs <- functions $ Program prog
   liftM Program $ sequence $ map (typeCheckDeclarationAst funcs) prog
 
+typeCheckWithMain :: Program -> TypeErrorOr Program
+typeCheckWithMain p = checkMain p >> typeCheck p
+
+checkMain :: Program -> TypeErrorOr ()
+checkMain program = if hasMain program then Result () else noMain (programPos program)
+
+programPos :: Program -> SourcePos
+programPos (Program ((DeclarationAst _ pos):xs)) = pos
+programPos _                                     = newPos "<unknown>" 0 0
+
+hasMain :: Program -> Bool
+hasMain = getAny . foldMapSignatures (\s -> Any $ funcName s == "main")
+
 typeCheckDeclarationAst :: FunctionMap -> DeclarationAst -> TypeErrorOr DeclarationAst
-typeCheckDeclarationAst funcs declAst = do
-  typedDecl <- typeCheckDeclaration funcs $ decl declAst
+typeCheckDeclarationAst funcs declAst@(DeclarationAst decl pos) = do
+  typeCheckSignature (signature decl) pos
+  typedDecl <- typeCheckDeclaration funcs $ decl
   return declAst { decl = typedDecl }
+
+typeCheckSignature :: Signature -> SourcePos -> TypeErrorOr ()
+typeCheckSignature (Signature "main" [] Types.Integer) _ = Result ()
+typeCheckSignature (Signature "main" [] t) p             = invalidMainRetType t p
+typeCheckSignature (Signature "main" a Types.Integer) p  = invalidMainArgs a p
+typeCheckSignature _ _                                   = Result ()
 
 typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
 typeCheckDeclaration funcs (Function sig body) =
   let var (TypedVariable varName varType) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
   in typeCheckExp funcs vars body >>= return . Function sig
-typeCheckDeclaration funcs e@(Extern _)        =  return e
+typeCheckDeclaration funcs e@(Extern _)        = return e
 
 functions :: Program -> TypeErrorOr FunctionMap
 functions = functionsFromDecls . program
@@ -179,6 +202,17 @@ ambiguousFunction sig =
 
 unknownType :: SourcePos -> TypeErrorOr a
 unknownType = typeError "Unknown type."
+
+invalidMainArgs :: [TypedVariable] -> SourcePos -> TypeErrorOr a
+invalidMainArgs args =
+  typeError $ "Main function should not have arguments. Found " ++ show args ++ " instead."
+
+invalidMainRetType :: Type -> SourcePos -> TypeErrorOr a
+invalidMainRetType t =
+  typeError $ "Main function should have return type Integer. Found " ++ show t ++ " instead."
+
+noMain :: SourcePos -> TypeErrorOr a
+noMain = typeError "The program has no main funtion."
 
 typeError :: String -> SourcePos -> TypeErrorOr a
 typeError msg pos = Error $ TypeError pos msg

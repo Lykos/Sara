@@ -9,7 +9,8 @@ module AstUtils (
   , foldMapExpressions
   , transformDeclarationAsts
   , transformExpressions
-  , transformSignatures) where
+  , transformSignatures
+  , foldMapSignatures) where
 
 import Operators
 import Syntax
@@ -86,3 +87,5 @@ transformSignatures f = transformDeclarationAsts transformDeclarationAst
           sig' <- f sig
           return $ Extern sig'
 
+foldMapSignatures :: Monoid m => (Signature -> m) -> Program -> m
+foldMapSignatures = transformToFoldMap transformSignatures
