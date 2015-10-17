@@ -163,7 +163,7 @@ define :: S.Signature -> [BasicBlock] -> LLVM ()
 define (S.Signature label args retty) body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
-  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty) <- args], False)
+  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _) <- args], False)
   , returnType  = typ retty
   , basicBlocks = body
   }
@@ -232,7 +232,12 @@ codegenDeclarationAst :: S.DeclarationAst -> LLVM ()
 codegenDeclarationAst = codegenDeclaration . S.decl
 
 codegenDeclaration :: S.Declaration -> LLVM ()
-codegenDeclaration (S.Function signature body) = define signature bls
+codegenDeclaration (S.Extern sig)        = extern sig
+codegenDeclaration (S.Function sig body) = codegenFunctionOrMethod sig body
+codegenDeclaration (S.Method sig body)   = codegenFunctionOrMethod sig body
+
+codegenFunctionOrMethod :: S.Signature -> S.ExpressionAst -> LLVM ()
+codegenFunctionOrMethod signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName
@@ -244,7 +249,6 @@ codegenDeclaration (S.Function signature body) = define signature bls
         store var (local (Name name) t) t
         assign name var
       codegenExpressionAst body >>= ret
-codegenDeclaration (S.Extern sig) = extern sig
 
 codegenProgram :: S.Program -> LLVM ()
 codegenProgram (S.Program p) = (sequence $ map codegenDeclarationAst p) >> return ()
@@ -406,3 +410,6 @@ codegenExpressionAst (S.ExpressionAst exp t _) = let t' = typ t in case exp of
 
     setBlock exitBlock
     phi [(ifVal, ifBlock), (elseVal, elseBlock)] t'
+  (S.Block stmts exp)                -> do
+    stmts' <- mapM codegenExpressionAst stmts
+    codegenExpressionAst exp
