@@ -35,6 +35,7 @@ transformExpressionAst f (ExpressionAst exp typ pos) = do
             UnaryOperation op exp          -> liftM (UnaryOperation op) (transformSubExp exp)
             Conditional cond ifExp elseExp -> liftM3 Conditional (transformSubExp cond) (transformSubExp ifExp) (transformSubExp elseExp)
             Call name args                 -> liftM (Call name) (sequence $ map transformSubExp args)
+            Block stmts exp                -> liftM2 Block (sequence $ map transformSubExp stmts) (transformSubExp exp)
             e                              -> return e
 
 foldMapExpressionAst :: Monoid m => (ExpressionAst -> m) -> ExpressionAst -> m

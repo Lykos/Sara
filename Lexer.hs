@@ -38,6 +38,9 @@ identifierToken = Token.identifier lexer
 parensToken :: Parser a -> Parser a
 parensToken = Token.parens lexer
 
+bracesToken :: Parser a -> Parser a
+bracesToken = Token.braces lexer
+
 semiSep :: Parser a -> Parser [a]
 semiSep = Token.semiSep lexer
 

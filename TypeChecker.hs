@@ -96,6 +96,7 @@ checkPure e = transformExpressionAst checkPureExpressionAst e
         checkPureExpressionAst ea@(ExpressionAst e _ _) | isPure e  = return ea
                                                         | otherwise = impureExpression ea
         isPure :: Expression -> Bool
+        isPure Syntax.Unit             = True
         isPure (Syntax.Boolean _)      = True
         isPure (Syntax.Integer _)      = True
         isPure (Syntax.Double _)       = True
@@ -104,7 +105,7 @@ checkPure e = transformExpressionAst checkPureExpressionAst e
         isPure (Variable _)            = True
         isPure (Call _ _)              = True
         isPure (Conditional _ _ _)     = True
-        -- isPure (Block _ _ _)           = True
+        isPure (Block _ _)             = True
         isPure _                       = False
 
 typeCheckMethod :: FunctionMap -> Signature -> ExpressionAst -> TypeErrorOr Declaration
@@ -140,6 +141,7 @@ typeCheckExp :: FunctionMap -> VariableMap -> ExpressionAst -> TypeErrorOr Expre
 typeCheckExp funcs vars ast =
   let e = astExp ast
   in case e :: Expression of
+    Syntax.Unit -> typedAst Types.Unit
     Syntax.Boolean _ -> typedAst Types.Boolean
     Syntax.Integer _ -> typedAst Types.Integer
     Syntax.Double _ -> typedAst Types.Double
@@ -169,6 +171,10 @@ typeCheckExp funcs vars ast =
         (Types.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (Result ifType)
                                           | otherwise             -> mismatchingCondTypes typedIfExp typedElseExp pos
         (condType, _, _)                                          -> invalidCondType cond
+    Block stmts exp -> do
+      typedStmts <- sequence $ map typedSubExp stmts
+      typedExp <- typedSubExp exp
+      addType (Block typedStmts typedExp) (astType typedExp)
   where pos = expPos ast
         typedSubExp = typeCheckExp funcs vars
         checkNotUnknown :: Type -> SourcePos -> TypeErrorOr Type

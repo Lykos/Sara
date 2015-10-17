@@ -96,7 +96,7 @@ expressionAst t = do
   return $ ExpressionAst e t p
 
 typ :: Gen Type
-typ = elements [Types.Boolean, Types.Integer, Types.Double]
+typ = elements [Types.Unit, Types.Boolean, Types.Integer, Types.Double]
 
 boolean :: Gen Expression
 boolean = liftM Syntax.Boolean arbitrary
@@ -120,7 +120,9 @@ call = liftM2 Call identifier (scale pred TestUtils.args)
 args :: Gen [ExpressionAst]
 args = scale intRoot $ listOf arg
   where arg = typ >>= expressionAst
-        intRoot = round . sqrt . fromIntegral
+
+intRoot :: Int -> Int
+intRoot = round . sqrt . fromIntegral
 
 invert :: (Ord k, Ord v) => Map.Map k v -> Map.Map v [k]
 invert m = Map.fromListWith (++) pairs
@@ -149,11 +151,19 @@ conditional :: Type -> Gen Expression
 conditional t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree t)
   where subtree t = scale (\n -> n `div` 3) $ expressionAst t
 
+block :: Type -> Gen Expression
+block t = do
+  t' <- typ
+  stmts <- scale intRoot $ listOf $ expressionAst t'
+  expr <- scale intRoot $ expressionAst t
+  return $ Block stmts expr
+
 leafExpression :: Type -> Gen Expression
 leafExpression t = oneof [constant t, variable t]
   where constant Types.Boolean = boolean
         constant Types.Integer = integer
         constant Types.Double  = double
+        constant Types.Unit    = return Syntax.Unit
 
 innerExpression :: Type -> Gen Expression
 innerExpression t =
@@ -161,7 +171,7 @@ innerExpression t =
   frequency weighted
   where weighted = map ((,) weight) anyTyped ++ map ((,) numUnOps) binOps ++ map ((,) numBinOps) unOps
         anyTyped :: [Gen Expression]
-        anyTyped = map ($ t) [leafExpression, leafExpression, conditional] ++ [call]
+        anyTyped = map ($ t) [leafExpression, leafExpression, conditional, block] ++ [call]
         binOps :: [Gen Expression]
         binOps = binaryOperations t
         unOps :: [Gen Expression]
@@ -246,13 +256,17 @@ shrinkExpression t (BinaryOperation op left right)  = childrenWithType t [left, 
                                                       ++ [BinaryOperation op l r | (l, r) <- shrink (left, right)]
 shrinkExpression t (UnaryOperation op exp)          = childrenWithType t [exp]
                                                       ++ [UnaryOperation op e | e <- shrink exp]
-shrinkExpression t (Conditional cond ifExp elseExp) = childrenWithType t [cond, ifExp, elseExp]
-                                                      ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
 shrinkExpression t (Call name args)                 = childrenWithType t args
                                                       ++ [Call name a | a <- shrinkArgs args]
   where shrinkArgs :: [ExpressionAst] -> [[ExpressionAst]]
         shrinkArgs []     = []
         shrinkArgs (x:xs) = [y : xs | y <- shrink x] ++ [x:ys | ys <- shrinkArgs xs]
+shrinkExpression t (Conditional cond ifExp elseExp) = childrenWithType t [cond, ifExp, elseExp]
+                                                      ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
+shrinkExpression t (Block stmts exp)                = withoutExp ++ [Block s e | (s, e) <- shrink (stmts, exp)]
+  where withoutExp :: [Expression]
+        withoutExp = let exp' = last stmts in
+          if expType exp' == t then [Block (init stmts) exp'] else []
 
 childrenWithType :: Type -> [ExpressionAst] -> [Expression]
 childrenWithType t = map astExp . filter (\c -> expType c == t)

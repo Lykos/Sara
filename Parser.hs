@@ -2,6 +2,7 @@ module Parser (Parser.parse) where
 
 import Text.Parsec
 import Text.Parsec.String (Parser)
+import Data.Void
 
 import qualified Text.Parsec.Expr as Expr
 import qualified Text.Parsec.Token as Token
@@ -59,25 +60,23 @@ typedVariable = do
   addPosition . return $ TypedVariable name varType
 
 typeExpression :: Parser Type
-typeExpression = try booleanType
+typeExpression = try unitType
+                 <|> try booleanType
                  <|> try integerType
                  <|> try doubleType
                  <?> "type"
 
+unitType :: Parser Type
+unitType = reservedToken "Unit" >> return Types.Unit
+
 booleanType :: Parser Type
-booleanType = do
-  reservedToken "Boolean"
-  return Types.Boolean
+booleanType = reservedToken "Boolean" >> return Types.Boolean
 
 integerType :: Parser Type
-integerType = do
-  reservedToken "Integer"
-  return Types.Integer
+integerType = reservedToken "Integer" >> return Types.Integer
 
 doubleType :: Parser Type
-doubleType = do
-  reservedToken "Double"
-  return Types.Double
+doubleType = reservedToken "Double" >> return Types.Double
 
 expressionAst :: Parser ExpressionAst
 expressionAst = Expr.buildExpressionParser operatorTable term
@@ -143,12 +142,20 @@ simpleExpressionAst = do
   addPosition . return $ ExpressionAst t Unknown
 
 expression :: Parser Expression
-expression = try boolean
+expression = try unit
+             <|> try boolean
              <|> try double
              <|> try integer
              <|> try call
              <|> try conditional
+             <|> try block
              <|> variable
+
+empty :: Parser Void
+empty = return undefined
+
+unit :: Parser Expression
+unit = parensToken empty >> return Syntax.Unit
 
 boolean :: Parser Expression
 boolean = (reservedToken "true" >> return (Syntax.Boolean True))
@@ -184,6 +191,15 @@ conditional = do
   reservedToken "else"
   thenExpr <- expressionAst
   return $ Conditional cond ifExpr thenExpr
+
+block :: Parser Expression
+block = do
+  pos <- getPosition
+  exps <- bracesToken $ semiSep expressionAst
+  return $ if (null exps) then
+             Block [] (ExpressionAst Syntax.Unit Unknown pos)
+           else
+             Block (init exps) (last exps)
 
 contents :: Parser a -> Parser a
 contents p = do

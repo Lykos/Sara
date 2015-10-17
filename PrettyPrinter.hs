@@ -72,6 +72,7 @@ prettyTerm exp = case exp of
   _                    -> prettyBinaryTerm exp
 
 prettyExpression :: Expression -> Doc
+prettyExpression Syntax.Unit                      = text "()"
 prettyExpression (Syntax.Boolean True)            = text "true"
 prettyExpression (Syntax.Boolean False)           = text "false"
 prettyExpression (Syntax.Integer n)               = integer n
@@ -90,6 +91,10 @@ prettyExpression (Conditional cond ifExp elseExp) = text "if"
                                                     <+> prettyExpressionAst ifExp
                                                     <+> text "else"
                                                     <+> prettyExpressionAst elseExp
+prettyExpression (Block [] (ExpressionAst Syntax.Unit _ _)) = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
+prettyExpression (Block stmts exp)                = text "{"
+                                                    $+$ nest indentation (vsep . punctuate semi . map prettyExpressionAst $ stmts ++ [exp])
+                                                    $+$ text "}"
 
 prettySubExp :: ExpressionAst -> Doc
 prettySubExp ast = case astExp ast of

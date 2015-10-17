@@ -44,7 +44,8 @@ data ExpressionAst
   deriving (Eq, Ord, Show)
 
 data Expression
-  = Boolean Bool
+  = Unit
+  | Boolean Bool
   | Integer Integer
   | Double Double
   | UnaryOperation UnaryOperator ExpressionAst
@@ -52,7 +53,7 @@ data Expression
   | Variable Name
   | Call Name [ExpressionAst]
   | Conditional ExpressionAst ExpressionAst ExpressionAst
---  | Block [ExpressionAst] ExpressionAst
+  | Block [ExpressionAst] ExpressionAst
 --  | While ExpressionAst ExpressionAst
 --  | Assignment ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)

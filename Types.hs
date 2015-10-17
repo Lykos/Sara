@@ -4,8 +4,9 @@ import Operators
 import qualified Data.Map.Strict as Map
 
 data Type
-  = Integer
+  = Unit
   | Boolean
+  | Integer
   | Double
   | Unknown
   deriving (Eq, Ord, Show)
