@@ -9,7 +9,12 @@ data Type
   | Integer
   | Double
   | Unknown
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+types :: [Type]
+types = filter known $ enumFrom minBound
+  where known :: Type -> Bool
+        known = (/=) Unknown
 
 data TypedUnOp
   = TypedUnOp UnaryOperator Type

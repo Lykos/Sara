@@ -1,6 +1,7 @@
 module Lexer where
 
 import Operators
+import Types
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
@@ -10,7 +11,7 @@ import qualified Text.Parsec.Token as Token
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
                   ++ [";", ":"]
-reservedNames = ["function", "extern", "mehod", "if", "then", "else", "true", "false", "Boolean", "Integer", "Double"]
+reservedNames = ["function", "extern", "method", "if", "then", "else", "true", "false"] ++ map show types
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
