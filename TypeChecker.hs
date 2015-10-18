@@ -6,7 +6,9 @@ module TypeChecker (
 
 import Text.Parsec.Pos
 import Control.Monad
+import Control.Monad.Identity
 import Control.Applicative
+import Control.Monad.Except
 import Data.Functor
 import Data.Either
 import Types
@@ -23,10 +25,7 @@ data FunctionType =
 
 type FunctionMap = Map.Map FunctionType Type
 type VariableMap = Map.Map Name Type
-data TypeErrorOr a
-  = Error TypeError
-  | Result a
-  deriving (Eq, Ord, Show)
+type TypeErrorOr a = Except TypeError a
 
 data TypeError =
   TypeError { errorPos :: SourcePos
@@ -35,18 +34,6 @@ data TypeError =
 
 instance Show TypeError where
   show err = show (errorPos err) ++ ":\n" ++ errorMsg err
-
-instance Monad TypeErrorOr where
-  Error e >>= f  = Error e
-  Result r >>= f = f r
-  return         = Result
-
-instance Applicative TypeErrorOr where
-  pure  = return
-  (<*>) = ap
-
-instance Functor TypeErrorOr where
-  fmap f xs = xs >>= return . f
 
 typeCheck :: Program -> TypeErrorOr Program
 typeCheck (Program prog) = do
@@ -57,7 +44,7 @@ typeCheckWithMain :: Program -> TypeErrorOr Program
 typeCheckWithMain p = checkMain p >> typeCheck p
 
 checkMain :: Program -> TypeErrorOr ()
-checkMain program = if hasMain program then Result () else noMain (programPos program)
+checkMain program = if hasMain program then return () else noMain (programPos program)
 
 programPos :: Program -> SourcePos
 programPos (Program ((DeclarationAst _ pos):xs)) = pos
@@ -73,10 +60,10 @@ typeCheckDeclarationAst funcs declAst@(DeclarationAst decl pos) = do
   return declAst { decl = typedDecl }
 
 typeCheckSignature :: Signature -> SourcePos -> TypeErrorOr ()
-typeCheckSignature (Signature "main" [] Types.Integer) _ = Result ()
+typeCheckSignature (Signature "main" [] Types.Integer) _ = return ()
 typeCheckSignature (Signature "main" [] t) p             = invalidMainRetType t p
 typeCheckSignature (Signature "main" a Types.Integer) p  = invalidMainArgs a p
-typeCheckSignature _ _                                   = Result ()
+typeCheckSignature _ _                                   = return ()
 
 typeCheckDeclaration :: FunctionMap -> Declaration -> TypeErrorOr Declaration
 typeCheckDeclaration funcs (Function sig body) = typeCheckFunction funcs sig body
@@ -121,7 +108,7 @@ functions :: Program -> TypeErrorOr FunctionMap
 functions = functionsFromDecls . program
 
 functionsFromDecls :: [DeclarationAst] -> TypeErrorOr FunctionMap
-functionsFromDecls d = foldr addOneFunction (Result Map.empty) d
+functionsFromDecls d = foldr addOneFunction (return Map.empty) d
 
 addOneFunction :: DeclarationAst -> TypeErrorOr FunctionMap -> TypeErrorOr FunctionMap
 addOneFunction d m = do
@@ -168,7 +155,7 @@ typeCheckExp funcs vars ast =
       ifType <- astType typedIfExp
       elseType <- astType typedElseExp
       case (condType, ifType, elseType) of
-        (Types.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (Result ifType)
+        (Types.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (return ifType)
                                           | otherwise             -> mismatchingCondTypes typedIfExp typedElseExp pos
         (condType, _, _)                                          -> invalidCondType cond
     Block stmts exp -> do
@@ -179,7 +166,7 @@ typeCheckExp funcs vars ast =
         typedSubExp = typeCheckExp funcs vars
         checkNotUnknown :: Type -> SourcePos -> TypeErrorOr Type
         checkNotUnknown Unknown pos = unknownType pos
-        checkNotUnknown t _         = Result t
+        checkNotUnknown t _         = return t
         astType :: ExpressionAst -> TypeErrorOr Type
         astType exp = checkNotUnknown (expType exp) (expPos exp)
         typedAst :: Type -> TypeErrorOr ExpressionAst
@@ -193,21 +180,21 @@ typeCheckExp funcs vars ast =
         varType :: Name -> TypeErrorOr Type
         varType name = case name `Map.lookup` vars of
           Nothing -> unknownVariable name pos
-          Just t  -> Result t
+          Just t  -> return t
         funcType :: Name -> [Type] -> TypeErrorOr Type
         funcType name argTypes = case (FunctionType name argTypes) `Map.lookup` funcs of
           Nothing -> unknownFunction name argTypes pos
-          Just t  -> Result t
+          Just t  -> return t
 
 unOpType :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr Type
 unOpType op t pos = case (TypedUnOp op t) `Map.lookup` typedUnOps of
   Nothing -> unknownUnOp op t pos
-  Just t  -> Result t
+  Just t  -> return t
 
 binOpType :: BinaryOperator -> Type -> Type -> SourcePos -> TypeErrorOr Type
 binOpType op s t pos = case (TypedBinOp op s t) `Map.lookup` typedBinOps of
   Nothing -> unknownBinOp op s t pos
-  Just t  -> Result t
+  Just t  -> return t
 
 unknownUnOp :: UnaryOperator -> Type -> SourcePos -> TypeErrorOr a
 unknownUnOp op t =
@@ -256,4 +243,4 @@ impureExpression e =
   typeError ("Functions can only contain pure expressions, but expression " ++ show e ++ " is not pure.") (expPos e)
 
 typeError :: String -> SourcePos -> TypeErrorOr a
-typeError msg pos = Error $ TypeError pos msg
+typeError msg pos = throwError $ TypeError pos msg

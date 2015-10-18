@@ -7,6 +7,7 @@ import TestUtils
 import TypeChecker
 import Syntax
 
+import Control.Monad.Except
 import Test.QuickCheck
 import Test.QuickCheck.All
 import Test.QuickCheck.Property
@@ -17,11 +18,12 @@ prop_addsTypes p = example `counterexample` liftBool (actual == expected)
                   ++ "\n\nActual:\n" ++ render actual
                   ++ "\n\nInput:\n" ++ prettyRender input
         input = clearTypes p
-        expected = Result p
+        expected = return p
         actual = typeCheck input
         render :: TypeErrorOr Program -> String
-        render (Error e)  = show e
-        render (Result r) = prettyRender r
+        render e = case runExcept e of
+          Left e  -> show e
+          Right r -> prettyRender r
 
 return []
 
