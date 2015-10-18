@@ -36,8 +36,8 @@ passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
 type ExceptOrIO a = ExceptT Error IO a
 
-codegenStage :: Module -> Program -> (Context -> M.Module -> IO ()) -> ExceptOrIO Module
-codegenStage mod prog report = withExceptT OtherError $ ExceptT $ withContext $ \context -> runExceptT $ M.withModuleFromAST context mod' $ generate context
+codegenStage :: (Context -> M.Module -> IO ()) -> Module -> Program -> ExceptOrIO Module
+codegenStage report mod prog = withExceptT OtherError $ ExceptT $ withContext $ \context -> runExceptT $ M.withModuleFromAST context mod' $ generate context
   where generate :: Context -> M.Module -> IO Module
         generate context m = withPassManager passes $ \pm -> do
           -- Optimization Pass
@@ -60,8 +60,8 @@ jit c = EE.withMCJIT c optlevel model ptrelim fastins
     ptrelim  = Nothing -- frame pointer elimination
     fastins  = Nothing -- fast instruction selection
 
-runStage :: Context -> M.Module -> (Int64 -> IO ()) -> IO ()
-runStage context mod report = jit context $ \engine -> EE.withModuleInEngine engine mod execute'
+runStage :: (Int64 -> IO ()) -> Context -> M.Module -> IO ()
+runStage report context mod = jit context $ \engine -> EE.withModuleInEngine engine mod execute'
   where execute' :: EE.ExecutableModule EE.MCJIT -> IO ()
         execute' ee = do
           fn <- EE.getFunction ee (Name "main")
@@ -78,32 +78,32 @@ flattenError res = do
     (Left msg) -> return $ Left $ OtherError msg
     (Right m)  -> return m
 
-parseStage :: String -> String -> (Program -> IO ()) -> ExceptOrIO Program
-parseStage filename contents = stage $ toError $ parse filename contents
+parseStage :: (Program -> IO ()) -> String -> String -> ExceptOrIO Program
+parseStage report filename contents = stage report $ toError $ parse filename contents
   where toError :: ErrorOr Program -> ExceptOrIO Program
         toError e = case runExcept e of
           (Left err)  -> throwError err
           (Right res) -> return res
 
-stage :: ExceptOrIO b -> (b -> IO ()) -> ExceptOrIO b
-stage e report = mapExceptT stage' e
+stage :: (b -> IO ()) -> ExceptOrIO b -> ExceptOrIO b
+stage report e = mapExceptT stage' e
   where stage' e = do
           e' <- e
           case e' of
             Left err  -> return $ Left err
             Right res -> report res >> return (Right res)
 
-typeCheckStage :: Program -> (Program -> IO ()) -> ExceptOrIO Program
-typeCheckStage program = stage $ toError $ typeCheckWithMain program
+typeCheckStage :: (Program -> IO ()) -> Program -> ExceptOrIO Program
+typeCheckStage report program = stage report $ toError $ typeCheckWithMain program
   where toError :: ErrorOr Program -> ExceptOrIO Program
         toError e = case runExcept e of
           (Left err)  -> throwError err
           (Right res) -> return res
 
 compile'' :: (Context -> M.Module -> IO ()) -> Reporter -> Module -> String -> String -> ExceptOrIO Module
-compile'' moduleReporter reporter mod filename input = parseStage filename input (reportParsed reporter)
-                                                      >>= flip typeCheckStage (reportTyped reporter)
-                                                      >>= flip (codegenStage mod) moduleReporter
+compile'' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
+                                                      >>= typeCheckStage (reportTyped reporter)
+                                                      >>= codegenStage moduleReporter mod
 
 compile' :: Reporter -> String -> String -> ExceptOrIO Module
 compile' reporter filename input = withModule filename $ \mod ->
@@ -128,4 +128,4 @@ run' reporter filename input = withModule filename $ \mod ->
   where runReporter :: Context -> M.Module -> IO ()
         runReporter context mod = do
           reportModule reporter mod
-          runStage context mod $ reportResult reporter
+          runStage (reportResult reporter) context mod
