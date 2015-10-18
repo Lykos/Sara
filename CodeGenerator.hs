@@ -155,9 +155,10 @@ integerBits :: Word32
 integerBits = 64
 
 typ :: T.Type -> Type
+typ T.Unit    = IntegerType booleanBits
 typ T.Boolean = IntegerType booleanBits
 typ T.Integer = IntegerType integerBits
-typ T.Double = FloatingPointType 64 IEEE
+typ T.Double  = FloatingPointType 64 IEEE
 
 define :: S.Signature -> [BasicBlock] -> LLVM ()
 define (S.Signature label args retty) body = addDefn $
@@ -265,6 +266,9 @@ cons = ConstantOperand
 booleanToInteger :: Bool -> Integer
 booleanToInteger True  = 1
 booleanToInteger False = 0
+
+unit :: Codegen Operand
+unit = true1
 
 boolean :: Bool -> Codegen Operand
 boolean b = return $ cons $ C.Int booleanBits $ booleanToInteger b
@@ -375,6 +379,7 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
 
 codegenExpressionAst :: S.ExpressionAst -> Codegen Operand
 codegenExpressionAst (S.ExpressionAst exp t _) = let t' = typ t in case exp of
+  S.Unit                             -> unit
   (S.Boolean b)                      -> boolean b
   (S.Integer n)                      -> integer n
   (S.Double d)                       -> double d
