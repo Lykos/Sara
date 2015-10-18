@@ -1,0 +1,2 @@
+// returns 5
+method main(): Integer = 5

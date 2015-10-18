@@ -1,0 +1,5 @@
+// returns 59
+method main(): Integer = m(23, 6, 23, 7);
+
+method m(a: Integer, b: Integer, c: Integer, d: Integer): Integer =
+  if a < b then c + d else a + b + c + d

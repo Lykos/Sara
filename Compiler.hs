@@ -106,10 +106,10 @@ compile :: Reporter -> String -> String -> ExceptOrIO ()
 compile reporter filename input = ExceptT $ withModule filename $ \mod ->
   runExceptT $ compile' moduleReporter reporter mod filename input
   where moduleReporter :: Context -> M.Module -> IO (Either Error ())
-        moduleReporter = (\c m -> reportModule reporter m >> return (Right ()))
+        moduleReporter context mod = reportModule reporter mod >> return (Right ())
 
 run :: Reporter -> String -> String -> ExceptOrIO Int64
 run reporter filename input = withModule filename $ \mod ->
   compile' runReporter reporter mod filename input
   where runReporter :: Context -> M.Module -> IO (Either Error Int64)
-        runReporter context mod = runStage context mod
+        runReporter context mod = reportModule reporter mod >> runStage context mod

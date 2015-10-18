@@ -1,0 +1,6 @@
+// returns 5
+method main(): Integer = 5;
+
+method m(): Unit = ();
+
+method n(): Unit = {}

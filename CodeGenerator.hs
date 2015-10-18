@@ -297,10 +297,10 @@ unaryInstruction (T.TypedUnOp UnaryMinus T.Double) a t  = do
   zero <- doubleZero
   (instr $ FSub NoFastMathFlags zero a []) t
 unaryInstruction (T.TypedUnOp BitwiseNot T.Integer) a t = do
-  true <- true1
+  true <- true64
   (instr $ Xor true a []) t
 unaryInstruction (T.TypedUnOp LogicalNot T.Boolean) a t = do
-  true <- true64
+  true <- true1
   (instr $ Xor true a []) t
 
 binaryInstruction :: T.TypedBinOp -> Operand -> Operand -> Type -> Codegen Operand
