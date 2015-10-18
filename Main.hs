@@ -36,4 +36,3 @@ main = do
   case args of
     []   -> getContents >>= process "<stdin>"
     args -> sequence (map processFile args) >> return ()
-  return ()
