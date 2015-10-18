@@ -205,7 +205,7 @@ block = do
 
 contents :: Parser a -> Parser a
 contents p = do
-  Token.whiteSpace lexer
+  whiteSpaceToken
   r <- p
   eof
   return r

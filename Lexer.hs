@@ -53,3 +53,6 @@ reservedToken = Token.reserved lexer
 
 reservedOpToken :: String -> Parser ()
 reservedOpToken = Token.reservedOp lexer
+
+whiteSpaceToken :: Parser ()
+whiteSpaceToken = Token.whiteSpace lexer
