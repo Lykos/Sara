@@ -3,6 +3,7 @@ module Parser (Parser.parse) where
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Data.Void
+import Control.Monad.Except
 
 import qualified Text.Parsec.Expr as Expr
 import qualified Text.Parsec.Token as Token
@@ -12,6 +13,7 @@ import Syntax
 import Types
 import Operators
 import AstUtils
+import Errors
 
 declarationAst :: Parser DeclarationAst
 declarationAst = do
@@ -213,5 +215,7 @@ toplevel = do
   program <- semiSep declarationAst
   return $ Program program
 
-parse :: String -> String -> Either ParseError Program
-parse source s = Text.Parsec.parse (contents toplevel) source s
+parse :: String -> String -> ErrorOr Program
+parse source s = case Text.Parsec.parse (contents toplevel) source s of
+  (Left err) -> parseError err
+  (Right p)  -> return p
