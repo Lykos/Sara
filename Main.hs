@@ -1,27 +1,39 @@
 module Main where
 
+import Compiler
+import PrettyPrinter
+import Syntax
+
 import System.IO
 import System.Environment
 import System.Console.Haskeline
+import LLVM.General.Module
+
+process :: String -> String -> IO ()
+process = run reporter
+
+reporter :: Reporter
+reporter = Reporter Main.reportParsed Main.reportTyped Main.reportModule Main.reportResult Main.reportError
+
+reportParsed = reportProgram "Parsed Program"
+reportTyped = reportProgram "Typed Program"
+reportModule mod = moduleLLVMAssembly mod >>= report "LLVM Code"
+reportResult n = report "Result" $ show n
+reportError error = print error
+
+report :: String -> String -> IO ()
+report name program = putStrLn $ "\n" ++ name ++ ":\n" ++ program
+
+reportProgram :: String -> Program -> IO ()
+reportProgram name program = report name $ prettyRender program
 
 processFile :: String -> IO ()
-processFile fname = withModule fname $ \m -> readFile fname >>= process m >> return ()
-
-repl :: IO ()
-repl = runInputT defaultSettings (withModule "my cool jit" $ \m -> loop m)
-  where loop mod = do
-          minput <- getInputLine "ready> "
-          case minput of
-            Nothing -> outputStrLn "Goodbye."
-            Just input -> do
-              modn <- liftIO $ process mod input
-              case modn of
-                Just modn -> loop modn
-                Nothing -> loop mod
+processFile fname = readFile fname >>= process fname
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
-    []      -> repl
-    [fname] -> processFile fname >> return ()
+    []   -> getContents >>= process "<stdin>"
+    args -> sequence (map processFile args) >> return ()
+  return ()

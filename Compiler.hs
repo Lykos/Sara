@@ -1,5 +1,6 @@
 module Compiler (
-  run
+  Reporter(..)
+  , run
   , compile) where
 
 import Parser
@@ -102,20 +103,34 @@ data Reporter
   = Reporter { reportParsed :: Program -> IO ()
              , reportTyped :: Program -> IO ()
              , reportModule :: M.Module -> IO ()
-             , reportResult :: Int64 -> IO () }
+             , reportResult :: Int64 -> IO ()
+             , reportError :: Error -> IO () }
 
-compile' :: (Context -> M.Module -> IO ()) -> Reporter -> Module -> String -> String -> ExceptOrIO Module
-compile' moduleReporter reporter mod filename input = parseStage filename input (reportParsed reporter)
+compile'' :: (Context -> M.Module -> IO ()) -> Reporter -> Module -> String -> String -> ExceptOrIO Module
+compile'' moduleReporter reporter mod filename input = parseStage filename input (reportParsed reporter)
                                                       >>= flip typeCheckStage (reportTyped reporter)
                                                       >>= flip (codegenStage mod) moduleReporter
 
-compile :: Reporter -> String -> String -> ExceptOrIO Module
-compile reporter filename input = withModule filename $ \mod ->
-  compile' (\c m -> reportModule reporter m) reporter mod filename input
+compile' :: Reporter -> String -> String -> ExceptOrIO Module
+compile' reporter filename input = withModule filename $ \mod ->
+  compile'' (\c m -> reportModule reporter m) reporter mod filename input
 
-run :: Reporter -> String -> String -> ExceptOrIO Module
-run reporter filename input = withModule filename $ \mod ->
-  compile' runReporter reporter mod filename input
+compile :: Reporter -> String -> String -> IO ()
+compile reporter filename input = handleError reporter $ compile' reporter filename input
+
+handleError :: Reporter -> ExceptOrIO Module -> IO ()
+handleError reporter res = do
+  res' <- runExceptT res
+  case res' of
+    Left error -> reportError reporter error
+    Right mod  -> return ()
+
+run :: Reporter -> String -> String -> IO ()
+run reporter filename input = handleError reporter $ run' reporter filename input
+
+run' :: Reporter -> String -> String -> ExceptOrIO Module
+run' reporter filename input = withModule filename $ \mod ->
+  compile'' runReporter reporter mod filename input
   where runReporter :: Context -> M.Module -> IO ()
         runReporter context mod = do
           reportModule reporter mod
