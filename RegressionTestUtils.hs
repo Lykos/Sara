@@ -1,4 +1,6 @@
-module RegressionTestUtils where
+module RegressionTestUtils (
+  Expectation
+  , parseExpectation) where
 
 import Errors
 import Data.Int
@@ -33,7 +35,7 @@ expectation = do
   n <- integerToken
   return $ fromInteger n
 
-parse :: String -> String -> ErrorOr Expectation
-parse fname input = case Text.Parsec.parse expectation fname input of
-  (Left err) -> parseError err
-  (Right p)  -> return p
+parseExpectation :: String -> String -> Expectation
+parseExpectation fname input = case Text.Parsec.parse expectation fname input of
+  (Left err) -> error $ show err
+  (Right p)  -> p

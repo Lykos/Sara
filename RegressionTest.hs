@@ -9,7 +9,10 @@ import TestUtils
 import Compiler
 import Syntax
 import TestUtils
+import RegressionTestUtils
 
+import System.FilePath
+import System.Directory
 import Data.Int
 import Control.Monad.Except
 import Test.QuickCheck
@@ -21,16 +24,42 @@ isExpected :: Either Error Int64 -> Int64 -> Bool
 isExpected (Left _)  _ = False
 isExpected (Right n) m = n == m
 
-checkRight :: String -> Int64 -> Property
-checkRight input expected = M.monadicIO $ do
-  actual <- M.run $ runExceptT $ run nopReporter testfile input
-  let example = "\nExpected:\n" ++ show expected
+checkRight :: String -> String -> IO (Bool, String)
+checkRight fname input = do
+  let expected = parseExpectation fname input
+  actual <- runExceptT $ run nopReporter fname input
+  let example = "\nFile: " ++ fname
+                ++ "\n\nExpected:\n" ++ show expected
                 ++ "\n\nInput:\n" ++ input
                 ++ "\n\nActual:\n" ++ show actual
-  return $ example `counterexample` (liftBool $ isExpected actual expected)
+  return (isExpected actual expected, example)
 
-prop_lol :: Bool
-prop_lol = True
+prop_regressionsWork :: Property
+prop_regressionsWork = once $ M.monadicIO $ do
+  inputs <- M.run $ getInputs
+  results <- M.run $ mapM (uncurry checkRight) inputs
+  let failedResults = filter (\r -> not $ fst r) results
+  let result = case failedResults of
+        []     -> (True, "")
+        (x:xs) -> x
+  M.monitor $ counterexample $ snd result
+  M.assert $ fst result
+
+extension :: String
+extension = ".sara"
+
+testDir :: String
+testDir = "test_files"
+
+getInputs :: IO [(String, String)]
+getInputs = do
+  dir <- getCurrentDirectory
+  let testDir' = dir </> testDir
+  files <- getDirectoryContents testDir'
+  let saraFiles = filter (((==) extension) . takeExtension) files
+  let readFile' f = readFile $ testDir' </> f
+  inputs <- mapM readFile' saraFiles
+  return $ saraFiles `zip` inputs
 
 return []
 
