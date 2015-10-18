@@ -2,6 +2,7 @@
 
 module TypeCheckerTest (typeCheckerCheck) where
 
+import Errors
 import PrettyPrinter
 import TestUtils
 import TypeChecker
@@ -20,7 +21,7 @@ prop_addsTypes p = example `counterexample` liftBool (actual == expected)
         input = clearTypes p
         expected = return p
         actual = typeCheck input
-        render :: TypeErrorOr Program -> String
+        render :: ErrorOr Program -> String
         render e = case runExcept e of
           Left e  -> show e
           Right r -> prettyRender r
