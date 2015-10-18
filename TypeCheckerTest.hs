@@ -4,7 +4,7 @@ module TypeCheckerTest (typeCheckerCheck) where
 
 import Errors
 import PrettyPrinter
-import TestUtils
+import AstTestUtils
 import TypeChecker
 import Syntax
 

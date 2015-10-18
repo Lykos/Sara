@@ -3,7 +3,7 @@
 module ParserTest (parserCheck) where
 
 import Errors
-import TestUtils
+import AstTestUtils
 import Parser
 import PrettyPrinter
 import Syntax

@@ -1,4 +1,4 @@
-module TestUtils where
+module AstTestUtils where
 
 import Syntax
 import Types
@@ -116,7 +116,7 @@ variable t = do
   return $ Variable $ id ++ show t
 
 call :: Gen Expression
-call = liftM2 Call identifier (scale pred TestUtils.args)
+call = liftM2 Call identifier (scale pred AstTestUtils.args)
 
 args :: Gen [ExpressionAst]
 args = scale intRoot $ listOf arg
@@ -326,8 +326,3 @@ clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts c
 clearTypes :: Program -> Program
 clearTypes = mapExpressionAsts clearTypes
   where clearTypes (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos
-
-reporter :: Reporter
-reporter = Reporter nop nop nop nop nop
-           where nop :: a -> IO ()
-                 nop a = return ()

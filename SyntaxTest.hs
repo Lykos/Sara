@@ -3,7 +3,7 @@
 module SyntaxTest (syntaxCheck) where
 
 import Syntax
-import TestUtils
+import AstTestUtils
 import Operators
 
 import Test.QuickCheck
