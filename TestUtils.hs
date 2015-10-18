@@ -5,6 +5,7 @@ import Types
 import Lexer
 import Operators
 import AstUtils
+import Reporter
 
 import Control.Monad.State
 import qualified Data.Set as Set
@@ -325,3 +326,8 @@ clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts c
 clearTypes :: Program -> Program
 clearTypes = mapExpressionAsts clearTypes
   where clearTypes (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos
+
+reporter :: Reporter
+reporter = Reporter nop nop nop nop nop
+           where nop :: a -> IO ()
+                 nop a = return ()

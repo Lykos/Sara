@@ -10,6 +10,7 @@ import CodeGenerator
 import Syntax
 import CodeGenerator
 import Errors
+import Reporter
 
 import Control.Monad.Except
 import Control.Monad.Identity
@@ -98,13 +99,6 @@ typeCheckStage program = stage $ toError $ typeCheckWithMain program
         toError e = case runExcept e of
           (Left err)  -> throwError err
           (Right res) -> return res
-
-data Reporter
-  = Reporter { reportParsed :: Program -> IO ()
-             , reportTyped :: Program -> IO ()
-             , reportModule :: M.Module -> IO ()
-             , reportResult :: Int64 -> IO ()
-             , reportError :: Error -> IO () }
 
 compile'' :: (Context -> M.Module -> IO ()) -> Reporter -> Module -> String -> String -> ExceptOrIO Module
 compile'' moduleReporter reporter mod filename input = parseStage filename input (reportParsed reporter)
