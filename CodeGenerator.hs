@@ -2,7 +2,7 @@
 
 module CodeGenerator (
   codegen
-  , emptyModule) where
+  , withModule) where
 
 import qualified Syntax as S
 import qualified Types as T
@@ -255,6 +255,9 @@ codegenProgram (S.Program p) = (sequence $ map codegenDeclarationAst p) >> retur
 
 codegen :: Module -> S.Program -> Module
 codegen mod program = runLLVM mod $ codegenProgram program
+
+withModule :: String -> (Module -> a) -> a
+withModule name f = f $ emptyModule name
 
 cons :: C.Constant -> Operand
 cons = ConstantOperand
