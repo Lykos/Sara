@@ -36,16 +36,13 @@ passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
 type ExceptOrIO a = ExceptT Error IO a
 
-codegenStage :: (Context -> M.Module -> IO ()) -> Module -> Program -> ExceptOrIO Module
-codegenStage report mod prog = withExceptT OtherError $ ExceptT $ withContext $ \context -> runExceptT $ M.withModuleFromAST context mod' $ generate context
-  where generate :: Context -> M.Module -> IO Module
+codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> Program -> ExceptOrIO a
+codegenStage report mod prog = ExceptT $ withContext $ \context -> codegen' context (codegen mod prog)
+  where codegen' context mod = flattenError $ runExceptT $ M.withModuleFromAST context mod $ generate context
         generate context m = withPassManager passes $ \pm -> do
           -- Optimization Pass
           runPassManager pm m
           report context m
-          -- Return the optimized module
-          M.moduleAST m
-        mod' = codegen mod prog
 
 foreign import ccall "dynamic" haskFun :: FunPtr (IO Int64) -> (IO Int64)
 
@@ -60,16 +57,16 @@ jit c = EE.withMCJIT c optlevel model ptrelim fastins
     ptrelim  = Nothing -- frame pointer elimination
     fastins  = Nothing -- fast instruction selection
 
-runStage :: (Int64 -> IO ()) -> Context -> M.Module -> IO ()
-runStage report context mod = jit context $ \engine -> EE.withModuleInEngine engine mod execute'
-  where execute' :: EE.ExecutableModule EE.MCJIT -> IO ()
+runStage :: Context -> M.Module -> IO (Either Error Int64)
+runStage context mod = jit context $ \engine -> EE.withModuleInEngine engine mod execute'
+  where execute' :: EE.ExecutableModule EE.MCJIT -> IO (Either Error Int64)
         execute' ee = do
           fn <- EE.getFunction ee (Name "main")
           case fn of
             (Just fn) -> do
               res <- runFn fn
-              report res
-            Nothing   -> return ()
+              return $ Right res
+            Nothing   -> return $ Left $ OtherError "Main function not found."
 
 flattenError :: IO (Either String (Either Error a)) -> IO (Either Error a)
 flattenError res = do
@@ -100,32 +97,19 @@ typeCheckStage report program = stage report $ toError $ typeCheckWithMain progr
           (Left err)  -> throwError err
           (Right res) -> return res
 
-compile'' :: (Context -> M.Module -> IO ()) -> Reporter -> Module -> String -> String -> ExceptOrIO Module
-compile'' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
+compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ExceptOrIO a
+compile' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
                                                       >>= typeCheckStage (reportTyped reporter)
                                                       >>= codegenStage moduleReporter mod
 
-compile' :: Reporter -> String -> String -> ExceptOrIO Module
-compile' reporter filename input = withModule filename $ \mod ->
-  compile'' (\c m -> reportModule reporter m) reporter mod filename input
+compile :: Reporter -> String -> String -> ExceptOrIO ()
+compile reporter filename input = ExceptT $ withModule filename $ \mod ->
+  runExceptT $ compile' moduleReporter reporter mod filename input
+  where moduleReporter :: Context -> M.Module -> IO (Either Error ())
+        moduleReporter = (\c m -> reportModule reporter m >> return (Right ()))
 
-compile :: Reporter -> String -> String -> IO ()
-compile reporter filename input = handleError reporter $ compile' reporter filename input
-
-handleError :: Reporter -> ExceptOrIO Module -> IO ()
-handleError reporter res = do
-  res' <- runExceptT res
-  case res' of
-    Left error -> reportError reporter error
-    Right mod  -> return ()
-
-run :: Reporter -> String -> String -> IO ()
-run reporter filename input = handleError reporter $ run' reporter filename input
-
-run' :: Reporter -> String -> String -> ExceptOrIO Module
-run' reporter filename input = withModule filename $ \mod ->
-  compile'' runReporter reporter mod filename input
-  where runReporter :: Context -> M.Module -> IO ()
-        runReporter context mod = do
-          reportModule reporter mod
-          runStage (reportResult reporter) context mod
+run :: Reporter -> String -> String -> ExceptOrIO Int64
+run reporter filename input = withModule filename $ \mod ->
+  compile' runReporter reporter mod filename input
+  where runReporter :: Context -> M.Module -> IO (Either Error Int64)
+        runReporter context mod = runStage context mod

@@ -3,25 +3,29 @@ import PrettyPrinter
 import Syntax
 import Reporter
 
+import Control.Monad.Except
 import System.IO
 import System.Environment
 import System.Console.Haskeline
 import LLVM.General.Module
 
 process :: String -> String -> IO ()
-process = run reporter
+process fname input = do
+  result <- runExceptT $ run reporter fname input
+  case result of
+    (Left err)  -> print err
+    (Right res) -> report "Result" $ show res
 
 reporter :: Reporter
-reporter = Reporter reportParsed reportTyped reportModule reportResult reportError
+reporter = Reporter reportParsed reportTyped reportModule
            where reportParsed      = reportProgram "Parsed Program"
                  reportTyped       = reportProgram "Typed Program"
                  reportModule mod  = moduleLLVMAssembly mod >>= report "LLVM Code"
-                 reportResult n    = report "Result" $ show n
-                 reportError error = print error
-                 report :: String -> String -> IO ()
-                 report name program = putStrLn $ "\n" ++ name ++ ":\n" ++ program
                  reportProgram :: String -> Program -> IO ()
                  reportProgram name program = report name $ prettyRender program
+
+report :: String -> String -> IO ()
+report name program = putStrLn $ "\n" ++ name ++ ":\n" ++ program
 
 processFile :: String -> IO ()
 processFile fname = readFile fname >>= process fname
