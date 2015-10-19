@@ -5,8 +5,8 @@ import CompilerTest
 import RegressionTest
 
 main = do
-  parserCheck
   regressionCheck
+  typeCheckerCheck
+  parserCheck
   compilerCheck
   syntaxCheck
-  typeCheckerCheck

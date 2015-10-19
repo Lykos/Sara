@@ -109,7 +109,8 @@ operatorTable = [ [ unaryOperator UnaryPlus
                 , [ binaryOperator ImpliedBy Expr.AssocLeft
                   , binaryOperator Implies Expr.AssocRight]
                 , [ binaryOperator EquivalentTo Expr.AssocLeft
-                  , binaryOperator NotEquivalentTo Expr.AssocLeft]]
+                  , binaryOperator NotEquivalentTo Expr.AssocLeft]
+                , [ binaryOperator Assign Expr.AssocRight]]
 
 unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOperation operator))
 

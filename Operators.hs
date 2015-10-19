@@ -40,6 +40,7 @@ data BinaryOperator
   | ImpliedBy
   | EquivalentTo
   | NotEquivalentTo
+  | Assign
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 binarySymbol :: BinaryOperator -> String
@@ -66,6 +67,7 @@ binarySymbol Implies         = "==>"
 binarySymbol ImpliedBy       = "<=="
 binarySymbol EquivalentTo    = "<==>"
 binarySymbol NotEquivalentTo = "<!=>"
+binarySymbol Assign          = "="
 
 binaryOperators :: [BinaryOperator]
 binaryOperators = enumFrom minBound

@@ -75,17 +75,18 @@ checkPure e = transformExpressionAst checkPureExpressionAst e
         checkPureExpressionAst ea@(ExpressionAst e _ _) | isPure e  = return ea
                                                         | otherwise = impureExpression ea
         isPure :: Expression -> Bool
-        isPure Syntax.Unit             = True
-        isPure (Syntax.Boolean _)      = True
-        isPure (Syntax.Integer _)      = True
-        isPure (Syntax.Double _)       = True
-        isPure (UnaryOperation _ _)    = True
-        isPure (BinaryOperation _ _ _) = True
-        isPure (Variable _)            = True
-        isPure (Call _ _)              = True
-        isPure (Conditional _ _ _)     = True
-        isPure (Block _ _)             = True
-        isPure _                       = False
+        isPure Syntax.Unit                  = True
+        isPure (Syntax.Boolean _)           = True
+        isPure (Syntax.Integer _)           = True
+        isPure (Syntax.Double _)            = True
+        isPure (UnaryOperation _ _)         = True
+        isPure (BinaryOperation Assign _ _) = False
+        isPure (BinaryOperation _ _ _)      = True
+        isPure (Variable _)                 = True
+        isPure (Call _ _)                   = True
+        isPure (Conditional _ _ _)          = True
+        isPure (Block _ _)                  = True
+        isPure _                            = False
 
 typeCheckMethod :: FunctionMap -> Signature -> ExpressionAst -> ErrorOr Declaration
 typeCheckMethod = typeCheckFunctionOrMethod Method

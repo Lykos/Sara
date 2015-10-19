@@ -1,0 +1,6 @@
+// returns 8
+method main(): Integer = m(3);
+method m(a: Integer): Integer = {
+  a = 5 + 3;
+  a
+}

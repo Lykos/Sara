@@ -136,12 +136,17 @@ inverseFindWithDefault map key = Map.findWithDefault [] key (invert map)
 typUnOps :: Type -> [TypedUnOp]
 typUnOps = inverseFindWithDefault typedUnOps
           
-typBinOps :: Type -> [TypedBinOp]
-typBinOps = inverseFindWithDefault typedBinOps
+typBinOps :: Bool -> Type -> [TypedBinOp]
+typBinOps pure t = filter (\(TypedBinOp op _ _) -> not pure || op /= Assign) (inverseFindWithDefault typedBinOps t)
           
 binaryOperations :: Bool -> Type -> [Gen Expression]
-binaryOperations pure t = map binOp $ typBinOps t
-  where binOp (TypedBinOp op r s) = liftM2 (BinaryOperation op) (subtree r) (subtree s)
+binaryOperations pure t = map binOp $ typBinOps pure t
+  where binOp (TypedBinOp Assign r s) = do
+          var <- variable r
+          let var' = ExpressionAst var r pos
+          val <- subtree s
+          return $ BinaryOperation Assign var' val
+        binOp (TypedBinOp op r s)     = liftM2 (BinaryOperation op) (subtree r) (subtree s)
         subtree r = scale (\n -> n `div` 2) $ expressionAst pure r
                                  
 unaryOperations :: Bool -> Type -> [Gen Expression]

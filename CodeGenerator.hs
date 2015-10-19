@@ -387,6 +387,11 @@ codegenExpressionAst (S.ExpressionAst exp t _) = let t' = typ t in case exp of
     let op' = unaryInstruction (T.TypedUnOp op (S.expType exp))
     exp' <- codegenExpressionAst exp
     op' exp' t'
+  (S.BinaryOperation Assign var val) -> do
+    let (S.ExpressionAst (S.Variable name) _ _) = var
+    var' <- getVar name
+    val' <- codegenExpressionAst val
+    store var' val' t'
   (S.BinaryOperation op left right)  -> do
     let op' = binaryInstruction (T.TypedBinOp op (S.expType left) (S.expType right))
     left' <- codegenExpressionAst left

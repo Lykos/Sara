@@ -55,7 +55,6 @@ data Expression
   | Conditional ExpressionAst ExpressionAst ExpressionAst
   | Block [ExpressionAst] ExpressionAst
   | While ExpressionAst ExpressionAst
---  | Assignment ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
 
 newtype Program
