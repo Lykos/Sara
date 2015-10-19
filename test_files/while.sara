@@ -1,0 +1,10 @@
+// returns 125
+method main(): Integer = pow(5, 3, 0);
+method pow(base: Integer, exponent: Integer, acc: Integer): Integer = {
+  acc = 1;
+  while (exponent > 0) {
+    acc = acc * base;
+    exponent = exponent - 1
+  };
+  acc
+}
