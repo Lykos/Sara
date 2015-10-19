@@ -213,6 +213,7 @@ while = do
   let body = transformBody bodyBlock pos
   return $ While cond body
   where transformBody :: Expression -> SourcePos -> ExpressionAst
+        transformBody (Block [] e) _ = e
         transformBody b pos          = ExpressionAst b Unknown pos
 
 contents :: Parser a -> Parser a
