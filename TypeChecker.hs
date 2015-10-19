@@ -134,6 +134,7 @@ typeCheckExp funcs vars ast =
       typedRight <- typedSubExp right
       leftType <- astType typedLeft
       rightType <- astType typedRight
+      when (op == Assign) (checkAssignable typedLeft)
       addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType pos)
     Variable name -> addType e (varType name)
     Call name args -> do
@@ -163,6 +164,9 @@ typeCheckExp funcs vars ast =
       addType (While typedCond typedBody) (return Types.Unit)
   where pos = expPos ast
         typedSubExp = typeCheckExp funcs vars
+        checkAssignable :: ExpressionAst -> ErrorOr ()
+        checkAssignable (ExpressionAst (Variable _) _ _) = return ()
+        checkAssignable a                                = notAssignable a
         checkNotUnknown :: Type -> SourcePos -> ErrorOr Type
         checkNotUnknown Unknown pos = unknownType pos
         checkNotUnknown t _         = return t
@@ -240,3 +244,7 @@ noMain = typeError "The program has no main funtion."
 impureExpression :: ExpressionAst -> ErrorOr a
 impureExpression e =
   typeError ("Functions can only contain pure expressions, but expression " ++ show e ++ " is not pure.") (expPos e)
+
+notAssignable :: ExpressionAst -> ErrorOr a
+notAssignable a =
+  typeError ("Not a valid assignment target " ++ show a ++ ".") (expPos a)
