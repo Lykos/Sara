@@ -421,3 +421,17 @@ codegenExpressionAst (S.ExpressionAst exp t _) = let t' = typ t in case exp of
   (S.Block stmts exp)                -> do
     stmts' <- mapM codegenExpressionAst stmts
     codegenExpressionAst exp
+  (S.While cond body)                -> do
+    whileBlock <- addBlock "while.body"
+    exitBlock <- addBlock "while.exit"
+    
+    cond' <- codegenExpressionAst cond
+    cbr cond' whileBlock exitBlock
+
+    setBlock whileBlock
+    codegenExpressionAst body
+    cond'' <- codegenExpressionAst cond
+    cbr cond'' whileBlock exitBlock
+
+    setBlock exitBlock
+    unit

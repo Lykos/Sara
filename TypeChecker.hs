@@ -154,6 +154,12 @@ typeCheckExp funcs vars ast =
       typedStmts <- sequence $ map typedSubExp stmts
       typedExp <- typedSubExp exp
       addType (Block typedStmts typedExp) (astType typedExp)
+    While cond body -> do
+      typedCond <- typedSubExp cond
+      typedBody <- typedSubExp body
+      condType <- astType typedCond
+      when (condType /= Types.Boolean) (invalidCondType cond)
+      addType (While typedCond typedBody) (return Types.Unit)
   where pos = expPos ast
         typedSubExp = typeCheckExp funcs vars
         checkNotUnknown :: Type -> SourcePos -> ErrorOr Type

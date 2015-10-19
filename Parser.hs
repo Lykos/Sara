@@ -151,6 +151,7 @@ expression = try unit
              <|> try call
              <|> try conditional
              <|> try block
+             <|> try while
              <|> variable
 
 empty :: Parser Void
@@ -202,6 +203,17 @@ block = do
              Block [] (ExpressionAst Syntax.Unit Unknown pos)
            else
              Block (init exps) (last exps)
+
+while :: Parser Expression
+while = do
+  reservedToken "while"
+  cond <- expressionAst
+  pos <- getPosition
+  bodyBlock <- block
+  let body = transformBody bodyBlock pos
+  return $ While cond body
+  where transformBody :: Expression -> SourcePos -> ExpressionAst
+        transformBody b pos          = ExpressionAst b Unknown pos
 
 contents :: Parser a -> Parser a
 contents p = do

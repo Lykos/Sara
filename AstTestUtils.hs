@@ -84,15 +84,16 @@ inferSignature name exp = Signature name (freeVariables exp) (expType exp)
 
 functionOrMethod :: Gen Declaration
 functionOrMethod = do
-  constructor <- elements [Function, Method]
+  pure <- elements [True, False]
+  let constructor = if pure then Function else Method
   t <- typ
   name <- identifier
-  exp <- expressionAst t
+  exp <- expressionAst pure t
   return $ constructor (inferSignature name exp) exp
 
-expressionAst :: Type -> Gen ExpressionAst
-expressionAst t = do
-  e <- expression t
+expressionAst :: Bool -> Type -> Gen ExpressionAst
+expressionAst pure t = do
+  e <- expression pure t
   p <- position
   return $ ExpressionAst e t p
 
@@ -115,12 +116,12 @@ variable t = do
   id <- identifier
   return $ Variable $ id ++ show t
 
-call :: Gen Expression
-call = liftM2 Call identifier (scale pred AstTestUtils.args)
+call :: Bool -> Gen Expression
+call pure = liftM2 Call identifier (scale pred $ AstTestUtils.args pure)
 
-args :: Gen [ExpressionAst]
-args = scale intRoot $ listOf arg
-  where arg = typ >>= expressionAst
+args :: Bool -> Gen [ExpressionAst]
+args pure = scale intRoot $ listOf arg
+  where arg = typ >>= expressionAst pure
 
 intRoot :: Int -> Int
 intRoot = round . sqrt . fromIntegral
@@ -138,26 +139,30 @@ typUnOps = inverseFindWithDefault typedUnOps
 typBinOps :: Type -> [TypedBinOp]
 typBinOps = inverseFindWithDefault typedBinOps
           
-binaryOperations :: Type -> [Gen Expression]
-binaryOperations t = map binOp $ typBinOps t
+binaryOperations :: Bool -> Type -> [Gen Expression]
+binaryOperations pure t = map binOp $ typBinOps t
   where binOp (TypedBinOp op r s) = liftM2 (BinaryOperation op) (subtree r) (subtree s)
-        subtree r = scale (\n -> n `div` 2) $ expressionAst r
+        subtree r = scale (\n -> n `div` 2) $ expressionAst pure r
                                  
-unaryOperations :: Type -> [Gen Expression]
-unaryOperations t = map unOp $ typUnOps t
+unaryOperations :: Bool -> Type -> [Gen Expression]
+unaryOperations pure t = map unOp $ typUnOps t
   where unOp (TypedUnOp op s) = liftM (UnaryOperation op) (subtree s)
-        subtree s = scale pred $ expressionAst s
+        subtree s = scale pred $ expressionAst pure s
 
-conditional :: Type -> Gen Expression
-conditional t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree t)
-  where subtree t = scale (\n -> n `div` 3) $ expressionAst t
+conditional :: Bool -> Type -> Gen Expression
+conditional pure t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree t)
+  where subtree t = scale (\n -> n `div` 3) $ expressionAst pure t
 
-block :: Type -> Gen Expression
-block t = do
+block :: Bool -> Type -> Gen Expression
+block pure t = do
   t' <- typ
-  stmts <- scale intRoot $ listOf $ expressionAst t'
-  expr <- scale intRoot $ expressionAst t
+  stmts <- scale intRoot $ listOf $ expressionAst pure t'
+  expr <- scale intRoot $ expressionAst pure t
   return $ Block stmts expr
+
+while :: Gen Expression
+while = liftM2 While (subtree Types.Boolean) (typ >>= subtree)
+  where subtree t = scale (\n -> n `div` 2) $ expressionAst False t
 
 leafExpression :: Type -> Gen Expression
 leafExpression t = oneof [constant t, variable t]
@@ -166,26 +171,28 @@ leafExpression t = oneof [constant t, variable t]
         constant Types.Double  = double
         constant Types.Unit    = return Syntax.Unit
 
-innerExpression :: Type -> Gen Expression
-innerExpression t =
+innerExpression :: Bool -> Type -> Gen Expression
+innerExpression pure t =
   -- We want the same probability to get a unary operation, a binary operation, a constant, a variable, a call or a conditional
   frequency weighted
   where weighted = map ((,) weight) anyTyped ++ map ((,) numUnOps) binOps ++ map ((,) numBinOps) unOps
         anyTyped :: [Gen Expression]
-        anyTyped = map ($ t) [leafExpression, leafExpression, conditional, block] ++ [call]
+        anyTyped = map ($ t) [leafExpression, leafExpression, conditional pure, block pure] ++ [call pure] ++ maybeWhile
+        maybeWhile :: [Gen Expression]
+        maybeWhile = if not pure && t == Types.Unit then [while] else []
         binOps :: [Gen Expression]
-        binOps = binaryOperations t
+        binOps = binaryOperations pure t
         unOps :: [Gen Expression]
-        unOps = unaryOperations t
+        unOps = unaryOperations pure t
         numUnOps = length unOps
         numBinOps = length binOps
         weight = if numUnOps * numBinOps == 0 then 1 else numUnOps * numBinOps
 
-expression :: Type -> Gen Expression
-expression t = sized expression'
+expression :: Bool -> Type -> Gen Expression
+expression pure t = sized expression'
   where expression' :: Int -> Gen Expression
         expression' 0         = leafExpression t
-        expression' n | n > 0 = innerExpression t
+        expression' n | n > 0 = innerExpression pure t
 
 arbitraryTypedVariable :: Type -> Gen TypedVariable
 arbitraryTypedVariable t = do
@@ -244,9 +251,8 @@ instance Arbitrary UnaryOperator where
 instance Arbitrary BinaryOperator where
   arbitrary = elements binaryOperators
 
-instance Arbitrary ExpressionAst where
-  arbitrary = typ >>= expressionAst
-  shrink (ExpressionAst exp typ pos) = [ExpressionAst e typ pos | e <- shrinkExpression typ exp]
+shrinkExpressionAst :: ExpressionAst -> [ExpressionAst]
+shrinkExpressionAst (ExpressionAst exp typ pos) = [ExpressionAst e typ pos | e <- shrinkExpression typ exp]
 
 shrinkExpression :: Type -> Expression -> [Expression]
 shrinkExpression _ (Syntax.Boolean b)               = map Syntax.Boolean $ shrink b
@@ -264,13 +270,24 @@ shrinkExpression t (Call name args)                 = childrenWithType t args
         shrinkArgs (x:xs) = [y : xs | y <- shrink x] ++ [x:ys | ys <- shrinkArgs xs]
 shrinkExpression t (Conditional cond ifExp elseExp) = childrenWithType t [cond, ifExp, elseExp]
                                                       ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
-shrinkExpression t (Block stmts exp)                = withoutExp ++ [Block s e | (s, e) <- shrink (stmts, exp)]
-  where withoutExp :: [Expression]
-        withoutExp = let exp' = last stmts in
-          if expType exp' == t then [Block (init stmts) exp'] else []
+shrinkExpression t (Block stmts exp)                = shrinkBlock t stmts exp
+shrinkExpression _ (While cond body)                = shrinkWhile cond body
 
 childrenWithType :: Type -> [ExpressionAst] -> [Expression]
 childrenWithType t = map astExp . filter (\c -> expType c == t)
+
+shrinkBlock :: Type -> [ExpressionAst] -> ExpressionAst -> [Expression]
+shrinkBlock t stmts exp = [astExp exp] ++ withoutExp ++ [Block s e | (s, e) <- shrink (stmts, exp)]
+  where withoutExp :: [Expression]
+        withoutExp = if null stmts then
+                       []
+                     else
+                       let exp' = last stmts in
+                         if expType exp' /= t then [] else [Block (init stmts) exp']
+
+-- TODO Throw the expression away
+shrinkWhile :: ExpressionAst -> ExpressionAst -> [Expression]
+shrinkWhile stmts body = [While c b | (c, b) <- shrink (stmts, body)]
 
 shrinkTypedVariable :: TypedVariable -> [TypedVariable]
 shrinkTypedVariable (TypedVariable var typ _) = [TypedVariable v typ pos | v <- shrinkIdentifier var]
@@ -302,6 +319,10 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 appendTail y = Program (y:xs)
                 tailShrinks = shrinkProgram' funcs $ Program xs
                 appendHead (Program ys) = Program (x:ys)
+
+instance Arbitrary ExpressionAst where
+  arbitrary = typ >>= expressionAst False
+  shrink = shrinkExpressionAst
 
 instance Arbitrary DeclarationAst where
   arbitrary = declarationAst

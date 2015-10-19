@@ -54,7 +54,7 @@ data Expression
   | Call Name [ExpressionAst]
   | Conditional ExpressionAst ExpressionAst ExpressionAst
   | Block [ExpressionAst] ExpressionAst
---  | While ExpressionAst ExpressionAst
+  | While ExpressionAst ExpressionAst
 --  | Assignment ExpressionAst ExpressionAst
   deriving (Eq, Ord, Show)
 

@@ -29,8 +29,10 @@ prettyDeclaration (Method sig body)   = prettyFunctionOrMethod "method" sig body
 prettyDeclaration (Extern sig)        = text "extern" <+> prettySignature sig
 
 prettyFunctionOrMethod :: String -> Signature -> ExpressionAst -> Doc
-prettyFunctionOrMethod keyword sig body = text keyword <+> prettySignature sig <+> text "="
-                                          $+$ nest indentation (prettyExpressionAst body)
+prettyFunctionOrMethod keyword sig body = case body of
+  ExpressionAst (Block _ _) _ _ -> sigDoc <+> prettyExpressionAst body
+  _                             -> sigDoc $+$ nest indentation (prettyExpressionAst body)
+  where sigDoc = text keyword <+> prettySignature sig <+> text "="
 
 prettySignature :: Signature -> Doc
 prettySignature (Signature name args retType) = prettyTyped sig retType
@@ -92,9 +94,11 @@ prettyExpression (Conditional cond ifExp elseExp) = text "if"
                                                     <+> text "else"
                                                     <+> prettyExpressionAst elseExp
 prettyExpression (Block [] (ExpressionAst Syntax.Unit _ _)) = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
-prettyExpression (Block stmts exp)                = text "{"
-                                                    $+$ nest indentation (vsep . punctuate semi . map prettyExpressionAst $ stmts ++ [exp])
-                                                    $+$ text "}"
+prettyExpression (Block stmts exp)                = inBlock (vsep . punctuate semi . map prettyExpressionAst $ stmts ++ [exp])
+prettyExpression (While cond body)                = text "while" <+> prettyExpressionAst cond <+> inBlock (prettyExpressionAst body)
+
+inBlock :: Doc -> Doc
+inBlock doc = text "{" $+$ nest indentation doc $+$ text "}"
 
 prettySubExp :: ExpressionAst -> Doc
 prettySubExp ast = case astExp ast of
