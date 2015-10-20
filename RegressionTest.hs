@@ -5,7 +5,6 @@ module RegressionTest (regressionCheck) where
 import Errors
 import PrettyPrinter
 import AstTestUtils
-import TestUtils
 import Compiler
 import Syntax
 import TestUtils
@@ -36,9 +35,9 @@ checkRight fname input = do
 
 prop_regressionsWork :: Property
 prop_regressionsWork = once $ M.monadicIO $ do
-  inputs <- M.run $ getInputs
+  inputs <- M.run getInputs
   results <- M.run $ mapM (uncurry checkRight) inputs
-  let failedResults = filter (\r -> not $ fst r) results
+  let failedResults = filter (not . fst) results
   let result = case failedResults of
         []     -> (True, "")
         (x:xs) -> x
@@ -56,7 +55,7 @@ getInputs = do
   dir <- getCurrentDirectory
   let testDir' = dir </> testDir
   files <- getDirectoryContents testDir'
-  let saraFiles = filter (((==) extension) . takeExtension) files
+  let saraFiles = filter ((extension ==) . takeExtension) files
   let readFile' f = readFile $ testDir' </> f
   inputs <- mapM readFile' saraFiles
   return $ saraFiles `zip` inputs

@@ -1,3 +1,5 @@
+module Main where
+
 import Compiler
 import PrettyPrinter
 import Syntax
@@ -35,4 +37,4 @@ main = do
   args <- getArgs
   case args of
     []   -> getContents >>= process "<stdin>"
-    args -> sequence (map processFile args) >> return ()
+    args -> mapM_ processFile args

@@ -72,10 +72,10 @@ createBlocks :: CodegenState -> [BasicBlock]
 createBlocks m = map makeBlock $ sortBlocks $ Map.toList (blocks m)
 
 makeBlock :: (Name, BlockState) -> BasicBlock
-makeBlock (l, (BlockState _ s t)) = BasicBlock l s (maketerm t)
+makeBlock (l, BlockState _ s t) = BasicBlock l s (maketerm t)
   where
     maketerm (Just x) = x
-    maketerm Nothing = error $ "Block has no terminator: " ++ (show l)
+    maketerm Nothing = error $ "Block has no terminator: " ++ show l
 
 entryBlockName :: String
 entryBlockName = "entry"
@@ -170,7 +170,7 @@ define (S.Signature label args retty) body = addDefn $
   }
 
 extern :: S.Signature -> LLVM ()
-extern = flip define $ []
+extern = flip define []
 
 local :: Name ->  Type -> Operand
 local = flip LocalReference
@@ -178,7 +178,7 @@ local = flip LocalReference
 assign :: String -> Operand -> Codegen ()
 assign var x = do
   lcls <- gets symtab
-  modify $ \s -> s { symtab = [(var, x)] ++ lcls }
+  modify $ \s -> s { symtab = (var, x) : lcls }
 
 getVar :: String -> Codegen Operand
 getVar var = do
@@ -192,7 +192,7 @@ instr ins t = do
   n   <- newTmpName
   blk <- current
   let i = stack blk
-  let ref = (UnName n)
+  let ref = UnName n
   modifyBlock $ blk { stack = i ++ [ref := ins] }
   return $ local ref t
 
@@ -243,7 +243,7 @@ codegenFunctionOrMethod signature body = define signature bls
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName
       setBlock entry
-      forM (S.args signature) $ \arg -> do
+      forM_ (S.args signature) $ \arg -> do
         let name = S.varName arg
         let t = typ $ S.varType arg
         var <- alloca t
@@ -252,7 +252,7 @@ codegenFunctionOrMethod signature body = define signature bls
       codegenExpressionAst body >>= ret
 
 codegenProgram :: S.Program -> LLVM ()
-codegenProgram (S.Program p) = (sequence $ map codegenDeclarationAst p) >> return ()
+codegenProgram (S.Program p) = mapM_ codegenDeclarationAst p
 
 codegen :: Module -> S.Program -> Module
 codegen mod program = runLLVM mod $ codegenProgram program

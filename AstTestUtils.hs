@@ -15,16 +15,16 @@ import Test.QuickCheck
 import Text.Parsec.Pos
 import qualified Data.Map.Strict as Map
 
-iden0' :: [Char]
-iden0' = ['a'..'z'] ++ ['A'..'Z'] ++ ['_']
+iden0' :: String
+iden0' = ['a'..'z'] ++ ['A'..'Z'] ++ "_"
 
 iden0 :: Gen Char
 iden0 = elements iden0'
 
-idenN' :: [Char]
+idenN' :: String
 idenN' = iden0' ++ ['0'..'9']
 
-idenN :: Gen [Char]
+idenN :: Gen String
 idenN = listOf $ elements idenN'
 
 ident :: Gen Name
@@ -147,7 +147,7 @@ binaryOperations pure t = map binOp $ typBinOps pure t
           val <- subtree s
           return $ BinaryOperation Assign var' val
         binOp (TypedBinOp op r s)     = liftM2 (BinaryOperation op) (subtree r) (subtree s)
-        subtree r = scale (\n -> n `div` 2) $ expressionAst pure r
+        subtree r = scale (`div` 2) $ expressionAst pure r
                                  
 unaryOperations :: Bool -> Type -> [Gen Expression]
 unaryOperations pure t = map unOp $ typUnOps t
@@ -156,7 +156,7 @@ unaryOperations pure t = map unOp $ typUnOps t
 
 conditional :: Bool -> Type -> Gen Expression
 conditional pure t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree t)
-  where subtree t = scale (\n -> n `div` 3) $ expressionAst pure t
+  where subtree t = scale (`div` 3) $ expressionAst pure t
 
 block :: Bool -> Type -> Gen Expression
 block pure t = do
@@ -167,7 +167,7 @@ block pure t = do
 
 while :: Gen Expression
 while = liftM2 While (subtree Types.Boolean) (typ >>= subtree)
-  where subtree t = scale (\n -> n `div` 2) $ expressionAst False t
+  where subtree t = scale (`div` 2) $ expressionAst False t
 
 leafExpression :: Type -> Gen Expression
 leafExpression t = oneof [constant t, variable t]
@@ -184,7 +184,7 @@ innerExpression pure t =
         anyTyped :: [Gen Expression]
         anyTyped = map ($ t) [leafExpression, leafExpression, conditional pure, block pure] ++ [call pure] ++ maybeWhile
         maybeWhile :: [Gen Expression]
-        maybeWhile = if not pure && t == Types.Unit then [while] else []
+        maybeWhile = [while | not pure && t == Types.Unit]
         binOps :: [Gen Expression]
         binOps = binaryOperations pure t
         unOps :: [Gen Expression]
@@ -206,7 +206,7 @@ arbitraryTypedVariable t = do
 
 arbitraryExtern :: FunctionType -> Gen Declaration
 arbitraryExtern (FunctionType name argTypes retType) = do
-  args <- sequence $ map arbitraryTypedVariable argTypes
+  args <- mapM arbitraryTypedVariable argTypes
   return $ Extern (Signature name args retType)
 
 fixName :: [Name] -> Name -> Name
@@ -218,7 +218,7 @@ arbitraryProgram = do
   prog <- liftM Program $ listOf arbitrary
   let prog' = fixFunctionNameClashes prog
   let free = calledFunctions prog'
-  externs <- sequence $ map (addPosition . arbitraryExtern) free
+  externs <- mapM (addPosition . arbitraryExtern) free
   return $ Program $ program prog' ++ externs
     where addPosition :: Gen Declaration -> Gen DeclarationAst
           addPosition decl = liftM2 DeclarationAst decl position
@@ -229,9 +229,7 @@ arbitraryProgram = do
             transformSignatures fixSignature prog >>= transformExpressionAsts fixExpressionAst
           fixSignature :: Signature -> State [Name] Signature
           fixSignature (Signature name argTypes typ) = do
-            names <- get
-            let name' = fixName names name
-            put (name':names)
+            name' <- fixName' name
             return $ Signature name' argTypes typ
           fixExpressionAst :: ExpressionAst -> State [Name] ExpressionAst
           fixExpressionAst (ExpressionAst e typ pos) = do
@@ -239,11 +237,15 @@ arbitraryProgram = do
             return $ ExpressionAst e' typ pos
           fixExpression :: Expression -> State [Name] Expression
           fixExpression (Call name args) = do
+            name' <- fixName' name
+            return $ Call name' args
+          fixExpression e                = return e
+          fixName' :: Name -> State [Name] Name
+          fixName' name = do
             names <- get
             let name' = fixName names name
             put (name':names)
-            return $ Call name' args
-          fixExpression e                = return e
+            return name'
 
 trivial :: Type -> Expression
 trivial Types.Boolean = Syntax.Boolean False
@@ -301,9 +303,9 @@ shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
 shrinkSignature free (Signature name args typ) = [Signature name a typ | a <- shrinkArgTypes args]
   where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
         shrinkArgTypes []                     = []
-        shrinkArgTypes (x:xs) | x `elem` free = [(x:ys) | ys <- shrinkArgTypes xs]
+        shrinkArgTypes (x:xs) | x `elem` free = [x:ys | ys <- shrinkArgTypes xs]
                               | otherwise     = xs : [y : xs | y <- shrinkTypedVariable x]
-                                                ++ [(x:ys) | ys <- shrinkArgTypes xs]
+                                                ++ [x:ys | ys <- shrinkArgTypes xs]
 
 shrinkProgram :: Program -> [Program]
 shrinkProgram p = shrinkProgram' (calledFunctions p) p
@@ -320,7 +322,7 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
                 isRemovable :: DeclarationAst -> Bool
                 isRemovable (DeclarationAst d _) = isRemovableSignature $ signature d
-                isRemovableSignature (Signature name args retType) = not (FunctionType name (map varType args) retType `elem` funcs)
+                isRemovableSignature (Signature name args retType) = FunctionType name (map varType args) retType `notElem` funcs
                 appendTail y = Program (y:xs)
                 tailShrinks = shrinkProgram' funcs $ Program xs
                 appendHead (Program ys) = Program (x:ys)

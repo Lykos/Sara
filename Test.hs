@@ -1,3 +1,5 @@
+module Main where
+
 import ParserTest
 import SyntaxTest
 import TypeCheckerTest

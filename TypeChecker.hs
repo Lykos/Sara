@@ -30,16 +30,16 @@ type VariableMap = Map.Map Name Type
 typeCheck :: Program -> ErrorOr Program
 typeCheck (Program prog) = do
   funcs <- functions $ Program prog
-  liftM Program $ sequence $ map (typeCheckDeclarationAst funcs) prog
+  liftM Program $ mapM (typeCheckDeclarationAst funcs) prog
 
 typeCheckWithMain :: Program -> ErrorOr Program
 typeCheckWithMain p = checkMain p >> typeCheck p
 
 checkMain :: Program -> ErrorOr ()
-checkMain program = if hasMain program then return () else noMain (programPos program)
+checkMain program = unless (hasMain program) $ noMain (programPos program)
 
 programPos :: Program -> SourcePos
-programPos (Program ((DeclarationAst _ pos):xs)) = pos
+programPos (Program (DeclarationAst _ pos : xs)) = pos
 programPos _                                     = newPos "<unknown>" 0 0
 
 hasMain :: Program -> Bool
@@ -48,7 +48,7 @@ hasMain = getAny . foldMapSignatures (\s -> Any $ funcName s == "main")
 typeCheckDeclarationAst :: FunctionMap -> DeclarationAst -> ErrorOr DeclarationAst
 typeCheckDeclarationAst funcs declAst@(DeclarationAst decl pos) = do
   typeCheckSignature (signature decl) pos
-  typedDecl <- typeCheckDeclaration funcs $ decl
+  typedDecl <- typeCheckDeclaration funcs decl
   return declAst { decl = typedDecl }
 
 typeCheckSignature :: Signature -> SourcePos -> ErrorOr ()
@@ -70,22 +70,22 @@ typeCheckFunction funcs sig body = typeCheckFunctionOrMethod Function funcs sig 
           return $ Function sig body
 
 checkPure :: ExpressionAst -> ErrorOr ExpressionAst
-checkPure e = transformExpressionAst checkPureExpressionAst e
+checkPure = transformExpressionAst checkPureExpressionAst
   where checkPureExpressionAst :: ExpressionAst -> ErrorOr ExpressionAst
         checkPureExpressionAst ea@(ExpressionAst e _ _) | isPure e  = return ea
                                                         | otherwise = impureExpression ea
         isPure :: Expression -> Bool
         isPure Syntax.Unit                  = True
-        isPure (Syntax.Boolean _)           = True
-        isPure (Syntax.Integer _)           = True
-        isPure (Syntax.Double _)            = True
-        isPure (UnaryOperation _ _)         = True
+        isPure Syntax.Boolean{}             = True
+        isPure Syntax.Integer{}             = True
+        isPure Syntax.Double{}              = True
+        isPure UnaryOperation{}             = True
         isPure (BinaryOperation Assign _ _) = False
-        isPure (BinaryOperation _ _ _)      = True
-        isPure (Variable _)                 = True
-        isPure (Call _ _)                   = True
-        isPure (Conditional _ _ _)          = True
-        isPure (Block _ _)                  = True
+        isPure BinaryOperation{}            = True
+        isPure Variable{}                   = True
+        isPure Call{}                       = True
+        isPure Conditional{}                = True
+        isPure Block{}                      = True
         isPure _                            = False
 
 typeCheckMethod :: FunctionMap -> Signature -> ExpressionAst -> ErrorOr Declaration
@@ -95,20 +95,20 @@ typeCheckFunctionOrMethod :: FunctionOrMethodConstructor -> FunctionMap -> Signa
 typeCheckFunctionOrMethod constructor funcs sig body =
   let var (TypedVariable varName varType _) = (varName, varType)
       vars = Map.fromList $ map var (args sig)
-  in typeCheckExp funcs vars body >>= return . constructor sig
+  in liftM (constructor sig) (typeCheckExp funcs vars body)
 
 functions :: Program -> ErrorOr FunctionMap
 functions = functionsFromDecls . program
 
 functionsFromDecls :: [DeclarationAst] -> ErrorOr FunctionMap
-functionsFromDecls d = foldr addOneFunction (return Map.empty) d
+functionsFromDecls = foldr addOneFunction (return Map.empty)
 
 addOneFunction :: DeclarationAst -> ErrorOr FunctionMap -> ErrorOr FunctionMap
 addOneFunction d m = do
   let sig = signature . decl $ d
   let pos = declPos d
   n <- m
-  when ((functionType sig) `Map.member` n) (ambiguousFunction sig pos)
+  when (functionType sig `Map.member` n) (ambiguousFunction sig pos)
   return $ insertFunction sig n
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
@@ -138,8 +138,8 @@ typeCheckExp funcs vars ast =
       addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType pos)
     Variable name -> addType e (varType name)
     Call name args -> do
-      typedArgs <- sequence $ map typedSubExp args
-      argTypes <- sequence $ map astType typedArgs
+      typedArgs <- mapM typedSubExp args
+      argTypes <- mapM astType typedArgs
       addType (Call name typedArgs) (funcType name argTypes)
     Conditional cond ifExp elseExp -> do
       typedCond <- typedSubExp cond
@@ -153,7 +153,7 @@ typeCheckExp funcs vars ast =
                                           | otherwise             -> mismatchingCondTypes typedIfExp typedElseExp pos
         (condType, _, _)                                          -> invalidCondType cond
     Block stmts exp -> do
-      typedStmts <- sequence $ map typedSubExp stmts
+      typedStmts <- mapM typedSubExp stmts
       typedExp <- typedSubExp exp
       addType (Block typedStmts typedExp) (astType typedExp)
     While cond body -> do
@@ -185,17 +185,17 @@ typeCheckExp funcs vars ast =
           Nothing -> unknownVariable name pos
           Just t  -> return t
         funcType :: Name -> [Type] -> ErrorOr Type
-        funcType name argTypes = case (FunctionType name argTypes) `Map.lookup` funcs of
+        funcType name argTypes = case FunctionType name argTypes `Map.lookup` funcs of
           Nothing -> unknownFunction name argTypes pos
           Just t  -> return t
 
 unOpType :: UnaryOperator -> Type -> SourcePos -> ErrorOr Type
-unOpType op t pos = case (TypedUnOp op t) `Map.lookup` typedUnOps of
+unOpType op t pos = case TypedUnOp op t `Map.lookup` typedUnOps of
   Nothing -> unknownUnOp op t pos
   Just t  -> return t
 
 binOpType :: BinaryOperator -> Type -> Type -> SourcePos -> ErrorOr Type
-binOpType op s t pos = case (TypedBinOp op s t) `Map.lookup` typedBinOps of
+binOpType op s t pos = case TypedBinOp op s t `Map.lookup` typedBinOps of
   Nothing -> unknownBinOp op s t pos
   Just t  -> return t
 

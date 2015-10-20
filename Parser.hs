@@ -114,7 +114,7 @@ operatorTable = [ [ unaryOperator UnaryPlus
 
 unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOperation operator))
 
-binaryOperator operator assoc = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator)) assoc
+binaryOperator operator = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator))
 
 operation :: String -> (SourcePos -> a) -> Parser a
 operation symbol op = do
@@ -128,10 +128,9 @@ binaryOperation :: BinaryOperator -> SourcePos -> ExpressionAst -> ExpressionAst
 binaryOperation op pos left right = ExpressionAst (BinaryOperation op left right) Unknown pos
 
 term :: Parser ExpressionAst
-term = do
-  simpleExpressionAst
-  <|> parensToken expressionAst
-  <?> "expression"
+term = simpleExpressionAst
+       <|> parensToken expressionAst
+       <?> "expression"
 
 addPosition :: Parser (SourcePos -> a) -> Parser a
 addPosition parser = do
@@ -200,7 +199,7 @@ block :: Parser Expression
 block = do
   pos <- getPosition
   exps <- bracesToken $ semiSep expressionAst
-  return $ if (null exps) then
+  return $ if null exps then
              Block [] (ExpressionAst Syntax.Unit Unknown pos)
            else
              Block (init exps) (last exps)

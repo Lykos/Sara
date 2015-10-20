@@ -6,7 +6,6 @@ module Compiler (
 import Parser
 import TypeChecker
 import PrettyPrinter
-import CodeGenerator
 import Syntax
 import CodeGenerator
 import Errors
@@ -18,10 +17,8 @@ import Data.Int
 import Data.Bifunctor
 import Foreign.Ptr ( FunPtr, castFunPtr )
 
-import LLVM.General.Context
 import LLVM.General.PassManager
 import LLVM.General.AST
-import LLVM.General.Context
 import LLVM.General.Target
 import LLVM.General.Context
 import LLVM.General.CodeModel
@@ -44,7 +41,7 @@ codegenStage report mod prog = ExceptT $ withContext $ \context -> codegen' cont
           runPassManager pm m
           report context m
 
-foreign import ccall "dynamic" haskFun :: FunPtr (IO Int64) -> (IO Int64)
+foreign import ccall "dynamic" haskFun :: FunPtr (IO Int64) -> IO Int64
 
 runFn :: FunPtr a -> IO Int64
 runFn fn = haskFun (castFunPtr fn :: FunPtr (IO Int64))
@@ -83,7 +80,7 @@ parseStage report filename contents = stage report $ toError $ parse filename co
           (Right res) -> return res
 
 stage :: (b -> IO ()) -> ExceptOrIO b -> ExceptOrIO b
-stage report e = mapExceptT stage' e
+stage report = mapExceptT stage'
   where stage' e = do
           e' <- e
           case e' of

@@ -34,19 +34,19 @@ transformExpressionAst f (ExpressionAst exp typ pos) = do
             BinaryOperation op left right  -> liftM2 (BinaryOperation op) (transformSubExp left) (transformSubExp right)
             UnaryOperation op exp          -> liftM (UnaryOperation op) (transformSubExp exp)
             Conditional cond ifExp elseExp -> liftM3 Conditional (transformSubExp cond) (transformSubExp ifExp) (transformSubExp elseExp)
-            Call name args                 -> liftM (Call name) (sequence $ map transformSubExp args)
-            Block stmts exp                -> liftM2 Block (sequence $ map transformSubExp stmts) (transformSubExp exp)
+            Call name args                 -> liftM (Call name) (mapM transformSubExp args)
+            Block stmts exp                -> liftM2 Block (mapM transformSubExp stmts) (transformSubExp exp)
             While cond body                -> liftM2 While (transformSubExp cond) (transformSubExp body)
             e                              -> return e
 
 foldMapExpressionAst :: Monoid m => (ExpressionAst -> m) -> ExpressionAst -> m
 foldMapExpressionAst = transformToFoldMap transformExpressionAst
 
-transformToFoldMap :: Monoid m => ((a -> State m a) -> (b -> State m b)) -> (a -> m) -> b -> m
+transformToFoldMap :: Monoid m => ((a -> State m a) -> b -> State m b) -> (a -> m) -> b -> m
 transformToFoldMap transform f e = execState (transform accumulate e) mempty
   where accumulate e = (modify . mappend . f) e >> return e
 
-transformToMap :: ((a -> Identity a) -> (b -> Identity b)) -> (a -> a) -> b -> b
+transformToMap :: ((a -> Identity a) -> b -> Identity b) -> (a -> a) -> b -> b
 transformToMap transform f = runIdentity . transform (Identity . f)
 
 mapExpressionAst :: (ExpressionAst -> ExpressionAst) -> ExpressionAst -> ExpressionAst
@@ -82,7 +82,7 @@ liftFunctionOrMethod constructor f sig exp pos = do
   return $ DeclarationAst func pos
 
 transformDeclarationAsts :: Monad m => (DeclarationAst -> m DeclarationAst) -> Program -> m Program
-transformDeclarationAsts f = liftM Program . ((sequence . map f) . program)
+transformDeclarationAsts f = liftM Program . mapM f . program
 
 mapDeclarationAsts :: (DeclarationAst -> DeclarationAst) -> Program -> Program
 mapDeclarationAsts = transformToMap transformDeclarationAsts

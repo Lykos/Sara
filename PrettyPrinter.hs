@@ -64,14 +64,14 @@ prettyTermAst (ExpressionAst exp typ _) = prettyTyped (prettyTerm exp) typ
 
 prettyBinaryTerm :: Expression -> Doc
 prettyBinaryTerm exp = case exp of
-  (BinaryOperation _ _ _) -> parens $ prettyExpression exp
-  (Conditional _ _ _)     -> parens $ prettyExpression exp
-  _                       -> prettyExpression exp
+  BinaryOperation{} -> parens $ prettyExpression exp
+  Conditional{}     -> parens $ prettyExpression exp
+  _                 -> prettyExpression exp
 
 prettyTerm :: Expression -> Doc
 prettyTerm exp = case exp of
-  (UnaryOperation _ _) -> parens $ prettyExpression exp
-  _                    -> prettyBinaryTerm exp
+  UnaryOperation{} -> parens $ prettyExpression exp
+  _                -> prettyBinaryTerm exp
 
 prettyExpression :: Expression -> Doc
 prettyExpression Syntax.Unit                      = text "()"
@@ -102,5 +102,5 @@ inBlock doc = text "{" $+$ nest indentation doc $+$ text "}"
 
 prettySubExp :: ExpressionAst -> Doc
 prettySubExp ast = case astExp ast of
-  b@(BinaryOperation _ _ _) -> parens . prettyExpressionAst $ ast
-  _                         -> prettyExpressionAst ast
+  b@BinaryOperation{} -> parens . prettyExpressionAst $ ast
+  _                   -> prettyExpressionAst ast

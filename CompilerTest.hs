@@ -5,7 +5,6 @@ module CompilerTest (compilerCheck) where
 import Errors
 import PrettyPrinter
 import AstTestUtils
-import TestUtils
 import Compiler
 import Syntax
 import TestUtils
@@ -27,9 +26,8 @@ prop_generatesCode p = checkRight input
         checkRight input = M.monadicIO $ do
           actual <- M.run $ runExceptT $ compile nopReporter testfile input
           let example = "\nInput:\n" ++ input ++ "\n\nActual:\n" ++ show actual
-          return $ example `counterexample` (liftBool $ isRight actual)
+          return $ example `counterexample` liftBool (isRight actual)
 
 return []
 
 compilerCheck = $quickCheckAll
-

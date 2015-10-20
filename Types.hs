@@ -35,11 +35,11 @@ data TypedBinOp
 typedBinOps :: Map.Map TypedBinOp Type
 typedBinOps = Map.fromList $
               map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Integer)) intBinOps
-              ++ (map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Integer)) intDoubleBinOps)
-              ++ (map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Double)) intDoubleBinOps)
-              ++ (map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Boolean)) relOps)
-              ++ (map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Boolean)) relOps)
-              ++ (map (\op -> (TypedBinOp op Types.Boolean Types.Boolean, Types.Boolean)) boolOps)
+              ++ map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Integer)) intDoubleBinOps
+              ++ map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Double)) intDoubleBinOps
+              ++ map (\op -> (TypedBinOp op Types.Integer Types.Integer, Types.Boolean)) relOps
+              ++ map (\op -> (TypedBinOp op Types.Double Types.Double, Types.Boolean)) relOps
+              ++ map (\op -> (TypedBinOp op Types.Boolean Types.Boolean, Types.Boolean)) boolOps
   where intBinOps = [LeftShift, RightShift, BitwiseAnd, BitwiseXor, BitwiseOr]
         intDoubleBinOps = [Times, DividedBy, Modulo, Plus, Minus, Assign]
         relOps = [LessThan, AtMost, GreaterThan, AtLeast, EqualTo, NotEqualTo]
