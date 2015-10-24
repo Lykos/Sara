@@ -84,10 +84,14 @@ checkPure funcs sig = if S.pure sig then transformExpression checkPureExpression
         isPure _                                   = False
 
 typeCheckFunctionBody :: FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Expression
-typeCheckFunctionBody funcs sig body pos =
+typeCheckFunctionBody funcs sig body pos = do
   let keyedVar var@(TypedVariable varName _ _) = (varName, var)
-      vars = Map.fromList $ map keyedVar (args sig)
-  in typeCheckExpression funcs vars body
+  let vars = Map.fromList $ map keyedVar (args sig)
+  body' <- typeCheckExpression funcs vars body
+  let bodyType = typ body'
+  let sigType = typ sig
+  when (bodyType /= sigType) (invalidRetType sigType bodyType (position body'))
+  return body'
 
 functions :: Program -> ErrorOr FunctionMap
 functions = functionsFromDecls . program

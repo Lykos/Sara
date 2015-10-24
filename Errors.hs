@@ -12,6 +12,7 @@ module Errors(
   , unknownBinOp
   , noMain
   , invalidMainRetType
+  , invalidRetType
   , impureExpression
   , invalidMainArgs
   , redeclaredFunction
@@ -183,6 +184,9 @@ unknownFunction name argTypes = unknownElementError $ UnknownVariable name
 
 invalidCondType :: Type -> SourcePos -> ErrorOr a
 invalidCondType t = positionedError $ TypeMismatchError Condition Types.Boolean t
+
+invalidRetType :: Type -> Type -> SourcePos -> ErrorOr a
+invalidRetType s t = positionedError $ TypeMismatchError ReturnType s t
 
 mismatchingCondTypes :: Type -> Type -> SourcePos -> ErrorOr a
 mismatchingCondTypes s t = positionedError $ DifferentTypesError [s, t]
