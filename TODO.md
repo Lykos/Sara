@@ -12,3 +12,5 @@
 - Generated tests for errors
 - Refactor TypeChecker to use transform
 - Directory structure.
+- Add pureness to the signature.
+
