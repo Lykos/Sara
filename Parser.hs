@@ -8,17 +8,13 @@ import Control.Monad.Except
 import qualified Text.Parsec.Expr as Expr
 import qualified Text.Parsec.Token as Token
 
+import qualified Syntax as S
 import Lexer
 import Syntax
 import Types
 import Operators
 import AstUtils
 import Errors
-
-declarationAst :: Parser DeclarationAst
-declarationAst = do
-  decl <- declaration
-  addPosition . return $ DeclarationAst decl
 
 declaration :: Parser Declaration
 declaration = try function
@@ -27,11 +23,11 @@ declaration = try function
               <?> "declaration"
 
 functionOrMethod :: String -> FunctionOrMethodConstructor -> Parser Declaration
-functionOrMethod keyword constructor = do
+functionOrMethod keyword constructor = addPosition $ do
   reservedToken keyword
   sig <- Parser.signature
   reservedOpToken "="
-  body <- expressionAst
+  body <- expression
   return $ constructor sig body
 
 function :: Parser Declaration
@@ -41,13 +37,13 @@ method :: Parser Declaration
 method = functionOrMethod "method" Method
 
 extern :: Parser Declaration
-extern = do
+extern = addPosition $ do
   reservedToken "extern"
   sig <- Parser.signature
   return $ Extern sig
 
 signature :: Parser Signature
-signature = do
+signature = addPosition $ do
   name <- identifierToken
   args <- parensToken $ commaSep typedVariable
   reservedToken ":"
@@ -55,11 +51,11 @@ signature = do
   return $ Signature name args retType
 
 typedVariable :: Parser TypedVariable
-typedVariable = do
+typedVariable = addPosition $ do
   name <- identifierToken
   reservedToken ":"
   varType <- typeExpression
-  addPosition . return $ TypedVariable name varType
+  return $ TypedVariable name varType
 
 typeExpression :: Parser Type
 typeExpression = try unitType
@@ -80,8 +76,8 @@ integerType = reservedToken "Integer" >> return Types.Integer
 doubleType :: Parser Type
 doubleType = reservedToken "Double" >> return Types.Double
 
-expressionAst :: Parser ExpressionAst
-expressionAst = Expr.buildExpressionParser operatorTable term
+expression :: Parser Expression
+expression = Expr.buildExpressionParser operatorTable term
 
 operatorTable = [ [ unaryOperator UnaryPlus
                   , unaryOperator UnaryMinus
@@ -117,19 +113,19 @@ unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOpe
 binaryOperator operator = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator))
 
 operation :: String -> (SourcePos -> a) -> Parser a
-operation symbol op = do
+operation symbol op = addPosition $ do
   reservedOpToken symbol
-  addPosition . return $ op
+  return op
 
-unaryOperation :: UnaryOperator -> SourcePos -> ExpressionAst -> ExpressionAst
-unaryOperation op pos exp = ExpressionAst (UnaryOperation op exp) Unknown pos
+unaryOperation :: UnaryOperator -> SourcePos -> Expression -> Expression
+unaryOperation op pos exp = UnaryOperation op exp Unknown pos
 
-binaryOperation :: BinaryOperator -> SourcePos -> ExpressionAst -> ExpressionAst -> ExpressionAst
-binaryOperation op pos left right = ExpressionAst (BinaryOperation op left right) Unknown pos
+binaryOperation :: BinaryOperator -> SourcePos -> Expression -> Expression -> Expression
+binaryOperation op pos left right = BinaryOperation op left right Unknown pos
 
-term :: Parser ExpressionAst
-term = simpleExpressionAst
-       <|> parensToken expressionAst
+term :: Parser Expression
+term = simpleExpression
+       <|> parensToken expression
        <?> "expression"
 
 addPosition :: Parser (SourcePos -> a) -> Parser a
@@ -138,83 +134,85 @@ addPosition parser = do
   ast <- parser
   return $ ast pos
 
-simpleExpressionAst :: Parser ExpressionAst
-simpleExpressionAst = do
-  t <- expression
-  addPosition . return $ ExpressionAst t Unknown
+addTypPosition :: Parser (Type -> SourcePos -> a) -> Parser a
+addTypPosition parser = addPosition $ do
+  ast <- parser
+  return $ ast Unknown
 
-expression :: Parser Expression
-expression = try unit
-             <|> try boolean
-             <|> try double
-             <|> try integer
-             <|> try call
-             <|> try conditional
-             <|> try block
-             <|> try while
-             <|> variable
+simpleExpression :: Parser Expression
+simpleExpression = addTypPosition $
+                   try unit
+                   <|> try boolean
+                   <|> try double
+                   <|> try integer
+                   <|> try call
+                   <|> try conditional
+                   <|> try block
+                   <|> try while
+                   <|> variable
 
 empty :: Parser Void
 empty = return undefined
 
-unit :: Parser Expression
-unit = parensToken empty >> return Syntax.Unit
+type UntypedExpression = Type -> SourcePos -> Expression
 
-boolean :: Parser Expression
-boolean = (reservedToken "true" >> return (Syntax.Boolean True))
-          <|> (reservedToken "false" >> return (Syntax.Boolean False))
+unit :: Parser UntypedExpression
+unit = parensToken empty >> return S.Unit
 
-integer :: Parser Expression
+boolean :: Parser UntypedExpression
+boolean = (reservedToken "true" >> return (S.Boolean True))
+          <|> (reservedToken "false" >> return (S.Boolean False))
+
+integer :: Parser UntypedExpression
 integer = do
   n <- integerToken
-  return $ Syntax.Integer n
+  return $ S.Integer n
 
-double :: Parser Expression
+double :: Parser UntypedExpression
 double = do
-  n <- doubleToken
-  return $ Syntax.Double n
+  d <- doubleToken
+  return $ S.Double d
 
-variable :: Parser Expression
+variable :: Parser UntypedExpression
 variable = do
   var <- identifierToken
   return $ Variable var
 
-call :: Parser Expression
+call :: Parser UntypedExpression
 call = do
   name <- identifierToken
-  args <- parensToken $ commaSep expressionAst
+  args <- parensToken $ commaSep expression
   return $ Call name args
 
-conditional :: Parser Expression
+conditional :: Parser UntypedExpression
 conditional = do
   reservedToken "if"
-  cond <- expressionAst
+  cond <- expression
   reservedToken "then"
-  ifExpr <- expressionAst
+  ifExpr <- expression
   reservedToken "else"
-  thenExpr <- expressionAst
+  thenExpr <- expression
   return $ Conditional cond ifExpr thenExpr
 
-block :: Parser Expression
+block :: Parser UntypedExpression
 block = do
   pos <- getPosition
-  exps <- bracesToken $ semiSep expressionAst
+  exps <- bracesToken $ semiSep expression
   return $ if null exps then
-             Block [] (ExpressionAst Syntax.Unit Unknown pos)
+             Block [] (S.Unit Unknown pos)
            else
              Block (init exps) (last exps)
 
-while :: Parser Expression
+while :: Parser UntypedExpression
 while = do
   reservedToken "while"
-  cond <- expressionAst
-  pos <- getPosition
-  bodyBlock <- block
-  let body = transformBody bodyBlock pos
+  cond <- expression
+  bodyBlock <- addTypPosition block
+  let body = transformBody bodyBlock
   return $ While cond body
-  where transformBody :: Expression -> SourcePos -> ExpressionAst
-        transformBody (Block [] e) _ = e
-        transformBody b pos          = ExpressionAst b Unknown pos
+  where transformBody :: Expression -> Expression
+        transformBody (Block [] e _ _) = e
+        transformBody b                = b
 
 contents :: Parser a -> Parser a
 contents p = do
@@ -224,8 +222,8 @@ contents p = do
   return r
 
 toplevel :: Parser Program
-toplevel = do
-  program <- semiSep declarationAst
+toplevel = addPosition $ do
+  program <- semiSep declaration
   return $ Program program
 
 parse :: String -> String -> ErrorOr Program

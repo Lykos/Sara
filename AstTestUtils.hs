@@ -1,4 +1,8 @@
-module AstTestUtils where
+module AstTestUtils (
+  clearTypes
+  , clearPositions
+  , testfile
+  ) where
 
 import Syntax
 import Types
@@ -6,6 +10,8 @@ import Lexer
 import Operators
 import AstUtils
 import Reporter
+import qualified Syntax as S
+import qualified Types as T
 
 import Control.Monad.State
 import qualified Data.Set as Set
@@ -51,20 +57,27 @@ testfile = "<testfile>"
 pos :: SourcePos
 pos = newPos testfile 0 0
 
+addPosition :: Gen (SourcePos -> a) -> Gen a
+addPosition gen = do
+  gen' <- gen
+  return $ gen' pos
+
+addTypePos :: Type -> Gen UntypedExpression -> Gen Expression
+addTypePos t gen = do
+  gen' <- gen
+  return $ gen' t pos
+
 position :: Gen SourcePos
 position = return pos
 
-declarationAst :: Gen DeclarationAst
-declarationAst = liftM2 DeclarationAst declaration position
-
 declaration :: Gen Declaration
-declaration = functionOrMethod
+declaration = addPosition functionOrMethod
 
-freeVariables :: ExpressionAst -> [TypedVariable]
-freeVariables = foldMapExpressionAst freeVariable
-  where freeVariable :: ExpressionAst -> [TypedVariable]
-        freeVariable (ExpressionAst (Variable a) t _) = [TypedVariable a t pos]
-        freeVariable _                                = []
+freeVariables :: Expression -> [TypedVariable]
+freeVariables = foldMapExpression freeVariable
+  where freeVariable :: Expression -> [TypedVariable]
+        freeVariable (Variable a t _) = [TypedVariable a t pos]
+        freeVariable _                = []
 
 data FunctionType =
   FunctionType { name :: Name
@@ -73,55 +86,56 @@ data FunctionType =
   deriving (Eq, Ord, Show)
 
 calledFunctions :: Program -> [FunctionType]
-calledFunctions = foldMapExpressionAsts calledFunctionsExpression
-  where calledFunctionsExpression :: ExpressionAst -> [FunctionType]
-        calledFunctionsExpression (ExpressionAst (Call name args) typ _) =
+calledFunctions = foldMapExpressions calledFunctionsExpression
+  where calledFunctionsExpression :: Expression -> [FunctionType]
+        calledFunctionsExpression (Call name args typ _) =
           [FunctionType name (map expType args) typ]
-        calledFunctionsExpression _                                      = []
+        calledFunctionsExpression _                      = []
 
-inferSignature :: Name -> ExpressionAst -> Signature
-inferSignature name exp = Signature name (freeVariables exp) (expType exp)
+inferSignature :: Name -> Expression -> Signature
+inferSignature name exp = Signature name (freeVariables exp) (S.typ exp) pos
 
-functionOrMethod :: Gen Declaration
+type UnpositionedDeclaration = SourcePos -> Declaration
+
+functionOrMethod :: Gen UnpositionedDeclaration
 functionOrMethod = do
   pure <- elements [True, False]
   let constructor = if pure then Function else Method
-  t <- typ
+  t <- AstTestUtils.typ
   name <- identifier
-  exp <- expressionAst pure t
+  exp <- expression pure t
   return $ constructor (inferSignature name exp) exp
 
-expressionAst :: Bool -> Type -> Gen ExpressionAst
-expressionAst pure t = do
-  e <- expression pure t
-  p <- position
-  return $ ExpressionAst e t p
-
 typ :: Gen Type
-typ = elements [Types.Unit, Types.Boolean, Types.Integer, Types.Double]
+typ = elements [T.Unit, T.Boolean, T.Integer, T.Double]
 
-boolean :: Gen Expression
-boolean = liftM Syntax.Boolean arbitrary
+type UntypedExpression = Type -> SourcePos -> Expression
 
-integer :: Gen Expression
-integer = liftM (Syntax.Integer . abs) arbitrary
+boolean :: Gen UntypedExpression
+boolean = liftM S.Boolean arbitrary
 
-double :: Gen Expression
-double = liftM Syntax.Double $ elements niceDoubles
+integer :: Gen UntypedExpression
+integer = liftM (S.Integer . abs) arbitrary
+
+double :: Gen UntypedExpression
+double = liftM S.Double $ elements niceDoubles
   where niceDoubles = [0.0, 0.1, 1.0, 1.1, 1e10, 1.1e10]
 
 -- We add the type to the variable name in order to avoid name clashes.
-variable :: Type -> Gen Expression
+variable :: Type -> Gen UntypedExpression
 variable t = do
   id <- identifier
   return $ Variable $ id ++ show t
 
-call :: Bool -> Gen Expression
-call pure = liftM2 Call identifier (scale pred $ AstTestUtils.args pure)
+call :: Bool -> Type -> Gen UntypedExpression
+call pure t = do
+  name <- identifier
+  args <- (scale pred $ AstTestUtils.args pure)
+  return $ Call name args
 
-args :: Bool -> Gen [ExpressionAst]
+args :: Bool -> Gen [Expression]
 args pure = scale intRoot $ listOf arg
-  where arg = typ >>= expressionAst pure
+  where arg = AstTestUtils.typ >>= expression pure
 
 intRoot :: Int -> Int
 intRoot = round . sqrt . fromIntegral
@@ -139,63 +153,62 @@ typUnOps = inverseFindWithDefault typedUnOps
 typBinOps :: Bool -> Type -> [TypedBinOp]
 typBinOps pure t = filter (\(TypedBinOp op _ _) -> not pure || op /= Assign) (inverseFindWithDefault typedBinOps t)
           
-binaryOperations :: Bool -> Type -> [Gen Expression]
+binaryOperations :: Bool -> Type -> [Gen UntypedExpression]
 binaryOperations pure t = map binOp $ typBinOps pure t
-  where binOp (TypedBinOp Assign r s) = do
-          var <- variable r
-          let var' = ExpressionAst var r pos
-          val <- subtree s
-          return $ BinaryOperation Assign var' val
-        binOp (TypedBinOp op r s)     = liftM2 (BinaryOperation op) (subtree r) (subtree s)
-        subtree r = scale (`div` 2) $ expressionAst pure r
+  where binOp :: TypedBinOp -> Gen UntypedExpression
+        binOp (TypedBinOp Assign r s) = liftM2 (BinaryOperation Assign) var (subtree s)
+          where var = addTypePos r (variable r)
+        binOp (TypedBinOp op r s)     = do
+          left <- subtree r
+          right <- subtree s
+          return $ BinaryOperation op left right
+        subtree r = scale (`div` 2) $ expression pure r
                                  
-unaryOperations :: Bool -> Type -> [Gen Expression]
+unaryOperations :: Bool -> Type -> [Gen UntypedExpression]
 unaryOperations pure t = map unOp $ typUnOps t
   where unOp (TypedUnOp op s) = liftM (UnaryOperation op) (subtree s)
-        subtree s = scale pred $ expressionAst pure s
+        subtree s = scale pred $ expression pure s
 
-conditional :: Bool -> Type -> Gen Expression
-conditional pure t = liftM3 Conditional (subtree Types.Boolean) (subtree t) (subtree t)
-  where subtree t = scale (`div` 3) $ expressionAst pure t
+conditional :: Bool -> Type -> Gen UntypedExpression
+conditional pure t = liftM3 Conditional (subtree T.Boolean) (subtree t) (subtree t)
+  where subtree t = scale (`div` 3) $ expression pure t
 
-block :: Bool -> Type -> Gen Expression
-block pure t = do
-  t' <- typ
-  stmts <- scale intRoot $ listOf $ expressionAst pure t'
-  expr <- scale intRoot $ expressionAst pure t
-  return $ Block stmts expr
+block :: Bool -> Type -> Gen UntypedExpression
+block pure t = liftM2 Block stmts exp
+  where stmts = scale intRoot $ listOf $ (AstTestUtils.typ >>= expression pure)
+        exp = scale intRoot $ expression pure t
 
-while :: Gen Expression
-while = liftM2 While (subtree Types.Boolean) (typ >>= subtree)
-  where subtree t = scale (`div` 2) $ expressionAst False t
+while :: Gen UntypedExpression
+while = liftM2 While (subtree T.Boolean) (AstTestUtils.typ >>= subtree)
+  where subtree t = scale (`div` 2) $ expression False t
 
-leafExpression :: Type -> Gen Expression
+leafExpression :: Type -> Gen UntypedExpression
 leafExpression t = oneof [constant t, variable t]
-  where constant Types.Boolean = boolean
-        constant Types.Integer = integer
-        constant Types.Double  = double
-        constant Types.Unit    = return Syntax.Unit
+  where constant T.Boolean = boolean
+        constant T.Integer = integer
+        constant T.Double  = double
+        constant T.Unit    = return $ S.Unit
 
-innerExpression :: Bool -> Type -> Gen Expression
+innerExpression :: Bool -> Type -> Gen UntypedExpression
 innerExpression pure t =
   -- We want the same probability to get a unary operation, a binary operation, a constant, a variable, a call or a conditional
   frequency weighted
   where weighted = map ((,) weight) anyTyped ++ map ((,) numUnOps) binOps ++ map ((,) numBinOps) unOps
-        anyTyped :: [Gen Expression]
-        anyTyped = map ($ t) [leafExpression, leafExpression, conditional pure, block pure] ++ [call pure] ++ maybeWhile
-        maybeWhile :: [Gen Expression]
-        maybeWhile = [while | not pure && t == Types.Unit]
-        binOps :: [Gen Expression]
+        anyTyped :: [Gen UntypedExpression]
+        anyTyped = map ($ t) [leafExpression, leafExpression, conditional pure, block pure, call pure] ++ maybeWhile
+        maybeWhile :: [Gen UntypedExpression]
+        maybeWhile = [while | not pure && t == T.Unit]
+        binOps :: [Gen UntypedExpression]
         binOps = binaryOperations pure t
-        unOps :: [Gen Expression]
+        unOps :: [Gen UntypedExpression]
         unOps = unaryOperations pure t
         numUnOps = length unOps
         numBinOps = length binOps
         weight = if numUnOps * numBinOps == 0 then 1 else numUnOps * numBinOps
 
 expression :: Bool -> Type -> Gen Expression
-expression pure t = sized expression'
-  where expression' :: Int -> Gen Expression
+expression pure t = addTypePos t $ sized expression'
+  where expression' :: Int -> Gen UntypedExpression
         expression' 0         = leafExpression t
         expression' n | n > 0 = innerExpression pure t
 
@@ -207,7 +220,7 @@ arbitraryTypedVariable t = do
 arbitraryExtern :: FunctionType -> Gen Declaration
 arbitraryExtern (FunctionType name argTypes retType) = do
   args <- mapM arbitraryTypedVariable argTypes
-  return $ Extern (Signature name args retType)
+  return $ Extern (Signature name args retType pos) pos
 
 fixName :: [Name] -> Name -> Name
 fixName names name | name `elem` names = fixName names (name ++ "0")
@@ -215,42 +228,38 @@ fixName names name | name `elem` names = fixName names (name ++ "0")
 
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
-  prog <- liftM Program $ listOf arbitrary
+  decls <- listOf arbitrary
+  let prog = Program decls pos
   let prog' = fixFunctionNameClashes prog
   let free = calledFunctions prog'
-  externs <- mapM (addPosition . arbitraryExtern) free
-  return $ Program $ program prog' ++ externs
-    where addPosition :: Gen Declaration -> Gen DeclarationAst
-          addPosition decl = liftM2 DeclarationAst decl position
-          fixFunctionNameClashes :: Program -> Program
+  externs <- mapM arbitraryExtern free
+  return $ prog' { program = program prog' ++ externs }
+    where fixFunctionNameClashes :: Program -> Program
           fixFunctionNameClashes prog = evalState (fixFunctionNameClashes' prog) []
           fixFunctionNameClashes' :: Program -> State [Name] Program
           fixFunctionNameClashes' prog =
-            transformSignatures fixSignature prog >>= transformExpressionAsts fixExpressionAst
+            transformSignatures fixSignature prog >>= transformExpressions fixExpression
           fixSignature :: Signature -> State [Name] Signature
-          fixSignature (Signature name argTypes typ) = do
-            name' <- fixName' name
-            return $ Signature name' argTypes typ
-          fixExpressionAst :: ExpressionAst -> State [Name] ExpressionAst
-          fixExpressionAst (ExpressionAst e typ pos) = do
-            e' <- fixExpression e
-            return $ ExpressionAst e' typ pos
+          fixSignature s@Signature{ S.sigName = n } = do
+            n' <- fixName' n
+            return $ s{ S.sigName = n' }
           fixExpression :: Expression -> State [Name] Expression
-          fixExpression (Call name args) = do
-            name' <- fixName' name
-            return $ Call name' args
-          fixExpression e                = return e
+          fixExpression c@Call{ S.expName = n } = do
+            n' <- fixName' n
+            return $ c{ S.expName = n' }
+          fixExpression e                    = return e
           fixName' :: Name -> State [Name] Name
           fixName' name = do
             names <- get
             let name' = fixName names name
-            put (name':names)
+            put (name' : names)
             return name'
 
-trivial :: Type -> Expression
-trivial Types.Boolean = Syntax.Boolean False
-trivial Types.Integer = Syntax.Integer 0
-trivial Types.Double  = Syntax.Double 0.0
+trivial :: Type -> SourcePos -> Expression
+trivial t = trivial' t t
+  where trivial' T.Boolean = S.Boolean False
+        trivial' T.Integer = S.Integer 0
+        trivial' T.Double  = S.Double 0.0
 
 instance Arbitrary UnaryOperator where
   arbitrary = elements unaryOperators
@@ -258,99 +267,88 @@ instance Arbitrary UnaryOperator where
 instance Arbitrary BinaryOperator where
   arbitrary = elements binaryOperators
 
-shrinkExpressionAst :: ExpressionAst -> [ExpressionAst]
-shrinkExpressionAst (ExpressionAst exp typ pos) = [ExpressionAst e typ pos | e <- shrinkExpression typ exp]
-
-shrinkExpression :: Type -> Expression -> [Expression]
-shrinkExpression _ (Syntax.Boolean b)               = map Syntax.Boolean $ shrink b
-shrinkExpression _ (Syntax.Integer n)               = map Syntax.Integer $ shrink n
-shrinkExpression _ (Syntax.Double d)                = map Syntax.Double $ shrink d
-shrinkExpression t (Variable v)                     = [trivial t]
-shrinkExpression t (BinaryOperation op left right)  = childrenWithType t [left, right]
-                                                      ++ [BinaryOperation op l r | (l, r) <- shrink (left, right)]
-shrinkExpression t (UnaryOperation op exp)          = childrenWithType t [exp]
-                                                      ++ [UnaryOperation op e | e <- shrink exp]
-shrinkExpression t (Call name args)                 = childrenWithType t args
-                                                      ++ [Call name a | a <- shrinkArgs args]
-  where shrinkArgs :: [ExpressionAst] -> [[ExpressionAst]]
+shrinkExpression :: Expression -> [Expression]
+shrinkExpression b@S.Boolean{ boolValue = val }       = [b{ boolValue = v } | v <- shrink val]
+shrinkExpression n@S.Integer{ intValue = val }        = [n{ intValue = v } | v <- shrink val]
+shrinkExpression d@S.Double{ doubleValue = val }      = [d{ doubleValue = v } | v <- shrink val]
+shrinkExpression (Variable v t p)                     = [trivial t p]
+shrinkExpression (BinaryOperation op left right t p)  = childrenWithType t [left, right]
+                                                        ++ [BinaryOperation op l r t p | (l, r) <- shrink (left, right)]
+shrinkExpression (UnaryOperation op exp t p)          = childrenWithType t [exp]
+                                                        ++ [UnaryOperation op e t p | e <- shrink exp]
+shrinkExpression (Call name args t p)                 = childrenWithType t args
+                                                        ++ [Call name a t p | a <- shrinkArgs args]
+  where shrinkArgs :: [Expression] -> [[Expression]]
         shrinkArgs []     = []
-        shrinkArgs (x:xs) = [y : xs | y <- shrink x] ++ [x:ys | ys <- shrinkArgs xs]
-shrinkExpression t (Conditional cond ifExp elseExp) = childrenWithType t [cond, ifExp, elseExp]
-                                                      ++ [Conditional c i e | (c, i, e) <- shrink (cond, ifExp, elseExp)]
-shrinkExpression t (Block stmts exp)                = shrinkBlock t stmts exp
-shrinkExpression _ (While cond body)                = shrinkWhile cond body
+        shrinkArgs (x:xs) = [y : xs | y <- shrink x] ++ [x : ys | ys <- shrinkArgs xs]
+shrinkExpression (Conditional cond ifExp elseExp t p) = childrenWithType t [cond, ifExp, elseExp]
+                                                        ++ [Conditional c i e t p | (c, i, e) <- shrink (cond, ifExp, elseExp)]
+shrinkExpression (Block stmts exp t p)                = [exp]
+                                                        ++ childrenWithType t stmts
+                                                        ++ [Block (init stmts) (last stmts) t p | not (null stmts), S.typ (last stmts) == t]
+                                                        ++ [Block s e t p | (s, e) <- shrink (stmts, exp)]
+shrinkExpression (While cond body t p)                = While cond (S.Unit T.Unit p) t p
+                                                        : [While c b t p | (c, b) <- shrink (cond, body)]
 
-childrenWithType :: Type -> [ExpressionAst] -> [Expression]
-childrenWithType t = map astExp . filter (\c -> expType c == t)
-
-shrinkBlock :: Type -> [ExpressionAst] -> ExpressionAst -> [Expression]
-shrinkBlock t stmts exp = [astExp exp] ++ withoutExp ++ [Block s e | (s, e) <- shrink (stmts, exp)]
-  where withoutExp :: [Expression]
-        withoutExp = if null stmts then
-                       []
-                     else
-                       let exp' = last stmts in
-                         if expType exp' /= t then [] else [Block (init stmts) exp']
-
--- TODO Throw the expression away
-shrinkWhile :: ExpressionAst -> ExpressionAst -> [Expression]
-shrinkWhile stmts body = [While c b | (c, b) <- shrink (stmts, body)]
+childrenWithType :: Type -> [Expression] -> [Expression]
+childrenWithType t = filter (\c -> S.typ c == t)
 
 shrinkTypedVariable :: TypedVariable -> [TypedVariable]
-shrinkTypedVariable (TypedVariable var typ _) = [TypedVariable v typ pos | v <- shrinkIdentifier var]
+shrinkTypedVariable (TypedVariable var typ p) = [TypedVariable v typ p | v <- shrinkIdentifier var]
 
 shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
-shrinkSignature free (Signature name args typ) = [Signature name a typ | a <- shrinkArgTypes args]
+shrinkSignature free (Signature name args typ p) = [Signature name a typ p | a <- shrinkArgTypes args]
   where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
         shrinkArgTypes []                     = []
-        shrinkArgTypes (x:xs) | x `elem` free = [x:ys | ys <- shrinkArgTypes xs]
+        shrinkArgTypes (x:xs) | x `elem` free = [x : ys | ys <- shrinkArgTypes xs]
                               | otherwise     = xs : [y : xs | y <- shrinkTypedVariable x]
-                                                ++ [x:ys | ys <- shrinkArgTypes xs]
+                                                ++ [x : ys | ys <- shrinkArgTypes xs]
 
 shrinkProgram :: Program -> [Program]
 shrinkProgram p = shrinkProgram' (calledFunctions p) p
-  where shrinkProgram' funcs (Program [])     = []
-        shrinkProgram' funcs (Program (x:xs)) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
+  where pos = S.position p
+        shrinkProgram' :: [FunctionType] -> Program -> [Program]
+        shrinkProgram' funcs (Program [] _)     = []
+        shrinkProgram' funcs (Program (x:xs) _) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
           where headShrinks = shrink x
                 headRemovals :: [Program]
-                headRemovals = if isRemovable x then Program xs : [Program (d : xs) | d <- shrinkSig x] else []
-                shrinkSig :: DeclarationAst -> [DeclarationAst]
-                shrinkSig (DeclarationAst decl pos) = [DeclarationAst d pos | d <- shrinkSig' decl]
-                shrinkSig' :: Declaration -> [Declaration]
-                shrinkSig' (Function sig body) = [Function s body | s <- shrinkSignature (freeVariables body) sig]
-                shrinkSig' (Method sig body)   = [Method s body | s <- shrinkSignature (freeVariables body) sig]
-                shrinkSig' (Extern s)          = map Extern $ shrinkSignature [] s
-                isRemovable :: DeclarationAst -> Bool
-                isRemovable (DeclarationAst d _) = isRemovableSignature $ signature d
-                isRemovableSignature (Signature name args retType) = FunctionType name (map varType args) retType `notElem` funcs
-                appendTail y = Program (y:xs)
-                tailShrinks = shrinkProgram' funcs $ Program xs
-                appendHead (Program ys) = Program (x:ys)
+                headRemovals = if isRemovable x then Program xs pos : [Program (d : xs) pos | d <- shrinkSig x] else []
+                shrinkSig :: Declaration -> [Declaration]
+                shrinkSig (Function sig body p) = [Function s body p | s <- shrinkSignature (freeVariables body) sig]
+                shrinkSig (Method sig body p)   = [Method s body p | s <- shrinkSignature (freeVariables body) sig]
+                shrinkSig (Extern sig p)          = [Extern s p | s <- shrinkSignature [] sig]
+                isRemovable :: Declaration -> Bool
+                isRemovable d = isRemovableSignature $ signature d
+                isRemovableSignature :: Signature -> Bool
+                isRemovableSignature (Signature name args retType _) = FunctionType name (map varType args) retType `notElem` funcs
+                appendTail :: Declaration -> Program
+                appendTail y = Program (y:xs) pos
+                tailShrinks :: [Program]
+                tailShrinks = shrinkProgram' funcs $ Program xs pos
+                appendHead :: Program -> Program
+                appendHead (Program ys p) = Program (x : ys) p
 
-instance Arbitrary ExpressionAst where
-  arbitrary = typ >>= expressionAst False
-  shrink = shrinkExpressionAst
-
-instance Arbitrary DeclarationAst where
-  arbitrary = declarationAst
-  shrink (DeclarationAst decl pos) = [DeclarationAst d pos | d <- shrink decl]
+instance Arbitrary Expression where
+  arbitrary = AstTestUtils.typ >>= expression False
+  shrink = shrinkExpression
 
 instance Arbitrary Declaration where
   arbitrary = declaration
-  shrink (Function sig body) = [Function sig b | b <- shrink body]
-  shrink _                   = []
+  shrink (Function sig body p) = [Function sig b p | b <- shrink body]
+  shrink _                     = []
 
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
   shrink = shrinkProgram
 
 clearPositions :: Program -> Program
-clearPositions = mapDeclarationAsts clearPosDeclarationAst . mapExpressionAsts clearPosExpressionAst . mapSignatures clearPosSignature
-  where clearPosDeclarationAst (DeclarationAst decl _)      = DeclarationAst decl pos
-        clearPosExpressionAst (ExpressionAst exp typ _)     = ExpressionAst exp typ pos
-        clearPosSignature (Signature name argTypes retType) = Signature name (map clearPosTypedVariable argTypes) retType
-        clearPosTypedVariable (TypedVariable name typ _)    = TypedVariable name typ pos
+clearPositions p = clearPosProgram p{ progPos = pos }
+  where clearPosProgram = mapDeclarations clearPosDeclaration . mapExpressions clearPosExpression . mapSignatures clearPosSignature
+        clearPosDeclaration d   = d{ declPos = pos }
+        clearPosExpression e    = e{ expPos = pos }
+        clearPosSignature s     = let args' = map clearPosTypedVariable $ S.args s in s{ sigPos = pos, S.args = args' }
+        clearPosTypedVariable v = v{ varPos = pos }
 
 clearTypes :: Program -> Program
-clearTypes = mapExpressionAsts clearTypes
-  where clearTypes (ExpressionAst exp _ pos) = ExpressionAst exp Unknown pos
+clearTypes = mapExpressions clearTypes
+  where clearTypes exp = exp{ expType = Unknown }

@@ -3,7 +3,6 @@
 - Extern
 - Pure calls
 - More structured errors/better error messages
-- Better AST
 - Proper building
 - Write README
 - Object Oriented

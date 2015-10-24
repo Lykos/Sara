@@ -161,7 +161,7 @@ typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
 
 define :: S.Signature -> [BasicBlock] -> LLVM ()
-define (S.Signature label args retty) body = addDefn $
+define (S.Signature label args retty _) body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
   , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _) <- args], False)
@@ -229,15 +229,12 @@ store ptr val = instr $ Store False ptr val Nothing 0 []
 load :: Operand -> Type -> Codegen Operand
 load ptr = instr $ Load False ptr Nothing 0 []
 
-codegenDeclarationAst :: S.DeclarationAst -> LLVM ()
-codegenDeclarationAst = codegenDeclaration . S.decl
-
 codegenDeclaration :: S.Declaration -> LLVM ()
-codegenDeclaration (S.Extern sig)        = extern sig
-codegenDeclaration (S.Function sig body) = codegenFunctionOrMethod sig body
-codegenDeclaration (S.Method sig body)   = codegenFunctionOrMethod sig body
+codegenDeclaration (S.Extern sig _)        = extern sig
+codegenDeclaration (S.Function sig body _) = codegenFunctionOrMethod sig body
+codegenDeclaration (S.Method sig body _)   = codegenFunctionOrMethod sig body
 
-codegenFunctionOrMethod :: S.Signature -> S.ExpressionAst -> LLVM ()
+codegenFunctionOrMethod :: S.Signature -> S.Expression -> LLVM ()
 codegenFunctionOrMethod signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
@@ -249,10 +246,10 @@ codegenFunctionOrMethod signature body = define signature bls
         var <- alloca t
         store var (local (Name name) t) t
         assign name var
-      codegenExpressionAst body >>= ret
+      codegenExpression body >>= ret
 
 codegenProgram :: S.Program -> LLVM ()
-codegenProgram (S.Program p) = mapM_ codegenDeclarationAst p
+codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
 
 codegen :: Module -> S.Program -> Module
 codegen mod program = runLLVM mod $ codegenProgram program
@@ -377,65 +374,65 @@ binaryInstruction (T.TypedBinOp EquivalentTo T.Boolean T.Boolean) a b =
 binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 
-codegenExpressionAst :: S.ExpressionAst -> Codegen Operand
-codegenExpressionAst (S.ExpressionAst exp t _) = let t' = typ t in case exp of
-  S.Unit                             -> unit
-  (S.Boolean b)                      -> boolean b
-  (S.Integer n)                      -> integer n
-  (S.Double d)                       -> double d
-  (S.UnaryOperation op exp)          -> do
+codegenExpression :: S.Expression -> Codegen Operand
+codegenExpression exp = let t' = typ $ S.typ exp in case exp of
+  S.Unit{}                               -> unit
+  (S.Boolean b _ _)                      -> boolean b
+  (S.Integer n _ _)                      -> integer n
+  (S.Double d _ _)                       -> double d
+  (S.UnaryOperation op exp _ _)          -> do
     let op' = unaryInstruction (T.TypedUnOp op (S.expType exp))
-    exp' <- codegenExpressionAst exp
+    exp' <- codegenExpression exp
     op' exp' t'
-  (S.BinaryOperation Assign var val) -> do
-    let (S.ExpressionAst (S.Variable name) _ _) = var
+  (S.BinaryOperation Assign var val _ _) -> do
+    let (S.Variable name _ _) = var
     var' <- getVar name
-    val' <- codegenExpressionAst val
+    val' <- codegenExpression val
     store var' val' t'
-  (S.BinaryOperation op left right)  -> do
+  (S.BinaryOperation op left right _ _)  -> do
     let op' = binaryInstruction (T.TypedBinOp op (S.expType left) (S.expType right))
-    left' <- codegenExpressionAst left
-    right' <- codegenExpressionAst right
+    left' <- codegenExpression left
+    right' <- codegenExpression right
     op' left' right' t'
-  (S.Variable name)                  -> do
+  (S.Variable name _ _)                  -> do
     var' <- getVar name
     load var' t'
-  (S.Call name args)                 -> do
-    args' <- mapM codegenExpressionAst args
+  (S.Call name args _ _)                 -> do
+    args' <- mapM codegenExpression args
     call name args' t'
-  (S.Conditional cond ifExp elseExp) -> do
+  (S.Conditional cond ifExp elseExp _ _) -> do
     ifBlock <- addBlock "if.then"
     elseBlock <- addBlock "if.else"
     exitBlock <- addBlock "if.exit"
   
-    cond' <- codegenExpressionAst cond
-    cbr cond' ifBlock elseBlock               -- Branch based on the condition
+    cond' <- codegenExpression cond
+    cbr cond' ifBlock elseBlock           -- Branch based on the condition
 
     setBlock ifBlock
-    ifVal <- codegenExpressionAst ifExp      -- Generate code for the true branch
-    br exitBlock                             -- Branch to the merge block
+    ifVal <- codegenExpression ifExp      -- Generate code for the true branch
+    br exitBlock                          -- Branch to the merge block
     ifBlock <- getBlock
 
     setBlock elseBlock
-    elseVal <- codegenExpressionAst elseExp  -- Generate code for the false branch
-    br exitBlock                             -- Branch to the merge block
+    elseVal <- codegenExpression elseExp  -- Generate code for the false branch
+    br exitBlock                          -- Branch to the merge block
     elseBlock <- getBlock
 
     setBlock exitBlock
     phi [(ifVal, ifBlock), (elseVal, elseBlock)] t'
-  (S.Block stmts exp)                -> do
-    stmts' <- mapM codegenExpressionAst stmts
-    codegenExpressionAst exp
-  (S.While cond body)                -> do
+  (S.Block stmts exp _ _)                -> do
+    stmts' <- mapM codegenExpression stmts
+    codegenExpression exp
+  (S.While cond body _ _)                -> do
     whileBlock <- addBlock "while.body"
     exitBlock <- addBlock "while.exit"
     
-    cond' <- codegenExpressionAst cond
+    cond' <- codegenExpression cond
     cbr cond' whileBlock exitBlock
 
     setBlock whileBlock
-    codegenExpressionAst body
-    cond'' <- codegenExpressionAst cond
+    codegenExpression body
+    cond'' <- codegenExpression cond
     cbr cond'' whileBlock exitBlock
 
     setBlock exitBlock

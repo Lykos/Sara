@@ -7,28 +7,39 @@ import Operators
 
 type Name = String
 
--- Declaration AST node that contains the declaration and some metadata.
-data DeclarationAst
-  = DeclarationAst { decl :: Declaration
-                   , declPos :: SourcePos }
-  deriving (Eq, Ord, Show)
+class Positioned p where
+  position :: p -> SourcePos
+
+class Named n where
+  name :: n -> Name
+
+class Typed t where
+  typ :: t -> Type
 
 data Declaration
-  = Function Signature ExpressionAst
-  | Extern Signature
-  | Method Signature ExpressionAst
+  = Function { signature :: Signature, body :: Expression, declPos :: SourcePos }
+  | Extern { signature :: Signature, declPos :: SourcePos }
+  | Method { signature :: Signature, body :: Expression, declPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
-signature :: Declaration -> Signature
-signature (Function sig _) = sig
-signature (Extern sig)     = sig
-signature (Method sig _)   = sig
+instance Positioned Declaration where
+  position = declPos
 
 data Signature
-  = Signature { funcName :: Name
+  = Signature { sigName :: Name
               , args :: [TypedVariable]
-              , returnType :: Type }
+              , retType :: Type
+              , sigPos :: SourcePos }
   deriving (Eq, Ord, Show)
+
+instance Positioned Signature where
+  position = sigPos
+
+instance Named Signature where
+  name = sigName
+
+instance Typed Signature where
+  typ = retType
 
 data TypedVariable
   = TypedVariable { varName :: Name
@@ -36,27 +47,38 @@ data TypedVariable
                   , varPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
--- Expression AST node that contains the expression and some metadata.
-data ExpressionAst
-  = ExpressionAst { astExp :: Expression
-                  , expType :: Type
-                  , expPos :: SourcePos }
-  deriving (Eq, Ord, Show)
+instance Positioned TypedVariable where
+  position = varPos
+
+instance Named TypedVariable where
+  name = varName
+
+instance Typed TypedVariable where
+  typ = varType
 
 data Expression
-  = Unit
-  | Boolean Bool
-  | Integer Integer
-  | Double Double
-  | UnaryOperation UnaryOperator ExpressionAst
-  | BinaryOperation BinaryOperator ExpressionAst ExpressionAst
-  | Variable Name
-  | Call Name [ExpressionAst]
-  | Conditional ExpressionAst ExpressionAst ExpressionAst
-  | Block [ExpressionAst] ExpressionAst
-  | While ExpressionAst ExpressionAst
+  = Unit { expType :: Type, expPos :: SourcePos }
+  | Boolean { boolValue :: Bool, expType :: Type, expPos :: SourcePos }
+  | Integer { intValue :: Integer, expType :: Type, expPos :: SourcePos }
+  | Double { doubleValue :: Double, expType :: Type, expPos :: SourcePos }
+  | UnaryOperation { unOp :: UnaryOperator, inner :: Expression, expType :: Type, expPos :: SourcePos }
+  | BinaryOperation { binOp :: BinaryOperator, left :: Expression, right :: Expression, expType :: Type, expPos :: SourcePos }
+  | Variable { expName :: Name, expType :: Type, expPos :: SourcePos }
+  | Call { expName :: Name, expArgs :: [Expression], expType :: Type, expPos :: SourcePos }
+  | Conditional { cond :: Expression, thenExp :: Expression, elseExp :: Expression, expType :: Type, expPos :: SourcePos }
+  | Block { stmts :: [Expression], inner :: Expression, expType :: Type, expPos :: SourcePos }
+  | While { cond :: Expression, inner :: Expression, expType :: Type, expPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
-newtype Program
-  = Program { program :: [DeclarationAst] }
+instance Typed Expression where
+  typ = expType
+
+instance Positioned Expression where
+  position = expPos
+
+data Program
+  = Program { program :: [Declaration], progPos :: SourcePos }
   deriving (Eq, Ord, Show)
+
+instance Positioned Program where
+  position = progPos
