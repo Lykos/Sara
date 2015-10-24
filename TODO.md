@@ -11,3 +11,4 @@
 - Regression tests for errors
 - Generated tests for errors
 - Refactor TypeChecker to use transform
+- Directory structure.
