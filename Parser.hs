@@ -19,22 +19,14 @@ import Errors
 declaration :: Parser Declaration
 declaration = try function
               <|> try extern
-              <|> try method
               <?> "declaration"
 
-functionOrMethod :: String -> FunctionOrMethodConstructor -> Parser Declaration
-functionOrMethod keyword constructor = addPosition $ do
-  reservedToken keyword
+function :: Parser Declaration
+function = addPosition $ do
   sig <- Parser.signature
   reservedOpToken "="
   body <- expression
-  return $ constructor sig body
-
-function :: Parser Declaration
-function = functionOrMethod "function" Function
-
-method :: Parser Declaration
-method = functionOrMethod "method" Method
+  return $ Function sig body
 
 extern :: Parser Declaration
 extern = addPosition $ do
@@ -44,11 +36,16 @@ extern = addPosition $ do
 
 signature :: Parser Signature
 signature = addPosition $ do
+  pure <- pureKeyword
   name <- identifierToken
   args <- parensToken $ commaSep typedVariable
   reservedToken ":"
   retType <- typeExpression
-  return $ Signature name args retType
+  return $ Signature pure name args retType
+
+pureKeyword :: Parser Bool
+pureKeyword = (reservedToken "function" >> return True)
+              <|> (reservedToken "method" >> return False)
 
 typedVariable :: Parser TypedVariable
 typedVariable = addPosition $ do

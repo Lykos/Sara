@@ -1,6 +1,5 @@
 module AstUtils (
-  FunctionOrMethodConstructor
-  , transformExpression
+  transformExpression
   , mapExpression
   , mapExpressions
   , mapDeclarations
@@ -20,8 +19,6 @@ import Control.Monad.State
 import Control.Monad.Identity
 import Data.Monoid
 import Text.Parsec.Pos
-
-type FunctionOrMethodConstructor = Signature -> Expression -> SourcePos -> Declaration
 
 transformExpression :: Monad m => (Expression -> m Expression) -> Expression -> m Expression
 transformExpression f exp = do
@@ -60,14 +57,13 @@ mapExpressions :: (Expression -> Expression) -> Program -> Program
 mapExpressions = transformToMap transformExpressions
 
 liftDeclaration :: Monad m => (Expression -> m Expression) -> Declaration -> m Declaration
-liftDeclaration f (Function sig exp pos) = liftFunctionOrMethod Function f sig exp pos
-liftDeclaration f (Method sig exp pos)   = liftFunctionOrMethod Method f sig exp pos
+liftDeclaration f (Function sig exp pos) = liftFunction f sig exp pos
 liftDeclaration _ d                      = return d
 
-liftFunctionOrMethod :: Monad m => FunctionOrMethodConstructor -> (Expression -> m Expression) -> Signature -> Expression -> SourcePos -> m Declaration
-liftFunctionOrMethod constructor f sig exp pos = do
+liftFunction :: Monad m => (Expression -> m Expression) -> Signature -> Expression -> SourcePos -> m Declaration
+liftFunction f sig exp pos = do
   exp' <- transformExpression f exp
-  return $ constructor sig exp' pos
+  return $ Function sig exp' pos
 
 transformDeclarations :: Monad m => (Declaration -> m Declaration) -> Program -> m Program
 transformDeclarations f p@(Program decls _) = do
@@ -82,9 +78,6 @@ transformSignatures f = transformDeclarations transformDeclaration
   where transformDeclaration (Function sig body pos) = do
           sig' <- f sig
           return $ Function sig' body pos
-        transformDeclaration (Method sig body pos) = do
-          sig' <- f sig
-          return $ Method sig' body pos
         transformDeclaration (Extern sig pos) = do
           sig' <- f sig
           return $ Extern sig' pos

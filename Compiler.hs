@@ -87,8 +87,8 @@ stage report = mapExceptT stage'
             Left err  -> return $ Left err
             Right res -> report res >> return (Right res)
 
-typeCheckStage :: (Program -> IO ()) -> Program -> ExceptOrIO Program
-typeCheckStage report program = stage report $ toError $ typeCheckWithMain program
+checkStage :: (Program -> IO ()) -> Program -> ExceptOrIO Program
+checkStage report program = stage report $ toError $ checkWithMain program
   where toError :: ErrorOr Program -> ExceptOrIO Program
         toError e = case runExcept e of
           (Left err)  -> throwError err
@@ -96,7 +96,7 @@ typeCheckStage report program = stage report $ toError $ typeCheckWithMain progr
 
 compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ExceptOrIO a
 compile' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
-                                                      >>= typeCheckStage (reportTyped reporter)
+                                                      >>= checkStage (reportTyped reporter)
                                                       >>= codegenStage moduleReporter mod
 
 compile :: Reporter -> String -> String -> ExceptOrIO ()

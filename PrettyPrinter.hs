@@ -37,20 +37,20 @@ vsep :: [Doc] -> Doc
 vsep = foldl ($+$) empty
 
 prettyDeclaration :: Declaration -> Doc
-prettyDeclaration (Function sig body _) = prettyFunctionOrMethod "function" sig body
-prettyDeclaration (Method sig body _)   = prettyFunctionOrMethod "method" sig body
+prettyDeclaration (Function sig body _) = prettyFunction sig body
 prettyDeclaration (Extern sig _)        = text "extern" <+> prettySignature sig
 
-prettyFunctionOrMethod :: String -> Signature -> Expression -> Doc
-prettyFunctionOrMethod keyword sig body = case body of
+prettyFunction :: Signature -> Expression -> Doc
+prettyFunction sig body = case body of
   Block{} -> sigDoc <+> prettyExpression body
   _       -> sigDoc $+$ nest indentation (prettyExpression body)
-  where sigDoc = text keyword <+> prettySignature sig <+> text "="
+  where sigDoc = prettySignature sig <+> text "="
 
 prettySignature :: Signature -> Doc
-prettySignature (Signature name args retType _) = prettyTyped sig retType
-  where sig = text name
+prettySignature (Signature pure name args retType _) = prettyTyped sig retType
+  where sig = text keyword <+> text name
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
+        keyword = if pure then "function" else "method"
 
 prettyTyped :: Doc -> Type -> Doc
 prettyTyped doc Unknown = doc

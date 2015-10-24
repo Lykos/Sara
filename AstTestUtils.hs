@@ -71,7 +71,7 @@ position :: Gen SourcePos
 position = return pos
 
 declaration :: Gen Declaration
-declaration = addPosition functionOrMethod
+declaration = addPosition function
 
 freeVariables :: Expression -> [TypedVariable]
 freeVariables = foldMapExpression freeVariable
@@ -80,7 +80,8 @@ freeVariables = foldMapExpression freeVariable
         freeVariable _                = []
 
 data FunctionType =
-  FunctionType { name :: Name
+  FunctionType { pure :: Bool
+               , name :: Name
                , argTypes :: [Type]
                , retType :: Type }
   deriving (Eq, Ord, Show)
@@ -89,22 +90,21 @@ calledFunctions :: Program -> [FunctionType]
 calledFunctions = foldMapExpressions calledFunctionsExpression
   where calledFunctionsExpression :: Expression -> [FunctionType]
         calledFunctionsExpression (Call name args typ _) =
-          [FunctionType name (map expType args) typ]
+          [FunctionType True name (map expType args) typ]
         calledFunctionsExpression _                      = []
 
-inferSignature :: Name -> Expression -> Signature
-inferSignature name exp = Signature name (freeVariables exp) (S.typ exp) pos
+inferSignature :: Bool -> Name -> Expression -> Signature
+inferSignature pure name exp = Signature pure name (freeVariables exp) (S.typ exp) pos
 
 type UnpositionedDeclaration = SourcePos -> Declaration
 
-functionOrMethod :: Gen UnpositionedDeclaration
-functionOrMethod = do
+function :: Gen UnpositionedDeclaration
+function = do
   pure <- elements [True, False]
-  let constructor = if pure then Function else Method
   t <- AstTestUtils.typ
   name <- identifier
   exp <- expression pure t
-  return $ constructor (inferSignature name exp) exp
+  return $ Function (inferSignature pure name exp) exp
 
 typ :: Gen Type
 typ = elements [T.Unit, T.Boolean, T.Integer, T.Double]
@@ -218,9 +218,9 @@ arbitraryTypedVariable t = do
   return $ TypedVariable name t pos
 
 arbitraryExtern :: FunctionType -> Gen Declaration
-arbitraryExtern (FunctionType name argTypes retType) = do
+arbitraryExtern (FunctionType pure name argTypes retType) = do
   args <- mapM arbitraryTypedVariable argTypes
-  return $ Extern (Signature name args retType pos) pos
+  return $ Extern (Signature pure name args retType pos) pos
 
 fixName :: [Name] -> Name -> Name
 fixName names name | name `elem` names = fixName names (name ++ "0")
@@ -297,7 +297,7 @@ shrinkTypedVariable :: TypedVariable -> [TypedVariable]
 shrinkTypedVariable (TypedVariable var typ p) = [TypedVariable v typ p | v <- shrinkIdentifier var]
 
 shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
-shrinkSignature free (Signature name args typ p) = [Signature name a typ p | a <- shrinkArgTypes args]
+shrinkSignature free (Signature pure name args typ p) = [Signature pure name a typ p | a <- shrinkArgTypes args]
   where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
         shrinkArgTypes []                     = []
         shrinkArgTypes (x:xs) | x `elem` free = [x : ys | ys <- shrinkArgTypes xs]
@@ -315,12 +315,11 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 headRemovals = if isRemovable x then Program xs pos : [Program (d : xs) pos | d <- shrinkSig x] else []
                 shrinkSig :: Declaration -> [Declaration]
                 shrinkSig (Function sig body p) = [Function s body p | s <- shrinkSignature (freeVariables body) sig]
-                shrinkSig (Method sig body p)   = [Method s body p | s <- shrinkSignature (freeVariables body) sig]
                 shrinkSig (Extern sig p)          = [Extern s p | s <- shrinkSignature [] sig]
                 isRemovable :: Declaration -> Bool
                 isRemovable d = isRemovableSignature $ signature d
                 isRemovableSignature :: Signature -> Bool
-                isRemovableSignature (Signature name args retType _) = FunctionType name (map varType args) retType `notElem` funcs
+                isRemovableSignature (Signature pure name args retType _) = FunctionType pure name (map varType args) retType `notElem` funcs
                 appendTail :: Declaration -> Program
                 appendTail y = Program (y:xs) pos
                 tailShrinks :: [Program]

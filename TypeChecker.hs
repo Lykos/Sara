@@ -1,6 +1,6 @@
 module TypeChecker (
-  typeCheck
-  , typeCheckWithMain) where
+  checkWithoutMain
+  , checkWithMain) where
 
 import Text.Parsec.Pos
 import Control.Monad
@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Data.Functor
 import Data.Either
 import Data.Monoid
+import Data.Maybe
 
 import qualified Data.Map.Strict as Map
 
@@ -21,22 +22,24 @@ import Operators
 import AstUtils
 import Errors
 
-data FunctionType =
-  FunctionType { name :: Name
+data FunctionKey =
+  FunctionKey { name :: Name
                , argTypes :: [Type] }
   deriving (Eq, Ord, Show)
 
-type FunctionMap = Map.Map FunctionType (Type, SourcePos)
-type VariableMap = Map.Map Name Type
+type FunctionMap = Map.Map FunctionKey Signature
+type VariableMap = Map.Map Name TypedVariable
 
-typeCheck :: Program -> ErrorOr Program
-typeCheck p@(Program decls _) = do
+checkProgram :: Program -> ErrorOr Program
+checkProgram p@(Program decls _) = do
   funcs <- functions p
-  decls' <- mapM (typeCheckDeclaration funcs) decls
+  decls' <- mapM (checkDeclaration funcs) decls
   return p{ program = decls' }
 
-typeCheckWithMain :: Program -> ErrorOr Program
-typeCheckWithMain p = checkMain p >> typeCheck p
+checkWithoutMain = checkProgram
+
+checkWithMain :: Program -> ErrorOr Program
+checkWithMain p = checkMain p >> checkProgram p
 
 checkMain :: Program -> ErrorOr ()
 checkMain program = unless (hasMain program) $ noMain
@@ -44,55 +47,47 @@ checkMain program = unless (hasMain program) $ noMain
 hasMain :: Program -> Bool
 hasMain = getAny . foldMapSignatures (\s -> Any $ S.name s == "main")
 
-typeCheckDeclaration :: FunctionMap -> Declaration -> ErrorOr Declaration
-typeCheckDeclaration funcs decl = do
-  typeCheckSignature (signature decl)
-  typeCheckDeclarationBody funcs decl
+checkDeclaration :: FunctionMap -> Declaration -> ErrorOr Declaration
+checkDeclaration funcs decl = do
+  checkSignature (signature decl)
+  checkDeclarationBody funcs decl
 
-typeCheckSignature :: Signature -> ErrorOr ()
-typeCheckSignature (Signature "main" [] T.Integer _) = return ()
-typeCheckSignature (Signature "main" [] t p)         = invalidMainRetType t p
-typeCheckSignature (Signature "main" a T.Integer p)  = invalidMainArgs a p
-typeCheckSignature _                                 = return ()
+checkSignature :: Signature -> ErrorOr ()
+checkSignature (Signature _ "main" [] T.Integer _) = return ()
+checkSignature (Signature _ "main" [] t p)         = invalidMainRetType t p
+checkSignature (Signature _ "main" a T.Integer p)  = invalidMainArgs a p
+checkSignature _                                   = return ()
 
-typeCheckDeclarationBody :: FunctionMap -> Declaration -> ErrorOr Declaration
-typeCheckDeclarationBody funcs (Function sig body pos) = typeCheckFunction funcs sig body pos
-typeCheckDeclarationBody funcs (Method sig body pos)   = typeCheckMethod funcs sig body pos
-typeCheckDeclarationBody funcs e@Extern{}              = return e
+checkDeclarationBody :: FunctionMap -> Declaration -> ErrorOr Declaration
+checkDeclarationBody funcs f@(Function sig exp pos) = do
+  exp' <- typeCheckFunctionBody funcs sig exp pos
+  exp'' <- checkPure funcs sig exp'
+  return f{ body = exp'' }
+checkDeclarationBody funcs e@Extern{}               = return e
 
-typeCheckFunction :: FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Declaration
-typeCheckFunction funcs sig exp pos = typeCheckFunctionOrMethod Function funcs sig exp pos >>= checkPureFunction
-  where checkPureFunction :: Declaration -> ErrorOr Declaration
-        checkPureFunction f = do
-          body' <- checkPure (signature f) (body f)
-          return f{ body = body' }
-
-checkPure :: Signature -> Expression -> ErrorOr Expression
-checkPure sig = transformExpression (checkPureExpression sig)
-  where checkPureExpression :: Signature -> Expression -> ErrorOr Expression
-        checkPureExpression sig e = if isPure e then return e else impureExpression sig (position e)
+checkPure :: FunctionMap -> Signature -> Expression -> ErrorOr Expression
+checkPure funcs sig = if S.pure sig then transformExpression checkPureExpression else return
+  where checkPureExpression :: Expression -> ErrorOr Expression
+        checkPureExpression e = if isPure e then return e else impureExpression sig (position e)
         isPure :: Expression -> Bool
-        isPure S.Unit{}                          = True
-        isPure S.Boolean{}                       = True
-        isPure S.Integer{}                       = True
-        isPure S.Double{}                        = True
-        isPure UnaryOperation{}                  = True
-        isPure BinaryOperation{ binOp = Assign } = False
-        isPure BinaryOperation{}                 = True
-        isPure Variable{}                        = True
-        isPure Call{}                            = True
-        isPure Conditional{}                     = True
-        isPure Block{}                           = True
-        isPure _                                 = False
+        isPure S.Unit{}                            = True
+        isPure S.Boolean{}                         = True
+        isPure S.Integer{}                         = True
+        isPure S.Double{}                          = True
+        isPure UnaryOperation{}                    = True
+        isPure BinaryOperation{ binOp = Assign }   = False
+        isPure BinaryOperation{}                   = True
+        isPure Variable{}                          = True
+        isPure Call{ expName = n, expArgs = args } = S.pure . fromJust $ FunctionKey n (map typ args) `Map.lookup` funcs
+        isPure Conditional{}                       = True
+        isPure Block{}                             = True
+        isPure _                                   = False
 
-typeCheckMethod :: FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Declaration
-typeCheckMethod = typeCheckFunctionOrMethod Method
-
-typeCheckFunctionOrMethod :: FunctionOrMethodConstructor -> FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Declaration
-typeCheckFunctionOrMethod constructor funcs sig body pos =
-  let var (TypedVariable varName varType _) = (varName, varType)
-      vars = Map.fromList $ map var (args sig)
-  in liftM2 (constructor sig) (typeCheckExpression funcs vars body) (return pos)
+typeCheckFunctionBody :: FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Expression
+typeCheckFunctionBody funcs sig body pos =
+  let keyedVar var@(TypedVariable varName _ _) = (varName, var)
+      vars = Map.fromList $ map keyedVar (args sig)
+  in typeCheckExpression funcs vars body
 
 functions :: Program -> ErrorOr FunctionMap
 functions = functionsFromDecls . program
@@ -105,16 +100,16 @@ addOneFunction decl map = do
   let sig = signature decl
   let pos = position decl
   map' <- map
-  case functionType sig `Map.lookup` map' of
-    Just (_, originalPos) -> redeclaredFunction sig originalPos pos
-    Nothing               -> return ()
+  case functionKey sig `Map.lookup` map' of
+    Just sig' -> redeclaredFunction sig (position sig') pos
+    Nothing   -> return ()
   return $ insertFunction sig map'
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
-insertFunction f = Map.insert (functionType f) (typ f, position f)
+insertFunction sig = Map.insert (functionKey sig) (sig)
 
-functionType :: Signature -> FunctionType
-functionType (Signature name args _ _) = FunctionType name $ map varType args
+functionKey :: Signature -> FunctionKey
+functionKey (Signature _ name args _ _)   = FunctionKey name $ map varType args
 
 typeCheckExpression :: FunctionMap -> VariableMap -> Expression -> ErrorOr Expression
 typeCheckExpression funcs vars checkedExp = case checkedExp of
@@ -172,11 +167,11 @@ typeCheckExpression funcs vars checkedExp = case checkedExp of
         varType :: Name -> ErrorOr Type
         varType name = case name `Map.lookup` vars of
           Nothing -> unknownVariable name pos
-          Just t  -> return t
+          Just t  -> return $ typ t
         funcType :: Name -> [Type] -> ErrorOr Type
-        funcType name argTypes = case FunctionType name argTypes `Map.lookup` funcs of
-          Nothing     -> unknownFunction name argTypes pos
-          Just (t, _) -> return t
+        funcType name argTypes = case FunctionKey name argTypes `Map.lookup` funcs of
+          Nothing  -> unknownFunction name argTypes pos
+          Just sig -> return $ typ sig
 
 unOpType :: UnaryOperator -> Type -> SourcePos -> ErrorOr Type
 unOpType op t pos = case TypedUnOp op t `Map.lookup` typedUnOps of

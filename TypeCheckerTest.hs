@@ -20,7 +20,7 @@ prop_addsTypes p = example `counterexample` liftBool (actual == expected)
                   ++ "\n\nInput:\n" ++ prettyRender input
         input = clearTypes p
         expected = return p
-        actual = typeCheck input
+        actual = checkWithoutMain input
         render :: ErrorOr Program -> String
         render e = case runExcept e of
           Left e  -> show e

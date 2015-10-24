@@ -161,7 +161,7 @@ typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
 
 define :: S.Signature -> [BasicBlock] -> LLVM ()
-define (S.Signature label args retty _) body = addDefn $
+define (S.Signature _ label args retty _) body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
   , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _) <- args], False)
@@ -231,11 +231,10 @@ load ptr = instr $ Load False ptr Nothing 0 []
 
 codegenDeclaration :: S.Declaration -> LLVM ()
 codegenDeclaration (S.Extern sig _)        = extern sig
-codegenDeclaration (S.Function sig body _) = codegenFunctionOrMethod sig body
-codegenDeclaration (S.Method sig body _)   = codegenFunctionOrMethod sig body
+codegenDeclaration (S.Function sig body _) = codegenFunction sig body
 
-codegenFunctionOrMethod :: S.Signature -> S.Expression -> LLVM ()
-codegenFunctionOrMethod signature body = define signature bls
+codegenFunction :: S.Signature -> S.Expression -> LLVM ()
+codegenFunction signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName

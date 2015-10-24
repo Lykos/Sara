@@ -19,14 +19,14 @@ class Typed t where
 data Declaration
   = Function { signature :: Signature, body :: Expression, declPos :: SourcePos }
   | Extern { signature :: Signature, declPos :: SourcePos }
-  | Method { signature :: Signature, body :: Expression, declPos :: SourcePos }
   deriving (Eq, Ord, Show)
 
 instance Positioned Declaration where
   position = declPos
 
 data Signature
-  = Signature { sigName :: Name
+  = Signature { pure :: Bool
+              , sigName :: Name
               , args :: [TypedVariable]
               , retType :: Type
               , sigPos :: SourcePos }
