@@ -26,7 +26,7 @@ data FunctionType =
                , argTypes :: [Type] }
   deriving (Eq, Ord, Show)
 
-type FunctionMap = Map.Map FunctionType Type
+type FunctionMap = Map.Map FunctionType (Type, SourcePos)
 type VariableMap = Map.Map Name Type
 
 typeCheck :: Program -> ErrorOr Program
@@ -39,7 +39,7 @@ typeCheckWithMain :: Program -> ErrorOr Program
 typeCheckWithMain p = checkMain p >> typeCheck p
 
 checkMain :: Program -> ErrorOr ()
-checkMain program = unless (hasMain program) $ noMain (position program)
+checkMain program = unless (hasMain program) $ noMain
 
 hasMain :: Program -> Bool
 hasMain = getAny . foldMapSignatures (\s -> Any $ S.name s == "main")
@@ -64,13 +64,13 @@ typeCheckFunction :: FunctionMap -> Signature -> Expression -> SourcePos -> Erro
 typeCheckFunction funcs sig exp pos = typeCheckFunctionOrMethod Function funcs sig exp pos >>= checkPureFunction
   where checkPureFunction :: Declaration -> ErrorOr Declaration
         checkPureFunction f = do
-          body' <- checkPure $ body f
+          body' <- checkPure (signature f) (body f)
           return f{ body = body' }
 
-checkPure :: Expression -> ErrorOr Expression
-checkPure = transformExpression checkPureExpression
-  where checkPureExpression :: Expression -> ErrorOr Expression
-        checkPureExpression e = if isPure e then return e else impureExpression e
+checkPure :: Signature -> Expression -> ErrorOr Expression
+checkPure sig = transformExpression (checkPureExpression sig)
+  where checkPureExpression :: Signature -> Expression -> ErrorOr Expression
+        checkPureExpression sig e = if isPure e then return e else impureExpression sig (position e)
         isPure :: Expression -> Bool
         isPure S.Unit{}                          = True
         isPure S.Boolean{}                       = True
@@ -105,84 +105,78 @@ addOneFunction decl map = do
   let sig = signature decl
   let pos = position decl
   map' <- map
-  when (functionType sig `Map.member` map') (ambiguousFunction sig pos)
+  case functionType sig `Map.lookup` map' of
+    Just (_, originalPos) -> redeclaredFunction sig originalPos pos
+    Nothing               -> return ()
   return $ insertFunction sig map'
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
-insertFunction f = Map.insert (functionType f) (typ f)
+insertFunction f = Map.insert (functionType f) (typ f, position f)
 
 functionType :: Signature -> FunctionType
 functionType (Signature name args _ _) = FunctionType name $ map varType args
 
 typeCheckExpression :: FunctionMap -> VariableMap -> Expression -> ErrorOr Expression
-typeCheckExpression funcs vars e = case e of
+typeCheckExpression funcs vars checkedExp = case checkedExp of
     S.Unit{} -> typed T.Unit
     S.Boolean{} -> typed T.Boolean
     S.Integer{} -> typed T.Integer
     S.Double{} -> typed T.Double
     UnaryOperation op subExp _ _ -> do
       typedSubExp <- typedSubExp subExp
-      subExpType <- astType typedSubExp
-      addType (UnaryOperation op typedSubExp) (unOpType op subExpType pos)
+      let subExpType = typ typedSubExp
+      t <- unOpType op subExpType pos
+      return $ UnaryOperation op typedSubExp t pos
     BinaryOperation op left right _ _ -> do
       typedLeft <- typedSubExp left
       typedRight <- typedSubExp right
-      leftType <- astType typedLeft
-      rightType <- astType typedRight
+      let leftType = typ typedLeft
+      let rightType = typ typedRight
       when (op == Assign) (checkAssignable typedLeft)
-      addType (BinaryOperation op typedLeft typedRight) (binOpType op leftType rightType pos)
-    Variable name _ _ -> addType (Variable name) (varType name)
+      t <- binOpType op leftType rightType pos
+      return $ BinaryOperation op typedLeft typedRight t pos
+    Variable name _ _ -> varType name >>= typed
     Call name args _ _-> do
       typedArgs <- mapM typedSubExp args
-      argTypes <- mapM astType typedArgs
-      addType (Call name typedArgs) (funcType name argTypes)
-    Conditional cond ifExp elseExp _ _ -> do
+      let argTypes = map typ typedArgs
+      t <- funcType name argTypes
+      return $ Call name typedArgs t pos
+    Conditional cond thenExp elseExp _ _ -> do
       typedCond <- typedSubExp cond
-      typedIfExp <- typedSubExp ifExp
+      typedThenExp <- typedSubExp thenExp
       typedElseExp <- typedSubExp elseExp
-      condType <- astType typedCond
-      ifType <- astType typedIfExp
-      elseType <- astType typedElseExp
-      case (condType, ifType, elseType) of
-        (T.Boolean, ifType, elseType) | ifType == elseType    -> addType (Conditional typedCond typedIfExp typedElseExp) (return ifType)
-                                      | otherwise             -> mismatchingCondTypes typedIfExp typedElseExp pos
-        (condType, _, _)                                          -> invalidCondType cond
+      let condType = typ typedCond
+      let thenType = typ typedThenExp
+      let elseType = typ typedElseExp
+      case (condType, thenType, elseType) of
+        (T.Boolean, thenType, elseType) | thenType == elseType -> return $ Conditional typedCond typedThenExp typedElseExp thenType pos
+                                        | otherwise            -> mismatchingCondTypes (typ typedThenExp) (typ typedElseExp) pos
+        (condType, _, _)                                       -> invalidCondType (typ cond) pos
     Block stmts exp _ _ -> do
       typedStmts <- mapM typedSubExp stmts
       typedExp <- typedSubExp exp
-      addType (Block typedStmts typedExp) (astType typedExp)
+      return $ Block typedStmts typedExp (typ typedExp) pos
     While cond body _ _ -> do
       typedCond <- typedSubExp cond
       typedBody <- typedSubExp body
-      condType <- astType typedCond
-      when (condType /= T.Boolean) (invalidCondType cond)
-      addType (While typedCond typedBody) (return T.Unit)
-  where pos = position e
+      let condType = typ typedCond
+      when (condType /= T.Boolean) (invalidCondType (typ cond) pos)
+      return $ While typedCond typedBody T.Unit pos
+  where pos = position checkedExp
         typedSubExp = typeCheckExpression funcs vars
         checkAssignable :: Expression -> ErrorOr ()
         checkAssignable (Variable _ _ _) = return ()
-        checkAssignable a                = notAssignable a
-        checkNotUnknown :: Type -> SourcePos -> ErrorOr Type
-        checkNotUnknown Unknown pos = unknownType pos
-        checkNotUnknown t _         = return t
-        astType :: Expression -> ErrorOr Type
-        astType exp = checkNotUnknown (expType exp) (expPos exp)
+        checkAssignable a                = notAssignable pos
         typed :: Type -> ErrorOr Expression
-        typed t = do
-          s <- checkNotUnknown t pos
-          return e { expType = s }
-        addType :: (Type -> SourcePos -> Expression) -> ErrorOr Type -> ErrorOr Expression
-        addType exp t = do
-          t' <- t
-          return $ exp t' pos
+        typed t = return checkedExp{ expType = t }
         varType :: Name -> ErrorOr Type
         varType name = case name `Map.lookup` vars of
           Nothing -> unknownVariable name pos
           Just t  -> return t
         funcType :: Name -> [Type] -> ErrorOr Type
         funcType name argTypes = case FunctionType name argTypes `Map.lookup` funcs of
-          Nothing -> unknownFunction name argTypes pos
-          Just t  -> return t
+          Nothing     -> unknownFunction name argTypes pos
+          Just (t, _) -> return t
 
 unOpType :: UnaryOperator -> Type -> SourcePos -> ErrorOr Type
 unOpType op t pos = case TypedUnOp op t `Map.lookup` typedUnOps of
@@ -193,53 +187,3 @@ binOpType :: BinaryOperator -> Type -> Type -> SourcePos -> ErrorOr Type
 binOpType op s t pos = case TypedBinOp op s t `Map.lookup` typedBinOps of
   Nothing -> unknownBinOp op s t pos
   Just t  -> return t
-
-unknownUnOp :: UnaryOperator -> Type -> SourcePos -> ErrorOr a
-unknownUnOp op t =
-  typeError $ "Unknown operator " ++ show op ++ " for expression of type " ++ show t ++ "."
-
-unknownBinOp :: BinaryOperator -> Type -> Type -> SourcePos -> ErrorOr a
-unknownBinOp op s t =
-  typeError $ "Unknown operator " ++ show op ++ " for expressions of type " ++ show s ++ " and " ++ show t ++ "."
-
-unknownVariable :: Name -> SourcePos -> ErrorOr a
-unknownVariable name =
-  typeError $ "Unknown variable " ++ name ++ "."
-
-unknownFunction :: Name -> [Type] -> SourcePos -> ErrorOr a
-unknownFunction name argTypes =
-  typeError $ "Unknown function " ++ name ++ " for argument types " ++ show argTypes ++ "."
-
-invalidCondType :: Expression -> ErrorOr a
-invalidCondType cond =
-  typeError ("Conditions of conditionals have to have type " ++ show T.Boolean ++ ", found " ++ show cond ++ ".") (expPos cond)
-
-mismatchingCondTypes :: Expression -> Expression -> SourcePos -> ErrorOr a
-mismatchingCondTypes ifExp elseExp =
-  typeError $ "If and Else branch of conditionals have to have the same types, found " ++ show ifExp ++ " and " ++ show elseExp ++ "."
-
-ambiguousFunction :: Signature -> SourcePos -> ErrorOr a
-ambiguousFunction sig =
-  typeError $ "Function " ++ show sig ++ " is ambiguous. A function with the same name and the same argument types already exists."
-
-unknownType :: SourcePos -> ErrorOr a
-unknownType = typeError "Unknown type."
-
-invalidMainArgs :: [TypedVariable] -> SourcePos -> ErrorOr a
-invalidMainArgs args =
-  typeError $ "Main function should not have arguments. Found " ++ show args ++ " instead."
-
-invalidMainRetType :: Type -> SourcePos -> ErrorOr a
-invalidMainRetType t =
-  typeError $ "Main function should have return type Integer. Found " ++ show t ++ " instead."
-
-noMain :: SourcePos -> ErrorOr a
-noMain = typeError "The program has no main funtion."
-
-impureExpression :: Expression -> ErrorOr a
-impureExpression e =
-  typeError ("Functions can only contain pure expressions, but expression " ++ show e ++ " is not pure.") (S.position e)
-
-notAssignable :: Expression -> ErrorOr a
-notAssignable a =
-  typeError ("Not a valid assignment target " ++ show a ++ ".") (S.position a)

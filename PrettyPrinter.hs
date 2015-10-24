@@ -1,5 +1,6 @@
 module PrettyPrinter (
-  pretty
+  Pretty
+  , pretty
   , prettyRender) where
 
 import Text.PrettyPrint
@@ -8,11 +9,26 @@ import AstUtils
 import Operators
 import Syntax
 
-prettyRender :: Program -> String
+prettyRender :: Pretty a => a -> String
 prettyRender = render . pretty
 
-pretty :: Program -> Doc
-pretty = vsep . punctuate semi . map prettyDeclaration . program
+class Pretty a where
+  pretty :: a -> Doc
+
+instance Pretty Program where
+  pretty = prettyProgram
+
+instance Pretty Signature where
+  pretty = prettySignature
+
+instance Pretty TypedVariable where
+  pretty = prettyTypedVariable
+
+instance Pretty Type where
+  pretty = prettyType
+
+prettyProgram :: Program -> Doc
+prettyProgram = vsep . punctuate semi . map prettyDeclaration . program
 
 indentation :: Int
 indentation = 2
