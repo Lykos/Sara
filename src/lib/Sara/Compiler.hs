@@ -10,6 +10,7 @@ import Sara.Syntax
 import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
+import Sara.Verifier
 
 import Control.Monad.Except
 import Control.Monad.Identity
