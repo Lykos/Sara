@@ -1,0 +1,6 @@
+// errors PositionedError ImpureExpressionError f 4:35
+method main(): Integer = 8;
+
+function f(a: Integer): Integer = m() + a;
+
+method m(): Integer = 5

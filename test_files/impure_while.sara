@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError f 5:3
+method main(): Integer = 8;
+
+function f(a: Integer): Integer = {
+  while true {};
+  a
+}
