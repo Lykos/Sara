@@ -1,0 +1,2 @@
+// errors PositionedError TypeMismatchError Condition Boolean Integer 2:29
+method main(): Integer = if 4 then 5 else 6

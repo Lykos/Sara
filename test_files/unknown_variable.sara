@@ -1,0 +1,2 @@
+// errors PositionedError UnknownElementError UnknownVariable a 2:26
+method main(): Integer = a

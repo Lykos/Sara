@@ -1,0 +1,2 @@
+// errors PositionedError MainArgsError Double Integer 2:1
+method main(a: Double, b: Integer): Integer = 8

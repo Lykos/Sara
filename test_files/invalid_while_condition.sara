@@ -1,0 +1,2 @@
+// errors PositionedError TypeMismatchError Condition Boolean Integer 2:32
+method main(): Integer = while 4 {}

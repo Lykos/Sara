@@ -1,0 +1,2 @@
+// errors PositionedError UnknownElementError UnknownFunction a 2:26
+method main(): Integer = a()

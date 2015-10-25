@@ -1,0 +1,2 @@
+// errors NoMain
+function f(): Integer = {}

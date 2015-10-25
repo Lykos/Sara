@@ -1,0 +1,2 @@
+// errors PositionedError TypeMismatchError MainReturnType Integer Boolean 2:1
+method main(): Boolean = true
