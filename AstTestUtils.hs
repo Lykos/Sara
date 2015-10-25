@@ -1,7 +1,11 @@
 module AstTestUtils (
   clearTypes
+  , identifier
+  , pos
   , clearPositions
   , testfile
+  , inferSignature
+  , completeProgram
   ) where
 
 import Syntax
@@ -229,6 +233,10 @@ fixName names name | name `elem` names = fixName names (name ++ "0")
 arbitraryProgram :: Gen Program
 arbitraryProgram = do
   decls <- listOf arbitrary
+  completeProgram decls
+
+completeProgram :: [Declaration] -> Gen Program
+completeProgram decls = do
   let prog = Program decls pos
   let prog' = fixFunctionNameClashes prog
   let free = calledFunctions prog'
@@ -327,9 +335,17 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 appendHead :: Program -> Program
                 appendHead (Program ys p) = Program (x : ys) p
 
+newtype PureExpression
+  = PureExpression { run :: Expression }
+  deriving (Eq, Ord, Show)
+
 instance Arbitrary Expression where
   arbitrary = AstTestUtils.typ >>= expression False
   shrink = shrinkExpression
+
+instance Arbitrary PureExpression where
+  arbitrary = AstTestUtils.typ >>= liftM PureExpression . expression True
+  shrink = map PureExpression . shrinkExpression . run
 
 instance Arbitrary Declaration where
   arbitrary = declaration
@@ -339,6 +355,9 @@ instance Arbitrary Declaration where
 instance Arbitrary Program where
   arbitrary = arbitraryProgram
   shrink = shrinkProgram
+
+instance Arbitrary Type where
+  arbitrary = AstTestUtils.typ
 
 clearPositions :: Program -> Program
 clearPositions p = clearPosProgram p{ progPos = pos }
