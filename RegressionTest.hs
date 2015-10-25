@@ -19,9 +19,9 @@ import Test.QuickCheck.All
 import qualified Test.QuickCheck.Monadic as M
 import Test.QuickCheck.Property
 
-isExpected :: Either Error Int64 -> Int64 -> Bool
-isExpected (Left _)  _ = False
-isExpected (Right n) m = n == m
+isExpected :: Either Error Int64 -> Expectation -> Bool
+isExpected (Left e) (Errors f)   = e == f
+isExpected (Right n) (Returns m) = n == m
 
 checkRight :: String -> String -> IO (Bool, String)
 checkRight fname input = do

@@ -71,3 +71,12 @@ binarySymbol Assign          = "="
 
 binaryOperators :: [BinaryOperator]
 binaryOperators = enumFrom minBound
+
+class Operator o where
+  symbol :: o -> String
+
+instance Operator BinaryOperator where
+  symbol = binarySymbol
+
+instance Operator UnaryOperator where
+  symbol = unarySymbol

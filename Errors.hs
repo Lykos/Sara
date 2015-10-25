@@ -58,7 +58,6 @@ data UnknownElement
   | UnknownBinOp BinaryOperator Type Type
   | UnknownVariable Name
   | UnknownFunction Name [Type]
-  | UnknownFunctionOrMethod Name [Type]
   deriving (Eq, Show)
 
 data MismatchType
@@ -69,7 +68,6 @@ data MismatchType
 
 data RedeclaredElement
   = RedeclaredFunction Signature
-  | RedeclaredMethod Signature
   deriving (Eq, Show)
 
 renderError :: T.Text -> Error -> T.Text
@@ -106,15 +104,13 @@ renderTypes :: [Type] -> T.Text
 renderTypes = commaSep . (map pretty)
 
 renderRedeclaredElement :: RedeclaredElement -> T.Text
-renderRedeclaredElement (RedeclaredFunction sig) = T.append (T.pack "function ") (pretty sig)
-renderRedeclaredElement (RedeclaredMethod sig)   = T.append (T.pack "method ") (pretty sig)
+renderRedeclaredElement (RedeclaredFunction sig) = pretty sig
 
 renderUnknownElement :: UnknownElement -> T.Text
 renderUnknownElement (UnknownUnOp name typ)                 = renderUnknownTyped "unary operator" (unarySymbol name) [typ]
 renderUnknownElement (UnknownBinOp name leftType rightType) = renderUnknownTyped "binary operator" (binarySymbol name) [leftType, rightType]
 renderUnknownElement (UnknownVariable name)                 = renderUnknown "variable" name
-renderUnknownElement (UnknownFunction name types)           = renderUnknownTyped "function" name types
-renderUnknownElement (UnknownFunctionOrMethod name types)   = renderUnknownTyped "function or method" name types
+renderUnknownElement (UnknownFunction name types)           = renderUnknownTyped "function or method" name types
 
 renderUnknown :: String -> String -> T.Text
 renderUnknown elementType name = spaceSep $ map T.pack [elementType, name]

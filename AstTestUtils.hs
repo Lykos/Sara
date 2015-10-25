@@ -6,6 +6,7 @@ module AstTestUtils (
   , testfile
   , inferSignature
   , completeProgram
+  , PureExpression(..)
   ) where
 
 import Syntax
@@ -336,7 +337,7 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 appendHead (Program ys p) = Program (x : ys) p
 
 newtype PureExpression
-  = PureExpression { run :: Expression }
+  = PureExpression { runPureExpression :: Expression }
   deriving (Eq, Ord, Show)
 
 instance Arbitrary Expression where
@@ -345,7 +346,7 @@ instance Arbitrary Expression where
 
 instance Arbitrary PureExpression where
   arbitrary = AstTestUtils.typ >>= liftM PureExpression . expression True
-  shrink = map PureExpression . shrinkExpression . run
+  shrink = map PureExpression . shrinkExpression . runPureExpression
 
 instance Arbitrary Declaration where
   arbitrary = declaration

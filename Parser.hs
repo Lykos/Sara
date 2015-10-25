@@ -1,4 +1,8 @@
-module Parser (Parser.parse) where
+module Parser (
+  Parser.parse
+  , typeExpression
+  , typedVariable
+  , Parser.signature) where
 
 import Text.Parsec
 import Text.Parsec.String (Parser)
