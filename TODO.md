@@ -1,16 +1,12 @@
 - Commandline Options
 - Z3
 - Extern
-- Pure calls
-- More structured errors/better error messages
 - Proper building
 - Write README
 - Object Oriented
 - Long arithmetic
 - Function pointers
-- Regression tests for errors
 - Generated tests for errors
-- Refactor TypeChecker to use transform
 - Directory structure.
 - Add pureness to the signature.
-
+- Optional semicolons
