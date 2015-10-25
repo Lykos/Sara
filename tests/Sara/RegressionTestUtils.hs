@@ -1,11 +1,11 @@
-module RegressionTestUtils (
+module Sara.RegressionTestUtils (
   Expectation(..)
   , parseExpectation) where
 
-import Operators
-import qualified Errors as E
-import qualified Parser as P
-import qualified Lexer as L
+import Sara.Operators
+import qualified Sara.Errors as E
+import qualified Sara.Parser as P
+import qualified Sara.Lexer as L
 
 import Data.Int
 import Text.Parsec
@@ -16,6 +16,8 @@ import qualified Text.Parsec.Token as Token
 
 -- The input files can have returns directives in a comment at the top to indicate what the file is supposed to return.
 -- // returns 5
+-- They can also have error directives to indicate errors.
+-- // errors NoMain
 
 data Expectation
   = Returns Int64

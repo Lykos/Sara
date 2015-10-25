@@ -1,10 +1,10 @@
 module Main where
 
-import Compiler
-import PrettyPrinter
-import Syntax
-import Reporter
-import Errors (showError)
+import Sara.Compiler
+import Sara.PrettyPrinter
+import Sara.Syntax
+import Sara.Reporter
+import Sara.Errors (showError)
 
 import Control.Monad.Except
 import System.IO

@@ -1,13 +1,14 @@
-module PrettyPrinter (
+module Sara.PrettyPrinter (
   Pretty
   , pretty
   , prettyRender) where
 
 import Text.PrettyPrint
-import Types
-import AstUtils
-import Operators
-import Syntax
+import Sara.Types
+import Sara.AstUtils
+import Sara.Operators
+import Sara.Syntax
+import Sara.Syntax as S
 
 prettyRender :: Pretty a => a -> String
 prettyRender = render . pretty
@@ -85,11 +86,11 @@ prettyUntypedTerm exp = case exp of
   _                -> prettyBinaryTerm exp
 
 prettyUntypedExpression :: Expression -> Doc
-prettyUntypedExpression Syntax.Unit{}                        = text "()"
-prettyUntypedExpression (Syntax.Boolean True _ _)            = text "true"
-prettyUntypedExpression (Syntax.Boolean False _ _)           = text "false"
-prettyUntypedExpression (Syntax.Integer n _ _)               = integer n
-prettyUntypedExpression (Syntax.Double d _ _)                = double d
+prettyUntypedExpression S.Unit{}                             = text "()"
+prettyUntypedExpression (S.Boolean True _ _)                 = text "true"
+prettyUntypedExpression (S.Boolean False _ _)                = text "false"
+prettyUntypedExpression (S.Integer n _ _)                    = integer n
+prettyUntypedExpression (S.Double d _ _)                     = double d
 prettyUntypedExpression (UnaryOperation op exp _ _)          = (text . unarySymbol $ op)
                                                                <> prettyTerm exp
 prettyUntypedExpression (BinaryOperation op left right _ _)  = prettyBinaryTerm left
@@ -104,7 +105,7 @@ prettyUntypedExpression (Conditional cond ifExp elseExp _ _) = text "if"
                                                                <+> prettyExpression ifExp
                                                                <+> text "else"
                                                                <+> prettyExpression elseExp
-prettyUntypedExpression (Block [] (Syntax.Unit _ _) _ _)     = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
+prettyUntypedExpression (Block [] (S.Unit _ _) _ _)          = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
 prettyUntypedExpression (Block stmts exp _ _)                = inBlock (vsep . punctuate semi . map prettyExpression $ stmts ++ [exp])
 prettyUntypedExpression (While cond body _ _)                = text "while" <+> prettyExpression cond <+> inBlock (prettyExpression body)
 

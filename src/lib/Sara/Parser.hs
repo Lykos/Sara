@@ -1,6 +1,6 @@
-module Parser (
-  Parser.parse
-  , Parser.signature
+module Sara.Parser (
+  Sara.Parser.parse
+  , Sara.Parser.signature
   , typeExpression) where
 
 import Text.Parsec
@@ -11,13 +11,14 @@ import Control.Monad.Except
 import qualified Text.Parsec.Expr as Expr
 import qualified Text.Parsec.Token as Token
 
-import qualified Syntax as S
-import Lexer
-import Syntax
-import Types
-import Operators
-import AstUtils
-import Errors
+import qualified Sara.Syntax as S
+import qualified Sara.Types as T
+import Sara.Lexer
+import Sara.Syntax
+import Sara.Types
+import Sara.Operators
+import Sara.AstUtils
+import Sara.Errors
 
 declaration :: Parser Declaration
 declaration = try function
@@ -26,7 +27,7 @@ declaration = try function
 
 function :: Parser Declaration
 function = addPosition $ do
-  sig <- Parser.signature
+  sig <- Sara.Parser.signature
   reservedOpToken "="
   body <- expression
   return $ Function sig body
@@ -34,7 +35,7 @@ function = addPosition $ do
 extern :: Parser Declaration
 extern = addPosition $ do
   reservedToken "extern"
-  sig <- Parser.signature
+  sig <- Sara.Parser.signature
   return $ Extern sig
 
 signature :: Parser Signature
@@ -65,16 +66,16 @@ typeExpression = try unitType
                  <?> "type"
 
 unitType :: Parser Type
-unitType = reservedToken "Unit" >> return Types.Unit
+unitType = reservedToken "Unit" >> return T.Unit
 
 booleanType :: Parser Type
-booleanType = reservedToken "Boolean" >> return Types.Boolean
+booleanType = reservedToken "Boolean" >> return T.Boolean
 
 integerType :: Parser Type
-integerType = reservedToken "Integer" >> return Types.Integer
+integerType = reservedToken "Integer" >> return T.Integer
 
 doubleType :: Parser Type
-doubleType = reservedToken "Double" >> return Types.Double
+doubleType = reservedToken "Double" >> return T.Double
 
 expression :: Parser Expression
 expression = Expr.buildExpressionParser operatorTable term

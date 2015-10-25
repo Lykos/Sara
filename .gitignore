@@ -2,5 +2,6 @@
 *.o
 *.dyn_o
 *.dyn_hi
-Main
-Test
+dist
+.cabal-sandbox
+cabal.sandbox.config

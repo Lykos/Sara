@@ -1,4 +1,4 @@
-module AstTestUtils (
+module Sara.AstTestUtils (
   clearTypes
   , identifier
   , pos
@@ -9,14 +9,14 @@ module AstTestUtils (
   , PureExpression(..)
   ) where
 
-import Syntax
-import Types
-import Lexer
-import Operators
-import AstUtils
-import Reporter
-import qualified Syntax as S
-import qualified Types as T
+import Sara.Syntax
+import Sara.Types
+import Sara.Lexer
+import Sara.Operators
+import Sara.AstUtils
+import Sara.Reporter
+import qualified Sara.Syntax as S
+import qualified Sara.Types as T
 
 import Control.Monad.State
 import qualified Data.Set as Set
@@ -106,7 +106,7 @@ type UnpositionedDeclaration = SourcePos -> Declaration
 function :: Gen UnpositionedDeclaration
 function = do
   pure <- elements [True, False]
-  t <- AstTestUtils.typ
+  t <- Sara.AstTestUtils.typ
   name <- identifier
   exp <- expression pure t
   return $ Function (inferSignature pure name exp) exp
@@ -135,12 +135,12 @@ variable t = do
 call :: Bool -> Type -> Gen UntypedExpression
 call pure t = do
   name <- identifier
-  args <- scale pred $ AstTestUtils.args pure
+  args <- scale pred $ Sara.AstTestUtils.args pure
   return $ Call name args
 
 args :: Bool -> Gen [Expression]
 args pure = scale intRoot $ listOf arg
-  where arg = AstTestUtils.typ >>= expression pure
+  where arg = Sara.AstTestUtils.typ >>= expression pure
 
 intRoot :: Int -> Int
 intRoot = round . sqrt . fromIntegral
@@ -180,11 +180,11 @@ conditional pure t = liftM3 Conditional (subtree T.Boolean) (subtree t) (subtree
 
 block :: Bool -> Type -> Gen UntypedExpression
 block pure t = liftM2 Block stmts exp
-  where stmts = scale intRoot $ listOf $ AstTestUtils.typ >>= expression pure
+  where stmts = scale intRoot $ listOf $ Sara.AstTestUtils.typ >>= expression pure
         exp = scale intRoot $ expression pure t
 
 while :: Gen UntypedExpression
-while = liftM2 While (subtree T.Boolean) (AstTestUtils.typ >>= subtree)
+while = liftM2 While (subtree T.Boolean) (Sara.AstTestUtils.typ >>= subtree)
   where subtree t = scale (`div` 2) $ expression False t
 
 leafExpression :: Type -> Gen UntypedExpression
@@ -341,11 +341,11 @@ newtype PureExpression
   deriving (Eq, Ord, Show)
 
 instance Arbitrary Expression where
-  arbitrary = AstTestUtils.typ >>= expression False
+  arbitrary = Sara.AstTestUtils.typ >>= expression False
   shrink = shrinkExpression
 
 instance Arbitrary PureExpression where
-  arbitrary = AstTestUtils.typ >>= liftM PureExpression . expression True
+  arbitrary = Sara.AstTestUtils.typ >>= liftM PureExpression . expression True
   shrink = map PureExpression . shrinkExpression . runPureExpression
 
 instance Arbitrary Declaration where
@@ -358,7 +358,7 @@ instance Arbitrary Program where
   shrink = shrinkProgram
 
 instance Arbitrary Type where
-  arbitrary = AstTestUtils.typ
+  arbitrary = Sara.AstTestUtils.typ
 
 clearPositions :: Program -> Program
 clearPositions p = clearPosProgram p{ progPos = pos }

@@ -1,16 +1,15 @@
-{-# LANGUAGE TemplateHaskell #-}
+module Sara.ParserTest (parserGroup) where
 
-module ParserTest (parserCheck) where
-
-import Errors
-import AstTestUtils
-import Parser
-import PrettyPrinter
-import Syntax
+import Sara.Errors
+import Sara.AstTestUtils
+import qualified Sara.Parser as P
+import Sara.PrettyPrinter
+import Sara.Syntax
 
 import Control.Monad.Except
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
-import Test.QuickCheck.All
 import Test.QuickCheck.Property
 import Text.Parsec
 import Data.Bifunctor
@@ -27,12 +26,10 @@ prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
         input :: String
         input = prettyRender untyped
         actual :: ErrorOr Program
-        actual = clearPositions' $ Parser.parse testfile input
+        actual = clearPositions' $ P.parse testfile input
         clearPositions' :: ErrorOr Program -> ErrorOr Program
         clearPositions' e = case runExcept e of
           Left err -> throwError err
           Right p  -> return $ clearPositions p
 
-return []
-
-parserCheck = $quickCheckAll
+parserGroup = testGroup "Parser Tests" [ testProperty "pretty is the inverse of parse" prop_prettyInv ]

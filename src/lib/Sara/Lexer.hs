@@ -1,7 +1,7 @@
-module Lexer where
+module Sara.Lexer where
 
-import Operators
-import Types
+import Sara.Operators
+import Sara.Types
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)

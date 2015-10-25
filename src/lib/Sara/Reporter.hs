@@ -1,7 +1,7 @@
-module Reporter where
+module Sara.Reporter where
 
-import Syntax
-import Errors
+import Sara.Syntax
+import Sara.Errors
 import Data.Int
 import LLVM.General.Module
 

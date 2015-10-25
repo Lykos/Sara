@@ -1,4 +1,4 @@
-module TypeChecker (
+module Sara.TypeChecker (
   checkWithoutMain
   , checkWithMain) where
 
@@ -14,13 +14,13 @@ import Data.Maybe
 
 import qualified Data.Map.Strict as Map
 
-import qualified Types as T
-import qualified Syntax as S
-import Syntax
-import Types
-import Operators
-import AstUtils
-import Errors
+import qualified Sara.Types as T
+import qualified Sara.Syntax as S
+import Sara.Syntax
+import Sara.Types
+import Sara.Operators
+import Sara.AstUtils
+import Sara.Errors
 
 data FunctionKey =
   FunctionKey { name :: Name

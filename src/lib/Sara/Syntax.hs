@@ -1,9 +1,9 @@
-module Syntax where
+module Sara.Syntax where
 
 import Data.Bifunctor
-import Types
+import Sara.Types
 import Text.Parsec.Pos
-import Operators
+import Sara.Operators
 
 type Name = String
 

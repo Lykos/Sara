@@ -1,6 +1,6 @@
-module TestUtils where
+module Sara.TestUtils where
 
-import Reporter
+import Sara.Reporter
 
 nopReporter :: Reporter
 nopReporter = Reporter nop nop nop

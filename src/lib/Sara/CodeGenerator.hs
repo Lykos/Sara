@@ -1,12 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module CodeGenerator (
+module Sara.CodeGenerator (
   codegen
   , withModule) where
 
-import qualified Syntax as S
-import qualified Types as T
-import Operators
+import qualified Sara.Syntax as S
+import qualified Sara.Types as T
+import Sara.Operators
 
 import Data.Word
 import Data.String

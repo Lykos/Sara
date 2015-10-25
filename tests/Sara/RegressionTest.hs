@@ -1,21 +1,20 @@
-{-# LANGUAGE TemplateHaskell #-}
+module Sara.RegressionTest (regressionGroup) where
 
-module RegressionTest (regressionCheck) where
-
-import Errors
-import PrettyPrinter
-import AstTestUtils
-import Compiler
-import Syntax
-import TestUtils
-import RegressionTestUtils
+import Sara.Errors
+import Sara.PrettyPrinter
+import Sara.AstTestUtils
+import Sara.Compiler
+import Sara.Syntax
+import Sara.TestUtils
+import Sara.RegressionTestUtils
 
 import System.FilePath
 import System.Directory
 import Data.Int
 import Control.Monad.Except
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
-import Test.QuickCheck.All
 import qualified Test.QuickCheck.Monadic as M
 import Test.QuickCheck.Property
 
@@ -49,7 +48,7 @@ extension :: String
 extension = ".sara"
 
 testDir :: String
-testDir = "test_files"
+testDir = "tests/test_files"
 
 getInputs :: IO [(String, String)]
 getInputs = do
@@ -61,6 +60,4 @@ getInputs = do
   inputs <- mapM readFile' saraFiles
   return $ saraFiles `zip` inputs
 
-return []
-
-regressionCheck = $quickCheckAll
+regressionGroup = testGroup "Regression Tests" [ testProperty "regression tests work" prop_regressionsWork ]

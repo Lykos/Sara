@@ -1,4 +1,4 @@
-module AstUtils (
+module Sara.AstUtils (
   transformExpression
   , mapExpression
   , mapExpressions
@@ -12,8 +12,8 @@ module AstUtils (
   , foldMapSignatures) where
 
 
-import Operators
-import Syntax
+import Sara.Operators
+import Sara.Syntax
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Identity

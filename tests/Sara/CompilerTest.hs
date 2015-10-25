@@ -1,18 +1,17 @@
-{-# LANGUAGE TemplateHaskell #-}
+module Sara.CompilerTest (compilerGroup) where
 
-module CompilerTest (compilerCheck) where
-
-import Errors
-import PrettyPrinter
-import AstTestUtils
-import Compiler
-import Syntax
-import TestUtils
+import Sara.Errors
+import Sara.PrettyPrinter
+import Sara.AstTestUtils
+import Sara.Compiler
+import Sara.Syntax
+import Sara.TestUtils
 
 import Data.Either
 import Control.Monad.Except
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
-import Test.QuickCheck.All
 import qualified Test.QuickCheck.Monadic as M
 import Test.QuickCheck.Property
 
@@ -28,6 +27,4 @@ prop_generatesCode p = checkRight input
           let example = "\nInput:\n" ++ input ++ "\n\nActual:\n" ++ show actual
           return $ example `counterexample` liftBool (isRight actual)
 
-return []
-
-compilerCheck = $quickCheckAll
+compilerGroup = testGroup "Compiler Tests" [ testProperty "generates code" prop_generatesCode ]

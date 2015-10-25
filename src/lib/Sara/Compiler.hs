@@ -1,15 +1,15 @@
-module Compiler (
+module Sara.Compiler (
   Reporter(..)
   , run
   , compile) where
 
-import Parser
-import TypeChecker
-import PrettyPrinter
-import Syntax
-import CodeGenerator
-import Errors
-import Reporter
+import Sara.Parser
+import Sara.TypeChecker
+import Sara.PrettyPrinter
+import Sara.Syntax
+import Sara.CodeGenerator
+import Sara.Errors
+import Sara.Reporter
 
 import Control.Monad.Except
 import Control.Monad.Identity

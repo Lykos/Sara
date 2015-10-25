@@ -1,4 +1,4 @@
-module Operators where
+module Sara.Operators where
 
 data UnaryOperator
   = UnaryPlus

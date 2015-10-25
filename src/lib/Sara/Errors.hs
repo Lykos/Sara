@@ -1,4 +1,4 @@
-module Errors(
+module Sara.Errors(
   ErrorOr
   , Error(..)
   , PositionedError(..)
@@ -21,10 +21,11 @@ module Errors(
   , invalidCondType
   , notAssignable) where
 
-import Types
-import Syntax
-import Operators
-import qualified PrettyPrinter as P
+import Sara.Types
+import qualified Sara.Types as Ty
+import Sara.Syntax
+import Sara.Operators
+import qualified Sara.PrettyPrinter as P
 
 import qualified Data.Text as T
 import Text.Parsec.Pos
@@ -33,9 +34,6 @@ import Data.List
 import qualified Text.Parsec.Error as E
 
 type ErrorOr a = Except Error a
-
-instance Eq E.ParseError where
-  l == r = show l == show r
 
 data Error
   = ParseError E.ParseError
@@ -184,7 +182,7 @@ unknownFunction :: Name -> [Type] -> SourcePos -> ErrorOr a
 unknownFunction name argTypes = unknownElementError $ UnknownFunction name argTypes
 
 invalidCondType :: Type -> SourcePos -> ErrorOr a
-invalidCondType t = positionedError $ TypeMismatchError Condition Types.Boolean t
+invalidCondType t = positionedError $ TypeMismatchError Condition Ty.Boolean t
 
 invalidRetType :: Type -> Type -> SourcePos -> ErrorOr a
 invalidRetType s t = positionedError $ TypeMismatchError ReturnType s t
@@ -199,7 +197,7 @@ invalidMainArgs :: [Type] -> SourcePos -> ErrorOr a
 invalidMainArgs = positionedError . MainArgsError
 
 invalidMainRetType :: Type -> SourcePos -> ErrorOr a
-invalidMainRetType t = positionedError $ TypeMismatchError MainReturnType Types.Integer t
+invalidMainRetType t = positionedError $ TypeMismatchError MainReturnType Ty.Integer t
 
 noMain :: ErrorOr a
 noMain = throwError NoMain

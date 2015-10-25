@@ -1,17 +1,16 @@
-{-# LANGUAGE TemplateHaskell #-}
+module Sara.TypeCheckerTest (typeCheckerGroup) where
 
-module TypeCheckerTest (typeCheckerCheck) where
-
-import Types
-import Errors
-import PrettyPrinter
-import AstTestUtils
-import TypeChecker
-import Syntax
+import Sara.Types
+import Sara.Errors
+import Sara.PrettyPrinter
+import Sara.AstTestUtils
+import Sara.TypeChecker
+import Sara.Syntax
 
 import Control.Monad.Except
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
-import Test.QuickCheck.All
 import Test.QuickCheck.Gen
 import Test.QuickCheck.Property
 import Test.QuickCheck.Random
@@ -60,6 +59,6 @@ prop_complainsPureReturnTypeMismatch typ exp = complainsReturnTypeMismatch True 
 prop_complainsImpureReturnTypeMismatch :: Type -> Expression -> Property
 prop_complainsImpureReturnTypeMismatch = complainsReturnTypeMismatch False
 
-return []
-
-typeCheckerCheck = $quickCheckAll
+typeCheckerGroup = testGroup "TypeChecker Tests" [ testProperty "adds types" prop_addsTypes
+                                                 , testProperty "complains about pure return type mismatches" prop_complainsPureReturnTypeMismatch
+                                                 , testProperty "complains about imppure return type mismatches" prop_complainsImpureReturnTypeMismatch ]
