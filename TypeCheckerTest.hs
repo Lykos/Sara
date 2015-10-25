@@ -43,7 +43,7 @@ finish p = unGen p qcGen seed
         qcGen = mkQCGen seed
 
 complainsReturnTypeMismatch :: Bool -> Type -> Expression -> Property
-complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shrink input (\i -> check i (expected i) (actual i))
+complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shrink input (\i -> check i expected (actual i))
   where expTyp = typ exp
         complete = do
           name <- identifier
@@ -51,8 +51,8 @@ complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shr
           let wrongSig = inferredSig{ retType = retTyp }
           completeProgram [Function wrongSig exp pos]
         input = clearTypes $ finish complete
-        actual input = checkWithoutMain input
-        expected input = invalidRetType retTyp expTyp pos
+        actual = checkWithoutMain
+        expected = invalidRetType retTyp expTyp pos
 
 prop_complainsPureReturnTypeMismatch :: Type -> PureExpression -> Property
 prop_complainsPureReturnTypeMismatch typ exp = complainsReturnTypeMismatch True typ $ runPureExpression exp

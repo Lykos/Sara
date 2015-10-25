@@ -135,7 +135,7 @@ variable t = do
 call :: Bool -> Type -> Gen UntypedExpression
 call pure t = do
   name <- identifier
-  args <- (scale pred $ AstTestUtils.args pure)
+  args <- scale pred $ AstTestUtils.args pure
   return $ Call name args
 
 args :: Bool -> Gen [Expression]
@@ -180,7 +180,7 @@ conditional pure t = liftM3 Conditional (subtree T.Boolean) (subtree t) (subtree
 
 block :: Bool -> Type -> Gen UntypedExpression
 block pure t = liftM2 Block stmts exp
-  where stmts = scale intRoot $ listOf $ (AstTestUtils.typ >>= expression pure)
+  where stmts = scale intRoot $ listOf $ AstTestUtils.typ >>= expression pure
         exp = scale intRoot $ expression pure t
 
 while :: Gen UntypedExpression
@@ -192,7 +192,7 @@ leafExpression t = oneof [constant t, variable t]
   where constant T.Boolean = boolean
         constant T.Integer = integer
         constant T.Double  = double
-        constant T.Unit    = return $ S.Unit
+        constant T.Unit    = return S.Unit
 
 innerExpression :: Bool -> Type -> Gen UntypedExpression
 innerExpression pure t =

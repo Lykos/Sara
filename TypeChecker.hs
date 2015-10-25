@@ -42,7 +42,7 @@ checkWithMain :: Program -> ErrorOr Program
 checkWithMain p = checkMain p >> checkProgram p
 
 checkMain :: Program -> ErrorOr ()
-checkMain program = unless (hasMain program) $ noMain
+checkMain program = unless (hasMain program) noMain
 
 hasMain :: Program -> Bool
 hasMain = getAny . foldMapSignatures (\s -> Any $ S.name s == "main")
@@ -111,7 +111,7 @@ addOneFunction funcs decl = do
   return $ insertFunction sig funcs'
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
-insertFunction sig = Map.insert (functionKey sig) (sig)
+insertFunction sig = Map.insert (functionKey sig) sig
 
 functionKey :: Signature -> FunctionKey
 functionKey (Signature _ name args _ _)   = FunctionKey name $ map varType args
@@ -165,8 +165,8 @@ typeCheckExpression funcs vars checkedExp = case checkedExp of
   where pos = position checkedExp
         typedSubExp = typeCheckExpression funcs vars
         checkAssignable :: Expression -> ErrorOr ()
-        checkAssignable (Variable _ _ _) = return ()
-        checkAssignable a                = notAssignable (position a)
+        checkAssignable Variable{} = return ()
+        checkAssignable a          = notAssignable (position a)
         typed :: Type -> ErrorOr Expression
         typed t = return checkedExp{ expType = t }
         varType :: Name -> ErrorOr Type

@@ -103,7 +103,7 @@ renderPositionedError AssignmentError                                        =
   T.pack "Invalid assignment target"
 
 renderTypes :: [Type] -> T.Text
-renderTypes = commaSep . (map pretty)
+renderTypes = commaSep . map pretty
 
 renderRedeclaredElement :: RedeclaredElement -> T.Text
 renderRedeclaredElement (RedeclaredFunction name argTypes) = T.concat [T.pack "function or method ", T.pack name, parens $ renderTypes argTypes]
@@ -119,10 +119,10 @@ renderUnknown elementType name = spaceSep $ map T.pack [elementType, name]
 
 renderUnknownTyped :: String -> String -> [Type] -> T.Text
 renderUnknownTyped elementType name []    = renderUnknown elementType name
-renderUnknownTyped elementType name types = T.concat $ [renderUnknown elementType name, T.pack " for types ", renderTypes types]
+renderUnknownTyped elementType name types = T.concat [renderUnknown elementType name, T.pack " for types ", renderTypes types]
 
 extractLine :: Int -> T.Text -> T.Text
-extractLine n input = (T.lines input) !! (n - 1)
+extractLine n input = T.lines input !! (n - 1)
 
 renderPosition :: SourcePos -> T.Text
 renderPosition pos = colonSep $ posComponents pos
