@@ -180,8 +180,9 @@ redeclaredElement = redeclaredFunction <?> "redeclared element expectation"
 redeclaredFunction :: Parser E.RedeclaredElement
 redeclaredFunction = do
   reservedToken "RedeclaredFunction"
-  sig <- P.signature
-  return $ E.RedeclaredFunction sig
+  name <- L.identifierToken
+  t <- many P.typeExpression
+  return $ E.RedeclaredFunction name t
 
 assignmentError :: Parser E.PositionedError
 assignmentError = do

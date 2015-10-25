@@ -97,17 +97,18 @@ functions :: Program -> ErrorOr FunctionMap
 functions = functionsFromDecls . program
 
 functionsFromDecls :: [Declaration] -> ErrorOr FunctionMap
-functionsFromDecls = foldr addOneFunction (return Map.empty)
+functionsFromDecls = foldl addOneFunction (return Map.empty)
 
-addOneFunction :: Declaration -> ErrorOr FunctionMap -> ErrorOr FunctionMap
-addOneFunction decl map = do
+addOneFunction :: ErrorOr FunctionMap -> Declaration -> ErrorOr FunctionMap
+addOneFunction funcs decl = do
   let sig = signature decl
   let pos = position decl
-  map' <- map
-  case functionKey sig `Map.lookup` map' of
-    Just sig' -> redeclaredFunction sig (position sig') pos
+  funcs' <- funcs
+  let f@(FunctionKey name argTypes) = functionKey sig
+  case f `Map.lookup` funcs' of
+    Just sig' -> redeclaredFunction name argTypes (position sig') pos
     Nothing   -> return ()
-  return $ insertFunction sig map'
+  return $ insertFunction sig funcs'
 
 insertFunction :: Signature -> FunctionMap -> FunctionMap
 insertFunction sig = Map.insert (functionKey sig) (sig)
@@ -165,7 +166,7 @@ typeCheckExpression funcs vars checkedExp = case checkedExp of
         typedSubExp = typeCheckExpression funcs vars
         checkAssignable :: Expression -> ErrorOr ()
         checkAssignable (Variable _ _ _) = return ()
-        checkAssignable a                = notAssignable pos
+        checkAssignable a                = notAssignable (position a)
         typed :: Type -> ErrorOr Expression
         typed t = return checkedExp{ expType = t }
         varType :: Name -> ErrorOr Type

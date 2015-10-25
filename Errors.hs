@@ -68,7 +68,7 @@ data MismatchType
   deriving (Eq, Show)
 
 data RedeclaredElement
-  = RedeclaredFunction Signature
+  = RedeclaredFunction Name [Type]
   deriving (Eq, Show)
 
 showError :: String -> Error -> String
@@ -106,7 +106,7 @@ renderTypes :: [Type] -> T.Text
 renderTypes = commaSep . (map pretty)
 
 renderRedeclaredElement :: RedeclaredElement -> T.Text
-renderRedeclaredElement (RedeclaredFunction sig) = pretty sig
+renderRedeclaredElement (RedeclaredFunction name argTypes) = T.concat [T.pack "function or method ", T.pack name, parens $ renderTypes argTypes]
 
 renderUnknownElement :: UnknownElement -> T.Text
 renderUnknownElement (UnknownUnOp name typ)                 = renderUnknownTyped "unary operator" (unarySymbol name) [typ]
@@ -153,6 +153,9 @@ colonSep = T.intercalate colon
 spaceSep :: [T.Text] -> T.Text
 spaceSep = T.intercalate space
 
+parens :: T.Text -> T.Text
+parens text = T.concat [T.singleton '(', text, T.singleton ')']
+
 dot :: T.Text
 dot = T.singleton '.'
 
@@ -189,8 +192,8 @@ invalidRetType s t = positionedError $ TypeMismatchError ReturnType s t
 mismatchingCondTypes :: Type -> Type -> SourcePos -> ErrorOr a
 mismatchingCondTypes s t = positionedError $ DifferentTypesError [s, t]
 
-redeclaredFunction :: Signature -> SourcePos -> SourcePos -> ErrorOr a
-redeclaredFunction sig pos =  positionedError $ RedeclaredElementError (RedeclaredFunction sig) pos
+redeclaredFunction :: Name -> [Type] -> SourcePos -> SourcePos -> ErrorOr a
+redeclaredFunction name argTypes pos =  positionedError $ RedeclaredElementError (RedeclaredFunction name argTypes) pos
 
 invalidMainArgs :: [Type] -> SourcePos -> ErrorOr a
 invalidMainArgs = positionedError . MainArgsError
