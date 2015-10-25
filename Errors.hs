@@ -5,6 +5,7 @@ module Errors(
   , UnknownElement(..)
   , MismatchType(..)
   , RedeclaredElement(..)
+  , showError
   , parseError
   , unknownVariable
   , unknownFunction
@@ -47,8 +48,8 @@ data PositionedError
   = UnknownElementError UnknownElement
   | TypeMismatchError MismatchType Type Type  -- Used if we have one expected, one actual type.
   | DifferentTypesError [Type]                -- Used if we have several actual types that should be equal but are different.
-  | MainArgsError [TypedVariable]
-  | ImpureExpressionError Signature
+  | MainArgsError [Type]
+  | ImpureExpressionError Name
   | RedeclaredElementError RedeclaredElement SourcePos
   | AssignmentError
   deriving (Eq, Show)
@@ -70,6 +71,9 @@ data RedeclaredElement
   = RedeclaredFunction Signature
   deriving (Eq, Show)
 
+showError :: String -> Error -> String
+showError input err = T.unpack $ renderError (T.pack input) err
+
 renderError :: T.Text -> Error -> T.Text
 renderError _ (ParseError err)              = T.pack $ show err
 renderError _ NoMain                        = T.pack "No main method found."
@@ -78,8 +82,9 @@ renderError input (PositionedError err pos) = T.unlines $ renderMessageLine err 
   where renderMessageLine :: PositionedError -> SourcePos -> T.Text
         renderMessageLine err pos = T.concat [renderPosition pos, colon, space, renderPositionedError err, dot]
         renderExampleLines :: T.Text -> SourcePos -> [T.Text]
-        renderExampleLines input pos = [extractLine (sourceLine pos) input, T.append (posSpaces pos) indicator]
-        posSpaces pos = spaces $ sourceColumn pos
+        renderExampleLines input pos = [extractLine (sourceLine pos) input, indicatorLine]
+        posSpaces pos = spaces $ sourceColumn pos - 1
+        indicatorLine = T.append (posSpaces pos) indicator
 
 renderPositionedError :: PositionedError -> T.Text
 renderPositionedError (UnknownElementError elem)                             =
@@ -89,16 +94,13 @@ renderPositionedError (TypeMismatchError _ expectedType actualType)          =
 renderPositionedError (DifferentTypesError types)                            =
   T.append (T.pack "Expected equal types but got ") (renderTypes types)
 renderPositionedError (MainArgsError args)                                   =
-  T.append (T.pack "Expected no arguments for main function but got ") (renderArgs args)
-renderPositionedError (ImpureExpressionError sig)                            =
-  T.append (T.pack "Got impure expression in pure function ") (pretty sig)
+  T.append (T.pack "Expected no arguments for main function but got ") (renderTypes args)
+renderPositionedError (ImpureExpressionError name)                           =
+  T.append (T.pack "Got impure expression in pure function ") (T.pack name)
 renderPositionedError (RedeclaredElementError redeclaredElement originalPos) =
   T.concat [T.pack "Redeclared ", renderRedeclaredElement redeclaredElement, T.pack " which was already declared at ", renderPosition originalPos]
 renderPositionedError AssignmentError                                        =
   T.pack "Invalid assignment target"
-
-renderArgs :: [TypedVariable] -> T.Text
-renderArgs = commaSep . (map pretty)
 
 renderTypes :: [Type] -> T.Text
 renderTypes = commaSep . (map pretty)
@@ -131,7 +133,7 @@ indicator :: T.Text
 indicator = T.singleton '^'
 
 colon :: T.Text
-colon = T.singleton ' '
+colon = T.singleton ':'
 
 spaces :: Int -> T.Text
 spaces = flip T.replicate space
@@ -176,7 +178,7 @@ unknownVariable :: Name -> SourcePos -> ErrorOr a
 unknownVariable name = unknownElementError $ UnknownVariable name
 
 unknownFunction :: Name -> [Type] -> SourcePos -> ErrorOr a
-unknownFunction name argTypes = unknownElementError $ UnknownVariable name
+unknownFunction name argTypes = unknownElementError $ UnknownFunction name argTypes
 
 invalidCondType :: Type -> SourcePos -> ErrorOr a
 invalidCondType t = positionedError $ TypeMismatchError Condition Types.Boolean t
@@ -190,7 +192,7 @@ mismatchingCondTypes s t = positionedError $ DifferentTypesError [s, t]
 redeclaredFunction :: Signature -> SourcePos -> SourcePos -> ErrorOr a
 redeclaredFunction sig pos =  positionedError $ RedeclaredElementError (RedeclaredFunction sig) pos
 
-invalidMainArgs :: [TypedVariable] -> SourcePos -> ErrorOr a
+invalidMainArgs :: [Type] -> SourcePos -> ErrorOr a
 invalidMainArgs = positionedError . MainArgsError
 
 invalidMainRetType :: Type -> SourcePos -> ErrorOr a
@@ -199,8 +201,8 @@ invalidMainRetType t = positionedError $ TypeMismatchError MainReturnType Types.
 noMain :: ErrorOr a
 noMain = throwError NoMain
 
-impureExpression :: Signature -> SourcePos -> ErrorOr a
-impureExpression sig = positionedError $ ImpureExpressionError sig
+impureExpression :: Name -> SourcePos -> ErrorOr a
+impureExpression name = positionedError $ ImpureExpressionError name
 
 notAssignable :: SourcePos -> ErrorOr a
 notAssignable = positionedError AssignmentError

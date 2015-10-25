@@ -55,7 +55,7 @@ checkDeclaration funcs decl = do
 checkSignature :: Signature -> ErrorOr ()
 checkSignature (Signature _ "main" [] T.Integer _) = return ()
 checkSignature (Signature _ "main" [] t p)         = invalidMainRetType t p
-checkSignature (Signature _ "main" a T.Integer p)  = invalidMainArgs a p
+checkSignature (Signature _ "main" a T.Integer p)  = invalidMainArgs (map typ a) p
 checkSignature _                                   = return ()
 
 checkDeclarationBody :: FunctionMap -> Declaration -> ErrorOr Declaration
@@ -68,7 +68,7 @@ checkDeclarationBody funcs e@Extern{}               = return e
 checkPure :: FunctionMap -> Signature -> Expression -> ErrorOr Expression
 checkPure funcs sig = if S.pure sig then transformExpression checkPureExpression else return
   where checkPureExpression :: Expression -> ErrorOr Expression
-        checkPureExpression e = if isPure e then return e else impureExpression sig (position e)
+        checkPureExpression e = if isPure e then return e else impureExpression (S.name sig) (position e)
         isPure :: Expression -> Bool
         isPure S.Unit{}                            = True
         isPure S.Boolean{}                         = True
@@ -149,8 +149,8 @@ typeCheckExpression funcs vars checkedExp = case checkedExp of
       let elseType = typ typedElseExp
       case (condType, thenType, elseType) of
         (T.Boolean, thenType, elseType) | thenType == elseType -> return $ Conditional typedCond typedThenExp typedElseExp thenType pos
-                                        | otherwise            -> mismatchingCondTypes (typ typedThenExp) (typ typedElseExp) pos
-        (condType, _, _)                                       -> invalidCondType (typ cond) pos
+                                        | otherwise            -> mismatchingCondTypes thenType elseType pos
+        (condType, _, _)                                       -> invalidCondType condType (position cond)
     Block stmts exp _ _ -> do
       typedStmts <- mapM typedSubExp stmts
       typedExp <- typedSubExp exp
@@ -159,7 +159,7 @@ typeCheckExpression funcs vars checkedExp = case checkedExp of
       typedCond <- typedSubExp cond
       typedBody <- typedSubExp body
       let condType = typ typedCond
-      when (condType /= T.Boolean) (invalidCondType (typ cond) pos)
+      when (condType /= T.Boolean) (invalidCondType condType (position cond))
       return $ While typedCond typedBody T.Unit pos
   where pos = position checkedExp
         typedSubExp = typeCheckExpression funcs vars

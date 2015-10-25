@@ -4,6 +4,7 @@ import Compiler
 import PrettyPrinter
 import Syntax
 import Reporter
+import Errors (showError)
 
 import Control.Monad.Except
 import System.IO
@@ -15,13 +16,13 @@ process :: String -> String -> IO ()
 process fname input = do
   result <- runExceptT $ run reporter fname input
   case result of
-    (Left err)  -> print err
+    (Left err)  -> putStrLn $ showError input err
     (Right res) -> report "Result" $ show res
 
 reporter :: Reporter
 reporter = Reporter reportParsed reportTyped reportModule
-           where reportParsed      = reportProgram "Parsed Program"
-                 reportTyped       = reportProgram "Typed Program"
+           where reportParsed _    = return () -- reportProgram "Parsed Program"
+                 reportTyped _     = return () -- reportProgram "Typed Program"
                  reportModule mod  = moduleLLVMAssembly mod >>= report "LLVM Code"
                  reportProgram :: String -> Program -> IO ()
                  reportProgram name program = report name $ prettyRender program

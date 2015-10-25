@@ -25,11 +25,12 @@ data Expectation
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
 
-reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownUnOp"
-                , "UnknownBinOp", "UnknownVariable", "UnknownFunction", "TypeMismatchError"
-                , "Condition", "ReturnType", "MainReturnType", "DifferentTypesError"
-                , "MainArgsError", "ImpureExpressionError", "RedeclaredElementError"
-                , "RedeclaredFunction", "AssignmentError", "NoMain" ] ++ L.reservedNames
+reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementError"
+                , "UnknownUnOp", "UnknownBinOp", "UnknownVariable", "UnknownFunction"
+                , "TypeMismatchError", "Condition", "ReturnType", "MainReturnType"
+                , "DifferentTypesError", "MainArgsError", "ImpureExpressionError"
+                , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
+                , "NoMain" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -63,7 +64,7 @@ returnExpectation = do
 errorExpectation :: Parser Expectation
 errorExpectation = do
   reservedToken "errors"
-  err <- try noMain <|> try positionedError <?> "error expectation"
+  err <- try noMain <|> positionedError <?> "error expectation"
   return $ Errors err
 
 positionedError :: Parser E.Error
@@ -81,10 +82,10 @@ unpositionedError = try unknownElementError
                   <|> try impureExpressionError
                   <|> try redeclaredElementError
                   <|> assignmentError
-                  <?> "positioned error expectation"
 
 unknownElementError :: Parser E.PositionedError
 unknownElementError = do
+  reservedToken "UnknownElementError"
   el <- unknownElement
   return $ E.UnknownElementError el
 
@@ -93,7 +94,6 @@ unknownElement = try unknownUnOp
                  <|> try unknownBinOp
                  <|> try unknownVariable
                  <|> unknownFunction
-                 <?> "unknown element expectation"
 
 unknownUnOp :: Parser E.UnknownElement
 unknownUnOp = do
@@ -158,14 +158,14 @@ differentTypesError = do
 mainArgsError :: Parser E.PositionedError
 mainArgsError = do
   reservedToken "MainArgsError"
-  t <- many P.typedVariable
+  t <- many P.typeExpression
   return $ E.MainArgsError t
 
 impureExpressionError :: Parser E.PositionedError
 impureExpressionError = do
   reservedToken "ImpureExpressionError"
-  sig <- P.signature
-  return $ E.ImpureExpressionError sig
+  name <- L.identifierToken
+  return $ E.ImpureExpressionError name
 
 redeclaredElementError :: Parser E.PositionedError
 redeclaredElementError = do

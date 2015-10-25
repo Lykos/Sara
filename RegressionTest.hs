@@ -22,6 +22,7 @@ import Test.QuickCheck.Property
 isExpected :: Either Error Int64 -> Expectation -> Bool
 isExpected (Left e) (Errors f)   = e == f
 isExpected (Right n) (Returns m) = n == m
+isExpected _ _                   = False
 
 checkRight :: String -> String -> IO (Bool, String)
 checkRight fname input = do

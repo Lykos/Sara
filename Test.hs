@@ -8,7 +8,7 @@ import RegressionTest
 
 main = do
   regressionCheck
-  typeCheckerCheck
-  parserCheck
-  compilerCheck
-  syntaxCheck
+--  typeCheckerCheck
+--  parserCheck
+--  compilerCheck
+--  syntaxCheck
