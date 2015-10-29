@@ -1,6 +1,5 @@
 module Sara.CompilerTest (compilerGroup) where
 
-import Sara.Errors
 import Sara.PrettyPrinter
 import Sara.AstTestUtils
 import Sara.Compiler
@@ -27,4 +26,5 @@ prop_generatesCode p = checkRight input
           let example = "\nInput:\n" ++ input ++ "\n\nActual:\n" ++ show actual
           return $ example `counterexample` liftBool (isRight actual)
 
+compilerGroup :: Test
 compilerGroup = testGroup "Compiler Tests" [ testProperty "generates code" prop_generatesCode ]

@@ -2,7 +2,6 @@ module Sara.Verifier (z3Expression) where
 
 import Sara.Operators
 import Sara.Syntax
-import Sara.AstUtils
 import Data.Maybe
 import Z3.Monad
 

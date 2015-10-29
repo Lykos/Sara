@@ -14,14 +14,10 @@ import Sara.Types
 import Sara.Lexer
 import Sara.Operators
 import Sara.AstUtils
-import Sara.Reporter
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 
 import Control.Monad.State
-import qualified Data.Set as Set
-import Data.Bifunctor
-import Control.Monad
 import Test.QuickCheck
 import Text.Parsec.Pos
 import qualified Data.Map.Strict as Map
@@ -53,9 +49,6 @@ isNotReserved a = a /= "main" && a `notElem` reservedNames
 shrinkIdentifier :: Name -> [Name]
 shrinkIdentifier = filter (\a -> not (null a) && isNotReserved a) . shrink
 
-shrinkWithIdentifier :: Arbitrary a => Name -> a -> [(Name, a)]
-shrinkWithIdentifier i b = [(i', b) | i' <- shrinkIdentifier i] ++ [(i, b') | b' <- shrink b]
-
 testfile :: String
 testfile = "<testfile>"
 
@@ -72,9 +65,6 @@ addTypePos t gen = do
   gen' <- gen
   return $ gen' t pos
 
-position :: Gen SourcePos
-position = return pos
-
 declaration :: Gen Declaration
 declaration = addPosition function
 
@@ -85,10 +75,7 @@ freeVariables = foldMapExpression freeVariable
         freeVariable _                = []
 
 data FunctionType =
-  FunctionType { pure :: Bool
-               , name :: Name
-               , argTypes :: [Type]
-               , retType :: Type }
+  FunctionType Bool Name [Type] Type
   deriving (Eq, Ord, Show)
 
 calledFunctions :: Program -> [FunctionType]
@@ -133,7 +120,7 @@ variable t = do
   return $ Variable $ id ++ show t
 
 call :: Bool -> Type -> Gen UntypedExpression
-call pure t = do
+call pure _ = do
   name <- identifier
   args <- scale pred $ Sara.AstTestUtils.args pure
   return $ Call name args
@@ -193,6 +180,7 @@ leafExpression t = oneof [constant t, variable t]
         constant T.Integer = integer
         constant T.Double  = double
         constant T.Unit    = return S.Unit
+        constant t         = error $ "Constants for type " ++ show t ++ " not supported."
 
 innerExpression :: Bool -> Type -> Gen UntypedExpression
 innerExpression pure t =
@@ -216,6 +204,7 @@ expression pure t = addTypePos t $ sized expression'
   where expression' :: Int -> Gen UntypedExpression
         expression' 0         = leafExpression t
         expression' n | n > 0 = innerExpression pure t
+        expression' s         = error $ "expression' for negative size " ++ show s ++ " not supported."
 
 arbitraryTypedVariable :: Type -> Gen TypedVariable
 arbitraryTypedVariable t = do
@@ -269,6 +258,8 @@ trivial t = trivial' t t
   where trivial' T.Boolean = S.Boolean False
         trivial' T.Integer = S.Integer 0
         trivial' T.Double  = S.Double 0.0
+        trivial' T.Unit    = S.Unit
+        trivial' t         = error $ "Type " ++ show t ++ " not supported."
 
 instance Arbitrary UnaryOperator where
   arbitrary = elements unaryOperators
@@ -280,7 +271,8 @@ shrinkExpression :: Expression -> [Expression]
 shrinkExpression b@S.Boolean{ boolValue = val }       = [b{ boolValue = v } | v <- shrink val]
 shrinkExpression n@S.Integer{ intValue = val }        = [n{ intValue = v } | v <- shrink val]
 shrinkExpression d@S.Double{ doubleValue = val }      = [d{ doubleValue = v } | v <- shrink val]
-shrinkExpression (Variable v t p)                     = [trivial t p]
+shrinkExpression S.Unit{}                             = []
+shrinkExpression (Variable _ t p)                     = [trivial t p]
 shrinkExpression (BinaryOperation op left right t p)  = childrenWithType t [left, right]
                                                         ++ [BinaryOperation op l r t p | (l, r) <- shrink (left, right)]
 shrinkExpression (UnaryOperation op exp t p)          = childrenWithType t [exp]
@@ -317,7 +309,7 @@ shrinkProgram :: Program -> [Program]
 shrinkProgram p = shrinkProgram' (calledFunctions p) p
   where pos = S.position p
         shrinkProgram' :: [FunctionType] -> Program -> [Program]
-        shrinkProgram' funcs (Program [] _)     = []
+        shrinkProgram' _ (Program [] _)         = []
         shrinkProgram' funcs (Program (x:xs) _) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
           where headShrinks = shrink x
                 headRemovals :: [Program]

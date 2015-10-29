@@ -1,15 +1,11 @@
 module Main where
 
 import Sara.Compiler
-import Sara.PrettyPrinter
-import Sara.Syntax
 import Sara.Reporter
 import Sara.Errors (showError)
 
 import Control.Monad.Except
-import System.IO
 import System.Environment
-import System.Console.Haskeline
 import LLVM.General.Module
 
 process :: String -> String -> IO ()
@@ -23,9 +19,9 @@ reporter :: Reporter
 reporter = Reporter reportParsed reportTyped reportModule
            where reportParsed _    = return () -- reportProgram "Parsed Program"
                  reportTyped _     = return () -- reportProgram "Typed Program"
-                 reportModule mod  = moduleLLVMAssembly mod >>= report "LLVM Code"
-                 reportProgram :: String -> Program -> IO ()
-                 reportProgram name program = report name $ prettyRender program
+                 reportModule modl = moduleLLVMAssembly modl >>= report "LLVM Code"
+                 -- reportProgram :: String -> Program -> IO ()
+                 -- reportProgram name program = report name $ prettyRender program
 
 report :: String -> String -> IO ()
 report name program = putStrLn $ "\n" ++ name ++ ":\n" ++ program
@@ -37,5 +33,5 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    []   -> getContents >>= process "<stdin>"
-    args -> mapM_ processFile args
+    [] -> getContents >>= process "<stdin>"
+    xs -> mapM_ processFile xs

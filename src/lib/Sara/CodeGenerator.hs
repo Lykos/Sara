@@ -9,15 +9,11 @@ import qualified Sara.Types as T
 import Sara.Operators
 
 import Data.Word
-import Data.String
 import Data.List
 import Data.Function
 import qualified Data.Map.Strict as Map
 
 import Control.Monad.State
-import Control.Monad.Except
-import Control.Applicative
-import System.IO
 
 import LLVM.General.AST
 import LLVM.General.AST.Global
@@ -89,9 +85,6 @@ emptyCodegen = CodegenState (Name entryBlockName) Map.empty [] 1 0 Map.empty
 execCodegen :: Codegen a -> CodegenState
 execCodegen m = execState (runCodegen m) emptyCodegen
 
-entry :: Codegen Name
-entry = gets currentBlock
-
 addBlock :: String -> Codegen Name
 addBlock bname = do
   bls <- gets blocks
@@ -145,9 +138,6 @@ uniqueName nm ns = case Map.lookup nm ns of
             Nothing -> (nm ++ show ix, Map.insert nm (ix + 1) ns)
             Just ix -> uniqueName' nm ns (ix + 1)
 
-instance IsString Name where
-  fromString = Name . fromString
-
 booleanBits :: Word32
 booleanBits = 1
 
@@ -159,6 +149,7 @@ typ T.Unit    = IntegerType booleanBits
 typ T.Boolean = IntegerType booleanBits
 typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
+typ T.Unknown = error "Found type unknown"
 
 define :: S.Signature -> [BasicBlock] -> LLVM ()
 define (S.Signature _ label args retty _) body = addDefn $
@@ -288,8 +279,8 @@ doubleZero :: Codegen Operand
 doubleZero = double 0
 
 unaryInstruction :: T.TypedUnOp -> Operand -> Type -> Codegen Operand
-unaryInstruction (T.TypedUnOp UnaryPlus T.Integer) a t  = return a
-unaryInstruction (T.TypedUnOp UnaryPlus T.Double) a t   = return a
+unaryInstruction (T.TypedUnOp UnaryPlus T.Integer) a _  = return a
+unaryInstruction (T.TypedUnOp UnaryPlus T.Double) a _   = return a
 unaryInstruction (T.TypedUnOp UnaryMinus T.Integer) a t = do
   zero <- integerZero
   (instr $ Sub False False zero a []) t
@@ -302,6 +293,7 @@ unaryInstruction (T.TypedUnOp BitwiseNot T.Integer) a t = do
 unaryInstruction (T.TypedUnOp LogicalNot T.Boolean) a t = do
   true <- true1
   (instr $ Xor true a []) t
+unaryInstruction unop _ _                               = error $ "Unsupported unary operation " ++ show unop ++ "."
 
 binaryInstruction :: T.TypedBinOp -> Operand -> Operand -> Type -> Codegen Operand
 binaryInstruction (T.TypedBinOp LeftShift T.Integer T.Integer) a b =
@@ -372,6 +364,7 @@ binaryInstruction (T.TypedBinOp EquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.EQ a b []
 binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
+binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
 codegenExpression :: S.Expression -> Codegen Operand
 codegenExpression exp = let t' = typ $ S.typ exp in case exp of
@@ -420,7 +413,7 @@ codegenExpression exp = let t' = typ $ S.typ exp in case exp of
     setBlock exitBlock
     phi [(ifVal, ifBlock), (elseVal, elseBlock)] t'
   (S.Block stmts exp _ _)                -> do
-    stmts' <- mapM codegenExpression stmts
+    mapM codegenExpression stmts
     codegenExpression exp
   (S.While cond body _ _)                -> do
     whileBlock <- addBlock "while.body"

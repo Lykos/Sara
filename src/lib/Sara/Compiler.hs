@@ -1,30 +1,21 @@
 module Sara.Compiler (
-  Reporter(..)
-  , run
+  run
   , compile) where
 
 import Sara.Parser
 import Sara.TypeChecker
-import Sara.PrettyPrinter
 import Sara.Syntax
 import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
-import Sara.Verifier
 
 import Control.Monad.Except
-import Control.Monad.Identity
 import Data.Int
-import Data.Bifunctor
 import Foreign.Ptr ( FunPtr, castFunPtr )
 
 import LLVM.General.PassManager
 import LLVM.General.AST
-import LLVM.General.Target
 import LLVM.General.Context
-import LLVM.General.CodeModel
-import LLVM.General.Transforms
-import LLVM.General.Analysis
 
 import qualified LLVM.General.Module as M
 import qualified LLVM.General.ExecutionEngine as EE
@@ -35,8 +26,8 @@ passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 type ExceptOrIO a = ExceptT Error IO a
 
 codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> Program -> ExceptOrIO a
-codegenStage report mod prog = ExceptT $ withContext $ \context -> codegen' context (codegen mod prog)
-  where codegen' context mod = flattenError $ runExceptT $ M.withModuleFromAST context mod $ generate context
+codegenStage report modl prog = ExceptT $ withContext $ \context -> codegen' context (codegen modl prog)
+  where codegen' context modl' = flattenError $ runExceptT $ M.withModuleFromAST context modl' $ generate context
         generate context m = withPassManager passes $ \pm -> do
           -- Optimization Pass
           runPassManager pm m
@@ -104,7 +95,7 @@ compile :: Reporter -> String -> String -> ExceptOrIO ()
 compile reporter filename input = ExceptT $ withModule filename $ \mod ->
   runExceptT $ compile' moduleReporter reporter mod filename input
   where moduleReporter :: Context -> M.Module -> IO (Either Error ())
-        moduleReporter context mod = reportModule reporter mod >> return (Right ())
+        moduleReporter _ mod = reportModule reporter mod >> return (Right ())
 
 run :: Reporter -> String -> String -> ExceptOrIO Int64
 run reporter filename input = withModule filename $ \mod ->

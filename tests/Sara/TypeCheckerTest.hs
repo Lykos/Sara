@@ -59,6 +59,7 @@ prop_complainsPureReturnTypeMismatch typ exp = complainsReturnTypeMismatch True 
 prop_complainsImpureReturnTypeMismatch :: Type -> Expression -> Property
 prop_complainsImpureReturnTypeMismatch = complainsReturnTypeMismatch False
 
+typeCheckerGroup :: Test
 typeCheckerGroup = testGroup "TypeChecker Tests" [ testProperty "adds types" prop_addsTypes
                                                  , testProperty "complains about pure return type mismatches" prop_complainsPureReturnTypeMismatch
                                                  , testProperty "complains about imppure return type mismatches" prop_complainsImpureReturnTypeMismatch ]

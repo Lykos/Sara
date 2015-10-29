@@ -1,10 +1,7 @@
 module Sara.RegressionTest (regressionGroup) where
 
 import Sara.Errors
-import Sara.PrettyPrinter
-import Sara.AstTestUtils
 import Sara.Compiler
-import Sara.Syntax
 import Sara.TestUtils
 import Sara.RegressionTestUtils
 
@@ -16,7 +13,6 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
 import qualified Test.QuickCheck.Monadic as M
-import Test.QuickCheck.Property
 
 isExpected :: Either Error Int64 -> Expectation -> Bool
 isExpected (Left e) (Errors f)   = e == f
@@ -39,8 +35,8 @@ prop_regressionsWork = once $ M.monadicIO $ do
   results <- M.run $ mapM (uncurry checkRight) inputs
   let failedResults = filter (not . fst) results
   let result = case failedResults of
-        []     -> (True, "")
-        (x:xs) -> x
+        []    -> (True, "")
+        (x:_) -> x
   M.monitor $ counterexample $ snd result
   M.assert $ fst result
 
@@ -60,4 +56,5 @@ getInputs = do
   inputs <- mapM readFile' saraFiles
   return $ saraFiles `zip` inputs
 
+regressionGroup :: Test
 regressionGroup = testGroup "Regression Tests" [ testProperty "regression tests work" prop_regressionsWork ]

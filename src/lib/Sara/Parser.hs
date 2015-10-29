@@ -6,18 +6,15 @@ module Sara.Parser (
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Data.Void
-import Control.Monad.Except
+import Data.Functor.Identity
 
 import qualified Text.Parsec.Expr as Expr
-import qualified Text.Parsec.Token as Token
-
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 import Sara.Lexer
 import Sara.Syntax
 import Sara.Types
 import Sara.Operators
-import Sara.AstUtils
 import Sara.Errors
 
 declaration :: Parser Declaration
@@ -80,6 +77,7 @@ doubleType = reservedToken "Double" >> return T.Double
 expression :: Parser Expression
 expression = Expr.buildExpressionParser operatorTable term
 
+operatorTable :: [[Expr.Operator String () Data.Functor.Identity.Identity Expression]]
 operatorTable = [ [ unaryOperator UnaryPlus
                   , unaryOperator UnaryMinus
                   , unaryOperator BitwiseNot
@@ -109,8 +107,10 @@ operatorTable = [ [ unaryOperator UnaryPlus
                   , binaryOperator NotEquivalentTo Expr.AssocLeft]
                 , [ binaryOperator Assign Expr.AssocRight]]
 
+unaryOperator :: UnaryOperator -> Expr.Operator String () Data.Functor.Identity.Identity Expression
 unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOperation operator))
 
+binaryOperator :: BinaryOperator -> Expr.Assoc -> Expr.Operator String () Data.Functor.Identity.Identity Expression
 binaryOperator operator = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator))
 
 operation :: String -> (SourcePos -> a) -> Parser a

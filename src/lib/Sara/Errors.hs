@@ -30,7 +30,6 @@ import qualified Sara.PrettyPrinter as P
 import qualified Data.Text as T
 import Text.Parsec.Pos
 import Control.Monad.Except
-import Data.List
 import qualified Text.Parsec.Error as E
 
 type ErrorOr a = Except Error a

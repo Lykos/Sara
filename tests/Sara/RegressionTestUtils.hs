@@ -24,9 +24,11 @@ data Expectation
   | Errors E.Error
   deriving (Eq, Show)
 
+reservedOpNames :: [String]
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
-
+                  
+reservedNames :: [String]
 reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementError"
                 , "UnknownUnOp", "UnknownBinOp", "UnknownVariable", "UnknownFunction"
                 , "TypeMismatchError", "Condition", "ReturnType", "MainReturnType"

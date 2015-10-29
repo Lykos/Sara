@@ -4,11 +4,6 @@ module Sara.TypeChecker (
 
 import Text.Parsec.Pos
 import Control.Monad
-import Control.Monad.Identity
-import Control.Applicative
-import Control.Monad.Except
-import Data.Functor
-import Data.Either
 import Data.Monoid
 import Data.Maybe
 
@@ -23,8 +18,7 @@ import Sara.AstUtils
 import Sara.Errors
 
 data FunctionKey =
-  FunctionKey { name :: Name
-               , argTypes :: [Type] }
+  FunctionKey Name [Type]
   deriving (Eq, Ord, Show)
 
 type FunctionMap = Map.Map FunctionKey Signature
@@ -36,6 +30,7 @@ checkProgram p@(Program decls _) = do
   decls' <- mapM (checkDeclaration funcs) decls
   return p{ program = decls' }
 
+checkWithoutMain :: Program -> ErrorOr Program
 checkWithoutMain = checkProgram
 
 checkWithMain :: Program -> ErrorOr Program
@@ -63,7 +58,7 @@ checkDeclarationBody funcs f@(Function sig exp pos) = do
   exp' <- typeCheckFunctionBody funcs sig exp pos
   exp'' <- checkPure funcs sig exp'
   return f{ body = exp'' }
-checkDeclarationBody funcs e@Extern{}               = return e
+checkDeclarationBody _ e@Extern{}                   = return e
 
 checkPure :: FunctionMap -> Signature -> Expression -> ErrorOr Expression
 checkPure funcs sig = if S.pure sig then transformExpression checkPureExpression else return
@@ -84,7 +79,7 @@ checkPure funcs sig = if S.pure sig then transformExpression checkPureExpression
         isPure _                                   = False
 
 typeCheckFunctionBody :: FunctionMap -> Signature -> Expression -> SourcePos -> ErrorOr Expression
-typeCheckFunctionBody funcs sig body pos = do
+typeCheckFunctionBody funcs sig body _ = do
   let keyedVar var@(TypedVariable varName _ _) = (varName, var)
   let vars = Map.fromList $ map keyedVar (args sig)
   body' <- typeCheckExpression funcs vars body

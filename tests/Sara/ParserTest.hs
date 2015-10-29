@@ -11,8 +11,6 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
 import Test.QuickCheck.Property
-import Text.Parsec
-import Data.Bifunctor
 
 prop_prettyInv :: Program -> Property
 prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
@@ -32,4 +30,5 @@ prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
           Left err -> throwError err
           Right p  -> return $ clearPositions p
 
+parserGroup :: Test
 parserGroup = testGroup "Parser Tests" [ testProperty "pretty is the inverse of parse" prop_prettyInv ]

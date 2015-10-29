@@ -1,6 +1,5 @@
 module Sara.Syntax where
 
-import Data.Bifunctor
 import Sara.Types
 import Text.Parsec.Pos
 import Sara.Operators

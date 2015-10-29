@@ -5,7 +5,6 @@ module Sara.PrettyPrinter (
 
 import Text.PrettyPrint
 import Sara.Types
-import Sara.AstUtils
 import Sara.Operators
 import Sara.Syntax
 import Sara.Syntax as S

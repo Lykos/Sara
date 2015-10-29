@@ -12,12 +12,10 @@ module Sara.AstUtils (
   , foldMapSignatures) where
 
 
-import Sara.Operators
 import Sara.Syntax
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Identity
-import Data.Monoid
 import Text.Parsec.Pos
 
 transformExpression :: Monad m => (Expression -> m Expression) -> Expression -> m Expression

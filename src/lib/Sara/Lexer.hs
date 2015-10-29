@@ -8,9 +8,12 @@ import Text.Parsec.Language (emptyDef)
 
 import qualified Text.Parsec.Token as Token
 
+reservedOpNames :: [String]
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
                   ++ [";", ":"]
+
+reservedNames :: [String]
 reservedNames = ["function", "extern", "method", "if", "then", "else", "while", "true", "false"] ++ map show types
 
 lexer :: Token.TokenParser ()
