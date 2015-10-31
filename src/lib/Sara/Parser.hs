@@ -42,7 +42,18 @@ signature = addPosition $ do
   args <- parensToken $ commaSep typedVariable
   reservedToken ":"
   retType <- typeExpression
-  return $ Signature pure name args retType
+  precs <- many precondition
+  posts <- many postcondition
+  return $ Signature pure name args retType precs posts
+
+precondition :: Parser Expression
+precondition = condition "requires"
+
+postcondition :: Parser Expression
+postcondition = condition "ensures"
+
+condition :: String -> Parser Expression
+condition keyword = reservedToken keyword >> expression
 
 pureKeyword :: Parser Bool
 pureKeyword = (reservedToken "function" >> return True)

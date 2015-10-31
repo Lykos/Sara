@@ -85,8 +85,9 @@ calledFunctions = foldMapExpressions calledFunctionsExpression
           [FunctionType True name (map expType args) typ]
         calledFunctionsExpression _                      = []
 
-inferSignature :: Bool -> Name -> Expression -> Signature
-inferSignature pure name exp = Signature pure name (freeVariables exp) (S.typ exp) pos
+inferSignature :: Bool -> Name -> [Expression] -> [Expression] -> Expression -> Signature
+inferSignature pure name precs posts exp = Signature pure name freeVars (S.typ exp) precs posts pos
+  where freeVars = concatMap freeVariables precs ++ concatMap freeVariables posts ++ freeVariables exp
 
 type UnpositionedDeclaration = SourcePos -> Declaration
 
@@ -96,7 +97,7 @@ function = do
   t <- Sara.AstTestUtils.typ
   name <- identifier
   exp <- expression pure t
-  return $ Function (inferSignature pure name exp) exp
+  return $ Function (inferSignature pure name [] [] exp) exp
 
 typ :: Gen Type
 typ = elements [T.Unit, T.Boolean, T.Integer, T.Double]
@@ -214,7 +215,7 @@ arbitraryTypedVariable t = do
 arbitraryExtern :: FunctionType -> Gen Declaration
 arbitraryExtern (FunctionType pure name argTypes retType) = do
   args <- mapM arbitraryTypedVariable argTypes
-  return $ Extern (Signature pure name args retType pos) pos
+  return $ Extern (Signature pure name args retType [] [] pos) pos
 
 fixName :: [Name] -> Name -> Name
 fixName names name | name `elem` names = fixName names (name ++ "0")
@@ -298,7 +299,9 @@ shrinkTypedVariable :: TypedVariable -> [TypedVariable]
 shrinkTypedVariable (TypedVariable var typ p) = [TypedVariable v typ p | v <- shrinkIdentifier var]
 
 shrinkSignature :: [TypedVariable] -> Signature -> [Signature]
-shrinkSignature free (Signature pure name args typ p) = [Signature pure name a typ p | a <- shrinkArgTypes args]
+shrinkSignature free (Signature pure name args typ precs posts p) =
+  [Signature pure name args typ precs' posts' p | (precs', posts') <- shrink (precs, posts)]
+  ++ [Signature pure name a typ precs posts p | a <- shrinkArgTypes args]
   where shrinkArgTypes :: [TypedVariable] -> [[TypedVariable]]
         shrinkArgTypes []                     = []
         shrinkArgTypes (x:xs) | x `elem` free = [x : ys | ys <- shrinkArgTypes xs]
@@ -320,7 +323,8 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 isRemovable :: Declaration -> Bool
                 isRemovable d = isRemovableSignature $ signature d
                 isRemovableSignature :: Signature -> Bool
-                isRemovableSignature (Signature pure name args retType _) = FunctionType pure name (map varType args) retType `notElem` funcs
+                isRemovableSignature Signature{ S.pure = pure, sigName = name, S.args = args, retType = retType } =
+                  FunctionType pure name (map varType args) retType `notElem` funcs
                 appendTail :: Declaration -> Program
                 appendTail y = Program (y:xs) pos
                 tailShrinks :: [Program]

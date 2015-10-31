@@ -9,6 +9,7 @@ import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
 
+import Control.Monad.Identity
 import Control.Monad.Except
 import Data.Int
 import Foreign.Ptr ( FunPtr, castFunPtr )
@@ -23,9 +24,9 @@ import qualified LLVM.General.ExecutionEngine as EE
 passes :: PassSetSpec
 passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
-type ExceptOrIO a = ExceptT Error IO a
+type ErrorOrIO a = ExceptT Error IO a
 
-codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> Program -> ExceptOrIO a
+codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> Program -> ErrorOrIO a
 codegenStage report modl prog = ExceptT $ withContext $ \context -> codegen' context (codegen modl prog)
   where codegen' context modl' = flattenError $ runExceptT $ M.withModuleFromAST context modl' $ generate context
         generate context m = withPassManager passes $ \pm -> do
@@ -64,40 +65,30 @@ flattenError res = do
     (Left msg) -> return $ Left $ OtherError msg
     (Right m)  -> return m
 
-parseStage :: (Program -> IO ()) -> String -> String -> ExceptOrIO Program
-parseStage report filename contents = stage report $ toError $ parse filename contents
-  where toError :: ErrorOr Program -> ExceptOrIO Program
-        toError e = case runExcept e of
-          (Left err)  -> throwError err
-          (Right res) -> return res
+parseStage :: (Program -> IO ()) -> String -> String -> ErrorOrIO Program
+parseStage report filename contents = stage report $ toErrorOrIO $ parse filename contents
 
-stage :: (b -> IO ()) -> ExceptOrIO b -> ExceptOrIO b
-stage report = mapExceptT stage'
-  where stage' e = do
-          e' <- e
-          case e' of
-            Left err  -> return $ Left err
-            Right res -> report res >> return (Right res)
+toErrorOrIO :: ErrorOr Program -> ErrorOrIO Program
+toErrorOrIO = mapExceptT $ return . runIdentity
 
-checkStage :: (Program -> IO ()) -> Program -> ExceptOrIO Program
-checkStage report program = stage report $ toError $ checkWithMain program
-  where toError :: ErrorOr Program -> ExceptOrIO Program
-        toError e = case runExcept e of
-          (Left err)  -> throwError err
-          (Right res) -> return res
+stage :: (b -> IO ()) -> ErrorOrIO b -> ErrorOrIO b
+stage report p = p >>= (\a -> lift (report a) >> return a)
 
-compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ExceptOrIO a
+checkStage :: (Program -> IO ()) -> Program -> ErrorOrIO Program
+checkStage report program = stage report $ toErrorOrIO $ checkWithMain program
+
+compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a
 compile' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
                                                       >>= checkStage (reportTyped reporter)
                                                       >>= codegenStage moduleReporter mod
 
-compile :: Reporter -> String -> String -> ExceptOrIO ()
+compile :: Reporter -> String -> String -> ErrorOrIO ()
 compile reporter filename input = ExceptT $ withModule filename $ \mod ->
   runExceptT $ compile' moduleReporter reporter mod filename input
   where moduleReporter :: Context -> M.Module -> IO (Either Error ())
         moduleReporter _ mod = reportModule reporter mod >> return (Right ())
 
-run :: Reporter -> String -> String -> ExceptOrIO Int64
+run :: Reporter -> String -> String -> ErrorOrIO Int64
 run reporter filename input = withModule filename $ \mod ->
   compile' runReporter reporter mod filename input
   where runReporter :: Context -> M.Module -> IO (Either Error Int64)

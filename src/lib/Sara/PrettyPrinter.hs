@@ -27,6 +27,9 @@ instance Pretty TypedVariable where
 instance Pretty Type where
   pretty = prettyType
 
+instance Pretty Expression where
+  pretty = prettyExpression
+
 prettyProgram :: Program -> Doc
 prettyProgram = vsep . punctuate semi . map prettyDeclaration . program
 
@@ -47,10 +50,16 @@ prettyFunction sig body = case body of
   where sigDoc = prettySignature sig <+> text "="
 
 prettySignature :: Signature -> Doc
-prettySignature (Signature pure name args retType _) = prettyTyped sig retType
+prettySignature (Signature pure name args retType preconditions postconditions _) = prettyTyped sig retType
   where sig = text keyword <+> text name
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
+              $+$ conditions "requires" preconditions
+              $+$ conditions "ensures" postconditions
         keyword = if pure then "function" else "method"
+
+conditions :: String -> [Expression] -> Doc
+conditions keyword conds = nest (2 * indentation) $ vsep $ map toCond $ conds
+  where toCond cond = text keyword <+> prettyExpression cond
 
 prettyTyped :: Doc -> Type -> Doc
 prettyTyped doc Unknown = doc

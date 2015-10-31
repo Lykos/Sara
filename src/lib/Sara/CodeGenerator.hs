@@ -152,7 +152,7 @@ typ T.Double  = FloatingPointType 64 IEEE
 typ T.Unknown = error "Found type unknown"
 
 define :: S.Signature -> [BasicBlock] -> LLVM ()
-define (S.Signature _ label args retty _) body = addDefn $
+define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
   , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _) <- args], False)

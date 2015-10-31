@@ -28,6 +28,8 @@ data Signature
               , sigName :: Name
               , args :: [TypedVariable]
               , retType :: Type
+              , preconditions :: [Expression]
+              , postconditions :: [Expression]
               , sigPos :: SourcePos }
   deriving (Eq, Ord, Show)
 

@@ -46,7 +46,7 @@ complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shr
   where expTyp = typ exp
         complete = do
           name <- identifier
-          let inferredSig = inferSignature pure name exp
+          let inferredSig = inferSignature pure name [] [] exp
           let wrongSig = inferredSig{ retType = retTyp }
           completeProgram [Function wrongSig exp pos]
         input = clearTypes $ finish complete

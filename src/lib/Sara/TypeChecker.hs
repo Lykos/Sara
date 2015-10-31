@@ -48,9 +48,9 @@ checkDeclaration funcs decl = do
   checkDeclarationBody funcs decl
 
 checkSignature :: Signature -> ErrorOr ()
-checkSignature (Signature _ "main" [] T.Integer _) = return ()
-checkSignature (Signature _ "main" [] t p)         = invalidMainRetType t p
-checkSignature (Signature _ "main" a T.Integer p)  = invalidMainArgs (map typ a) p
+checkSignature Signature{ sigName = "main", args = [], retType = T.Integer }     = return ()
+checkSignature Signature{ sigName = "main", args = [], retType = t, sigPos = p } = invalidMainRetType t p
+checkSignature Signature{ sigName = "main", args = a, sigPos = p }               = invalidMainArgs (map typ a) p
 checkSignature _                                   = return ()
 
 checkDeclarationBody :: FunctionMap -> Declaration -> ErrorOr Declaration
@@ -109,7 +109,7 @@ insertFunction :: Signature -> FunctionMap -> FunctionMap
 insertFunction sig = Map.insert (functionKey sig) sig
 
 functionKey :: Signature -> FunctionKey
-functionKey (Signature _ name args _ _)   = FunctionKey name $ map varType args
+functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
 
 typeCheckExpression :: FunctionMap -> VariableMap -> Expression -> ErrorOr Expression
 typeCheckExpression funcs vars checkedExp = case checkedExp of
