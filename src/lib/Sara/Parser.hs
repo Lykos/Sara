@@ -11,60 +11,57 @@ import Data.Functor.Identity
 import qualified Text.Parsec.Expr as Expr
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
+import Sara.Meta
 import Sara.Lexer
 import Sara.Syntax
 import Sara.Types
 import Sara.Operators
 import Sara.Errors
 
-declaration :: Parser Declaration
+declaration :: Parser ParserDeclaration
 declaration = try function
               <|> try extern
               <?> "declaration"
 
-function :: Parser Declaration
-function = addPosition $ do
+function :: Parser ParserDeclaration
+function = addNodeMeta $ do
   sig <- Sara.Parser.signature
   reservedOpToken "="
   body <- expression
   return $ Function sig body
 
-extern :: Parser Declaration
-extern = addPosition $ do
+extern :: Parser ParserDeclaration
+extern = addNodeMeta $ do
   reservedToken "extern"
   sig <- Sara.Parser.signature
   return $ Extern sig
 
-signature :: Parser Signature
-signature = addPosition $ do
+signature :: Parser ParserSignature
+signature = do
+  pos <- getPosition
   pure <- pureKeyword
   name <- identifierToken
   args <- parensToken $ commaSep typedVariable
   reservedToken ":"
   retType <- typeExpression
-  precs <- many precondition
-  posts <- many postcondition
-  return $ Signature pure name args retType precs posts
+  precs <- conditions "requires"
+  posts <- conditions "ensures"
+  return $ Signature pure name args retType precs posts $ mkExpMeta pos
 
-precondition :: Parser Expression
-precondition = condition "requires"
-
-postcondition :: Parser Expression
-postcondition = condition "ensures"
-
-condition :: String -> Parser Expression
-condition keyword = reservedToken keyword >> expression
+conditions :: String -> Parser [ParserExpression]
+conditions keyword = semiSep $ reservedToken keyword >> expression
 
 pureKeyword :: Parser Bool
 pureKeyword = (reservedToken "function" >> return True)
               <|> (reservedToken "method" >> return False)
 
-typedVariable :: Parser TypedVariable
-typedVariable = addPosition $ do
+typedVariable :: Parser ParserTypedVariable
+typedVariable = do
+  pos <- getPosition
   name <- identifierToken
   reservedToken ":"
   varType <- typeExpression
-  return $ TypedVariable name varType
+  return $ TypedVariable name varType $ mkExpMeta pos
 
 typeExpression :: Parser Type
 typeExpression = try unitType
@@ -85,10 +82,10 @@ integerType = reservedToken "Integer" >> return T.Integer
 doubleType :: Parser Type
 doubleType = reservedToken "Double" >> return T.Double
 
-expression :: Parser Expression
+expression :: Parser ParserExpression
 expression = Expr.buildExpressionParser operatorTable term
 
-operatorTable :: [[Expr.Operator String () Data.Functor.Identity.Identity Expression]]
+operatorTable :: [[Expr.Operator String () Data.Functor.Identity.Identity ParserExpression]]
 operatorTable = [ [ unaryOperator UnaryPlus
                   , unaryOperator UnaryMinus
                   , unaryOperator BitwiseNot
@@ -118,41 +115,42 @@ operatorTable = [ [ unaryOperator UnaryPlus
                   , binaryOperator NotEquivalentTo Expr.AssocLeft]
                 , [ binaryOperator Assign Expr.AssocRight]]
 
-unaryOperator :: UnaryOperator -> Expr.Operator String () Data.Functor.Identity.Identity Expression
+unaryOperator :: UnaryOperator -> Expr.Operator String () Data.Functor.Identity.Identity ParserExpression
 unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOperation operator))
 
-binaryOperator :: BinaryOperator -> Expr.Assoc -> Expr.Operator String () Data.Functor.Identity.Identity Expression
+binaryOperator :: BinaryOperator -> Expr.Assoc -> Expr.Operator String () Data.Functor.Identity.Identity ParserExpression
 binaryOperator operator = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator))
 
-operation :: String -> (SourcePos -> a) -> Parser a
-operation symbol op = addPosition $ do
+operation :: String -> (ExpMeta -> a) -> Parser a
+operation symbol op = addExpressionMeta $ do
   reservedOpToken symbol
   return op
 
-unaryOperation :: UnaryOperator -> SourcePos -> Expression -> Expression
-unaryOperation op pos exp = UnaryOperation op exp Unknown pos
+unaryOperation :: UnaryOperator -> ExpMeta -> ParserExpression -> ParserExpression
+unaryOperation op meta exp = UnaryOperation op exp meta
 
-binaryOperation :: BinaryOperator -> SourcePos -> Expression -> Expression -> Expression
-binaryOperation op pos left right = BinaryOperation op left right Unknown pos
+binaryOperation :: BinaryOperator -> ExpMeta -> ParserExpression -> ParserExpression -> ParserExpression
+binaryOperation op meta left right = BinaryOperation op left right meta
 
-term :: Parser Expression
+term :: Parser ParserExpression
 term = simpleExpression
        <|> parensToken expression
        <?> "expression"
 
-addPosition :: Parser (SourcePos -> a) -> Parser a
-addPosition parser = do
+addNodeMeta :: Parser (ParserNodeMeta -> a) -> Parser a
+addNodeMeta parser = do
   pos <- getPosition
   ast <- parser
-  return $ ast pos
+  return $ ast $ ParserNodeMeta pos
 
-addTypPosition :: Parser (Type -> SourcePos -> a) -> Parser a
-addTypPosition parser = addPosition $ do
+addExpressionMeta :: Parser (ExpMeta -> a) -> Parser a
+addExpressionMeta parser = do
+  pos <- getPosition
   ast <- parser
-  return $ ast Unknown
+  return $ ast $ mkExpMeta pos
 
-simpleExpression :: Parser Expression
-simpleExpression = addTypPosition $
+simpleExpression :: Parser ParserExpression
+simpleExpression = addExpressionMeta $
                    try unit
                    <|> try boolean
                    <|> try double
@@ -166,7 +164,11 @@ simpleExpression = addTypPosition $
 empty :: Parser Void
 empty = return undefined
 
-type UntypedExpression = Type -> SourcePos -> Expression
+type ExpMeta = ((), ParserNodeMeta)
+type UntypedExpression = ExpMeta -> ParserExpression
+
+mkExpMeta :: SourcePos -> ExpMeta
+mkExpMeta pos = ((), ParserNodeMeta pos)
 
 unit :: Parser UntypedExpression
 unit = parensToken empty >> return S.Unit
@@ -188,13 +190,13 @@ double = do
 variable :: Parser UntypedExpression
 variable = do
   var <- identifierToken
-  return $ Variable var
+  return $ Variable var ()
 
 call :: Parser UntypedExpression
 call = do
   name <- identifierToken
   args <- parensToken $ commaSep expression
-  return $ Call name args
+  return $ Call name args ()
 
 conditional :: Parser UntypedExpression
 conditional = do
@@ -211,7 +213,7 @@ block = do
   pos <- getPosition
   exps <- bracesToken $ semiSep expression
   return $ if null exps then
-             Block [] (S.Unit Unknown pos)
+             Block [] (S.Unit $ mkExpMeta pos)
            else
              Block (init exps) (last exps)
 
@@ -219,12 +221,12 @@ while :: Parser UntypedExpression
 while = do
   reservedToken "while"
   cond <- expression
-  bodyBlock <- addTypPosition block
+  bodyBlock <- addExpressionMeta block
   let body = transformBody bodyBlock
   return $ While cond body
-  where transformBody :: Expression -> Expression
-        transformBody (Block [] e _ _) = e
-        transformBody b                = b
+  where transformBody :: ParserExpression -> ParserExpression
+        transformBody (Block [] e _) = e
+        transformBody b              = b
 
 contents :: Parser a -> Parser a
 contents p = do
@@ -233,12 +235,12 @@ contents p = do
   eof
   return r
 
-toplevel :: Parser Program
-toplevel = addPosition $ do
+toplevel :: Parser ParserProgram
+toplevel = addNodeMeta $ do
   program <- semiSep declaration
   return $ Program program
 
-parse :: String -> String -> ErrorOr Program
+parse :: String -> String -> ErrorOr ParserProgram
 parse source s = case Text.Parsec.parse (contents toplevel) source s of
   (Left err) -> parseError err
   (Right p)  -> return p

@@ -8,6 +8,7 @@ import Sara.Syntax
 import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
+import Sara.Meta
 
 import Control.Monad.Identity
 import Control.Monad.Except
@@ -26,7 +27,7 @@ passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
 type ErrorOrIO a = ExceptT Error IO a
 
-codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> Program -> ErrorOrIO a
+codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> TypeCheckerProgram -> ErrorOrIO a
 codegenStage report modl prog = ExceptT $ withContext $ \context -> codegen' context (codegen modl prog)
   where codegen' context modl' = flattenError $ runExceptT $ M.withModuleFromAST context modl' $ generate context
         generate context m = withPassManager passes $ \pm -> do
@@ -65,16 +66,16 @@ flattenError res = do
     (Left msg) -> return $ Left $ OtherError msg
     (Right m)  -> return m
 
-parseStage :: (Program -> IO ()) -> String -> String -> ErrorOrIO Program
+parseStage :: (ParserProgram -> IO ()) -> String -> String -> ErrorOrIO ParserProgram
 parseStage report filename contents = stage report $ toErrorOrIO $ parse filename contents
 
-toErrorOrIO :: ErrorOr Program -> ErrorOrIO Program
+toErrorOrIO :: ErrorOr (Program a b c d) -> ErrorOrIO (Program a b c d)
 toErrorOrIO = mapExceptT $ return . runIdentity
 
 stage :: (b -> IO ()) -> ErrorOrIO b -> ErrorOrIO b
 stage report p = p >>= (\a -> lift (report a) >> return a)
 
-checkStage :: (Program -> IO ()) -> Program -> ErrorOrIO Program
+checkStage :: (TypeCheckerProgram -> IO ()) -> ParserProgram -> ErrorOrIO TypeCheckerProgram
 checkStage report program = stage report $ toErrorOrIO $ checkWithMain program
 
 compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a

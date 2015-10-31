@@ -1,85 +1,106 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Sara.Syntax where
 
 import Sara.Types
-import Text.Parsec.Pos
 import Sara.Operators
 
 type Name = String
 
-class Positioned p where
-  position :: p -> SourcePos
+class ExpressionMeta a b where
+  expressionMeta :: a -> b
 
-class Named n where
-  name :: n -> Name
+class FunctionMeta a b where
+  functionMeta :: a -> b
 
-class Typed t where
-  typ :: t -> Type
+class VariableMeta a b where
+  variableMeta :: a -> b
 
-data Declaration
-  = Function { signature :: Signature, body :: Expression, declPos :: SourcePos }
-  | Extern { signature :: Signature, declPos :: SourcePos }
+class NodeMeta a b where
+  nodeMeta :: a -> b
+
+-- | Declaration with 4 types of metadata:
+-- [a:] The metadata used for signatures and calls.
+-- [b:] The metadata used for variables and variable declarations.
+-- [c:] The metadata used for all expressions.
+-- [d:] The metadata used for all nodes.
+data Declaration a b c d
+  = Function { signature :: Signature a b c d, body :: Expression a b c d, declMeta :: d }
+  | Extern { signature :: Signature a b c d, declMeta :: d }
   deriving (Eq, Ord, Show)
 
-instance Positioned Declaration where
-  position = declPos
+instance NodeMeta (Declaration a b c d) d where
+  nodeMeta = declMeta
 
-data Signature
-  = Signature { pure :: Bool
+-- | Signature with 4 types of metadata:
+-- [a:] The metadata used for signatures and calls.
+-- [b:] The metadata used for variables and variable declarations.
+-- [c:] The metadata used for all expressions.
+-- [d:] The metadata used for all nodes.
+data Signature a b c d
+  = Signature { isPure :: Bool
               , sigName :: Name
-              , args :: [TypedVariable]
+              , args :: [TypedVariable b d]
               , retType :: Type
-              , preconditions :: [Expression]
-              , postconditions :: [Expression]
-              , sigPos :: SourcePos }
+              , preconditions :: [Expression a b c d]
+              , postconditions :: [Expression a b c d]
+              , sigMeta :: (a, d) }
   deriving (Eq, Ord, Show)
 
-instance Positioned Signature where
-  position = sigPos
+instance NodeMeta (Signature a b c d) d where
+  nodeMeta = snd . sigMeta
 
-instance Named Signature where
-  name = sigName
+instance FunctionMeta (Signature a b c d) a where
+  functionMeta = fst . sigMeta
 
-instance Typed Signature where
-  typ = retType
-
-data TypedVariable
+-- | Typed variable with 2 types of metadata:
+-- [b:] The metadata used for variables and variable declarations.
+-- [d:] The metadata used for all nodes.
+data TypedVariable b d
   = TypedVariable { varName :: Name
                   , varType :: Type
-                  , varPos :: SourcePos }
+                  , varMeta :: (b, d) }
   deriving (Eq, Ord, Show)
 
-instance Positioned TypedVariable where
-  position = varPos
+instance VariableMeta (TypedVariable b d) b where
+  variableMeta = fst . varMeta
 
-instance Named TypedVariable where
-  name = varName
+instance NodeMeta (TypedVariable b d) d where
+  nodeMeta = snd . varMeta
 
-instance Typed TypedVariable where
-  typ = varType
-
-data Expression
-  = Unit { expType :: Type, expPos :: SourcePos }
-  | Boolean { boolValue :: Bool, expType :: Type, expPos :: SourcePos }
-  | Integer { intValue :: Integer, expType :: Type, expPos :: SourcePos }
-  | Double { doubleValue :: Double, expType :: Type, expPos :: SourcePos }
-  | UnaryOperation { unOp :: UnaryOperator, inner :: Expression, expType :: Type, expPos :: SourcePos }
-  | BinaryOperation { binOp :: BinaryOperator, left :: Expression, right :: Expression, expType :: Type, expPos :: SourcePos }
-  | Variable { expName :: Name, expType :: Type, expPos :: SourcePos }
-  | Call { expName :: Name, expArgs :: [Expression], expType :: Type, expPos :: SourcePos }
-  | Conditional { cond :: Expression, thenExp :: Expression, elseExp :: Expression, expType :: Type, expPos :: SourcePos }
-  | Block { stmts :: [Expression], inner :: Expression, expType :: Type, expPos :: SourcePos }
-  | While { cond :: Expression, inner :: Expression, expType :: Type, expPos :: SourcePos }
+-- | Expression with 4 types of metadata:
+-- [a:] The metadata used for signatures and calls.
+-- [b:] The metadata used for variables and variable declarations.
+-- [c:] The metadata used for all expressions.
+-- [d:] The metadata used for all nodes.
+data Expression a b c d
+  = Unit { expMeta :: (c, d) }
+  | Boolean { boolValue :: Bool, expMeta :: (c, d) }
+  | Integer { intValue :: Integer, expMeta :: (c, d) }
+  | Double { doubleValue :: Double, expMeta :: (c, d) }
+  | UnaryOperation { unOp :: UnaryOperator, inner :: Expression a b c d, expMeta :: (c, d) }
+  | BinaryOperation { binOp :: BinaryOperator, left :: Expression a b c d, right :: Expression a b c d, expMeta :: (c, d) }
+  | Variable { expName :: Name, expVarMeta :: b, expMeta :: (c, d) }
+  | Call { expName :: Name, expArgs :: [Expression a b c d], expCallMeta :: a, expMeta :: (c, d) }
+  | Conditional { cond :: Expression a b c d, thenExp :: Expression a b c d, elseExp :: Expression a b c d, expMeta :: (c, d) }
+  | Block { stmts :: [Expression a b c d], inner :: Expression a b c d, expMeta :: (c, d) }
+  | While { cond :: Expression a b c d, inner :: Expression a b c d, expMeta :: (c, d) }
   deriving (Eq, Ord, Show)
 
-instance Typed Expression where
-  typ = expType
+instance ExpressionMeta (Expression a b c d) c where
+  expressionMeta = fst . expMeta
 
-instance Positioned Expression where
-  position = expPos
+instance NodeMeta (Expression a b c d) d where
+  nodeMeta = snd . expMeta
 
-data Program
-  = Program { program :: [Declaration], progPos :: SourcePos }
+-- | Program with 4 types of metadata:
+-- [a:] The metadata used for signatures and calls.
+-- [b:] The metadata used for variables and variable declarations.
+-- [c:] The metadata used for all expressions.
+-- [d:] The metadata used for all nodes.
+data Program a b c d
+  = Program { program :: [Declaration a b c d], progMeta :: d }
   deriving (Eq, Ord, Show)
 
-instance Positioned Program where
-  position = progPos
+instance NodeMeta (Program a b c d) d where
+  nodeMeta = progMeta

@@ -3,8 +3,8 @@ module Sara.CompilerTest (compilerGroup) where
 import Sara.PrettyPrinter
 import Sara.AstTestUtils
 import Sara.Compiler
-import Sara.Syntax
 import Sara.TestUtils
+import Sara.Meta
 
 import Data.Either
 import Control.Monad.Except
@@ -14,11 +14,11 @@ import Test.QuickCheck
 import qualified Test.QuickCheck.Monadic as M
 import Test.QuickCheck.Property
 
-prop_generatesCode :: Program -> Property
+prop_generatesCode :: TypeCheckerProgram -> Property
 prop_generatesCode p = checkRight input
   where input :: String
         input = prettyRender untyped
-        untyped :: Program
+        untyped :: ParserProgram
         untyped = clearTypes p
         checkRight :: String -> Property
         checkRight input = M.monadicIO $ do

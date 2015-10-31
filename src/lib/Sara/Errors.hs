@@ -93,7 +93,7 @@ renderPositionedError (DifferentTypesError types)                            =
 renderPositionedError (MainArgsError args)                                   =
   T.append (T.pack "Expected no arguments for main function but got ") (renderTypes args)
 renderPositionedError (ImpureExpressionError name)                           =
-  T.append (T.pack "Got impure expression in pure function ") (T.pack name)
+  T.append (T.pack "Got impure expression in pure context ") (T.pack name)
 renderPositionedError (RedeclaredElementError redeclaredElement originalPos) =
   T.concat [T.pack "Redeclared ", renderRedeclaredElement redeclaredElement, T.pack " which was already declared at ", renderPosition originalPos]
 renderPositionedError AssignmentError                                        =

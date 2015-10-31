@@ -5,6 +5,7 @@ module Sara.Verifier (z3Expression, Z3FullContext(..), Z3CheapContext(..), Funct
 import Sara.Operators
 import qualified Sara.Syntax as S
 import Sara.Types
+import Sara.Meta
 import Data.Maybe
 import qualified Control.Monad.Trans.Reader as R
 import Control.Monad.Trans.Class
@@ -31,7 +32,7 @@ data FunctionInfo =
 -- I.e. we don't have the preconditions yet.
 data Z3CheapContext
   = Z3CheapContext { cheapVars :: M.Map S.Name AST
-                   , signatures :: M.Map FunctionKey S.Signature }
+                   , signatures :: M.Map FunctionKey TypeCheckerSignature }
 
 instance MonadZ3 m => MonadZ3 (R.ReaderT a m) where
   getSolver = lift getSolver
@@ -45,18 +46,18 @@ z3PrecTrivial :: MonadZ3 z3 => z3 AST -> z3 PrecAST
 z3PrecTrivial ast = PrecAST <$> mkTrue <*> ast
 
 -- | Create an expression and its precondition.
-z3PrecExpression :: (MonadZ3 z3, MonadReader Z3FullContext z3) => S.Expression -> z3 PrecAST
-z3PrecExpression (S.Boolean b _ _)              = z3PrecTrivial $ mkBool b
-z3PrecExpression (S.Integer n _ _)              = z3PrecTrivial $ mkInteger n
-z3PrecExpression (S.UnaryOperation op e _ _)    = do
+z3PrecExpression :: (MonadZ3 z3, MonadReader Z3FullContext z3) => TypeCheckerExpression -> z3 PrecAST
+z3PrecExpression (S.Boolean b _)              = z3PrecTrivial $ mkBool b
+z3PrecExpression (S.Integer n _)              = z3PrecTrivial $ mkInteger n
+z3PrecExpression (S.UnaryOperation op e _)    = do
   PrecAST p e' <- z3PrecExpression e
   PrecAST p <$> z3UnOp op e'
-z3PrecExpression (S.BinaryOperation op l r _ _) = do
+z3PrecExpression (S.BinaryOperation op l r _) = do
   l' <- z3PrecExpression l
   r' <- z3PrecExpression r
   z3PrecBinOp op l' r'
 z3PrecExpression (S.Variable v _ _)             = z3PrecTrivial $ asks $ fromJust . M.lookup v . fullVars
-z3PrecExpression (S.Conditional b t e _ _)      = do
+z3PrecExpression (S.Conditional b t e _)      = do
   PrecAST p b' <- z3PrecExpression b
   PrecAST q t' <- z3PrecExpression t
   PrecAST r e' <- z3PrecExpression e
@@ -66,18 +67,18 @@ z3PrecExpression (S.Conditional b t e _ _)      = do
 z3PrecExpression _                              = undefined
 
 -- | Create an expression without its precondition.
-z3Expression :: (MonadZ3 z3, MonadReader Z3CheapContext z3) => S.Expression -> z3 AST
-z3Expression (S.Boolean b _ _)              = mkBool b
-z3Expression (S.Integer n _ _)              = mkInteger n
-z3Expression (S.UnaryOperation op e _ _)    = do
+z3Expression :: (MonadZ3 z3, MonadReader Z3CheapContext z3) => TypeCheckerExpression -> z3 AST
+z3Expression (S.Boolean b _)              = mkBool b
+z3Expression (S.Integer n _)              = mkInteger n
+z3Expression (S.UnaryOperation op e _)    = do
   e' <- z3Expression e
   z3UnOp op e'
-z3Expression (S.BinaryOperation op l r _ _) = do
+z3Expression (S.BinaryOperation op l r _) = do
   l' <- z3Expression l
   r' <- z3Expression r
   z3BinOp op l' r'
 z3Expression (S.Variable v _ _)             = asks $ fromJust . M.lookup v . cheapVars
-z3Expression (S.Conditional b t e _ _)      = do
+z3Expression (S.Conditional b t e _)      = do
   b' <- z3Expression b
   t' <- z3Expression t
   e' <- z3Expression e

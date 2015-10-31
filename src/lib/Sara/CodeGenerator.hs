@@ -7,6 +7,7 @@ module Sara.CodeGenerator (
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 import Sara.Operators
+import Sara.Meta
 
 import Data.Word
 import Data.List
@@ -149,9 +150,8 @@ typ T.Unit    = IntegerType booleanBits
 typ T.Boolean = IntegerType booleanBits
 typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
-typ T.Unknown = error "Found type unknown"
 
-define :: S.Signature -> [BasicBlock] -> LLVM ()
+define :: TypeCheckerSignature -> [BasicBlock] -> LLVM ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
@@ -160,7 +160,7 @@ define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body =
   , basicBlocks = body
   }
 
-extern :: S.Signature -> LLVM ()
+extern :: TypeCheckerSignature -> LLVM ()
 extern = flip define []
 
 local :: Name ->  Type -> Operand
@@ -220,11 +220,11 @@ store ptr val = instr $ Store False ptr val Nothing 0 []
 load :: Operand -> Type -> Codegen Operand
 load ptr = instr $ Load False ptr Nothing 0 []
 
-codegenDeclaration :: S.Declaration -> LLVM ()
+codegenDeclaration :: TypeCheckerDeclaration -> LLVM ()
 codegenDeclaration (S.Extern sig _)        = extern sig
 codegenDeclaration (S.Function sig body _) = codegenFunction sig body
 
-codegenFunction :: S.Signature -> S.Expression -> LLVM ()
+codegenFunction :: TypeCheckerSignature -> TypeCheckerExpression -> LLVM ()
 codegenFunction signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
@@ -238,10 +238,10 @@ codegenFunction signature body = define signature bls
         assign name var
       codegenExpression body >>= ret
 
-codegenProgram :: S.Program -> LLVM ()
+codegenProgram :: TypeCheckerProgram -> LLVM ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
 
-codegen :: Module -> S.Program -> Module
+codegen :: Module -> TypeCheckerProgram -> Module
 codegen mod program = runLLVM mod $ codegenProgram program
 
 withModule :: String -> (Module -> a) -> a
@@ -366,33 +366,33 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
-codegenExpression :: S.Expression -> Codegen Operand
-codegenExpression exp = let t' = typ $ S.typ exp in case exp of
-  S.Unit{}                               -> unit
-  (S.Boolean b _ _)                      -> boolean b
-  (S.Integer n _ _)                      -> integer n
-  (S.Double d _ _)                       -> double d
-  (S.UnaryOperation op exp _ _)          -> do
-    let op' = unaryInstruction (T.TypedUnOp op (S.expType exp))
+codegenExpression :: TypeCheckerExpression -> Codegen Operand
+codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
+  S.Unit{}                             -> unit
+  (S.Boolean b _)                      -> boolean b
+  (S.Integer n _)                      -> integer n
+  (S.Double d _)                       -> double d
+  (S.UnaryOperation op exp _)          -> do
+    let op' = unaryInstruction (T.TypedUnOp op (expressionTyp exp))
     exp' <- codegenExpression exp
     op' exp' t'
-  (S.BinaryOperation Assign var val _ _) -> do
+  (S.BinaryOperation Assign var val _) -> do
     let (S.Variable name _ _) = var
     var' <- getVar name
     val' <- codegenExpression val
     store var' val' t'
-  (S.BinaryOperation op left right _ _)  -> do
-    let op' = binaryInstruction (T.TypedBinOp op (S.expType left) (S.expType right))
+  (S.BinaryOperation op left right _)  -> do
+    let op' = binaryInstruction (T.TypedBinOp op (expressionTyp left) (expressionTyp right))
     left' <- codegenExpression left
     right' <- codegenExpression right
     op' left' right' t'
-  (S.Variable name _ _)                  -> do
+  (S.Variable name _ _)                -> do
     var' <- getVar name
     load var' t'
-  (S.Call name args _ _)                 -> do
+  (S.Call name args _ _)               -> do
     args' <- mapM codegenExpression args
     call name args' t'
-  (S.Conditional cond ifExp elseExp _ _) -> do
+  (S.Conditional cond ifExp elseExp _) -> do
     ifBlock <- addBlock "if.then"
     elseBlock <- addBlock "if.else"
     exitBlock <- addBlock "if.exit"
@@ -412,10 +412,10 @@ codegenExpression exp = let t' = typ $ S.typ exp in case exp of
 
     setBlock exitBlock
     phi [(ifVal, ifBlock), (elseVal, elseBlock)] t'
-  (S.Block stmts exp _ _)                -> do
+  (S.Block stmts exp _)                -> do
     mapM codegenExpression stmts
     codegenExpression exp
-  (S.While cond body _ _)                -> do
+  (S.While cond body _)                -> do
     whileBlock <- addBlock "while.body"
     exitBlock <- addBlock "while.exit"
     

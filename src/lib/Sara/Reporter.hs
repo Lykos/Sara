@@ -1,9 +1,9 @@
 module Sara.Reporter where
 
-import Sara.Syntax
+import Sara.Meta
 import LLVM.General.Module
 
 data Reporter
-  = Reporter { reportParsed :: Program -> IO ()
-             , reportTyped :: Program -> IO ()
+  = Reporter { reportParsed :: ParserProgram -> IO ()
+             , reportTyped :: TypeCheckerProgram -> IO ()
              , reportModule :: Module -> IO () }
