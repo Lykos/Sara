@@ -63,4 +63,4 @@ prop_complainsImpureReturnTypeMismatch = complainsReturnTypeMismatch False
 typeCheckerGroup :: Test
 typeCheckerGroup = testGroup "TypeCheckerTests" [ testProperty "adds types" prop_addsTypes
                                                 , testProperty "complains about pure return type mismatches" prop_complainsPureReturnTypeMismatch
-                                                , testProperty "complains about imppure return type mismatches" prop_complainsImpureReturnTypeMismatch ]
+                                                , testProperty "complains about impure return type mismatches" prop_complainsImpureReturnTypeMismatch ]

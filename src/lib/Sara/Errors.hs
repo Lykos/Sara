@@ -19,7 +19,8 @@ module Sara.Errors( ErrorOr
                   , mismatchingCondTypes
                   , invalidCondType
                   , notAssignable
-                  , otherError ) where
+                  , otherError
+                  , verifierError ) where
 
 import Sara.Types
 import qualified Sara.Types as Ty
@@ -210,3 +211,7 @@ notAssignable = positionedError AssignmentError
 
 otherError :: String -> ErrorOr a
 otherError s = throwError $ OtherError s
+
+-- TODO Make this something better than a string!
+verifierError :: Monad m => String -> ExceptT Error m a
+verifierError s = throwError $ OtherError s

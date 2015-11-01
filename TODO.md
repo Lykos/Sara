@@ -7,3 +7,7 @@
 - Function pointers
 - Generated tests for errors
 - Optional semicolons
+- Remove Unit
+- Short circuit!!
+- More LLVM annotations
+- Syntactic sugar

@@ -1,20 +1,80 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.Verifier ( z3Expression ) where
+module Sara.Verifier ( verify ) where
 
+import Sara.Errors
 import Sara.Z3AstUtils
 import Data.List
+import Control.Monad.Except
 import Sara.Operators
 import qualified Sara.Syntax as S
-import qualified Control.Monad.Trans.Reader as R
 import Sara.Types
 import Sara.Meta
-import Control.Monad.Trans.Class
+import Sara.AstUtils
 import Z3.Monad
 
-instance MonadZ3 m => MonadZ3 (R.ReaderT a m) where
+instance MonadZ3 m => MonadZ3 (ExceptT a m) where
   getSolver = lift getSolver
   getContext = lift getContext
+
+verify :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
+verify prog = defineEverything prog >> verifyFunctions prog
+
+defineEverything :: MonadZ3 z3 => SymbolizerProgram -> z3 ()
+defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig prog
+  where addDecl ::  MonadZ3 z3 => SymbolizerDeclaration -> z3 ()
+        addDecl (S.Function S.Signature{ S.isPure = True, S.args = args, S.retType = retType, S.sigMeta = (m, _) } body _) = do
+          body' <- z3ExpressionAst body
+          args' <- z3Args args
+          (_, _, func) <- z3FuncDecls m (map S.varType args) retType
+          fApp <- mkApp func args'
+          assert =<< mkEq fApp body'
+        addDecl _                                                                                                          = return ()
+        addSig ::  MonadZ3 z3 => SymbolizerSignature -> z3 ()
+        addSig S.Signature{ S.args = args, S.retType = retType, S.preconditions = precs, S.postconditions = posts, S.sigMeta = (m, _) } = do
+          precs' <- conditions precs
+          posts' <- conditions posts
+          args' <- z3Args args
+          (funcPre, funcPost, _) <- z3FuncDecls m (map S.varType args) retType
+          preApp <- mkApp funcPre args'
+          postApp <- mkApp funcPost args'
+          assert =<< mkEq preApp precs'
+          assert =<< mkEq postApp posts'          
+        conditions conds = mkAnd =<< mapM z3ExpressionAst conds
+        z3ExpressionAst e = ast <$> z3Expression e
+        z3Args args = mapM z3Arg args
+        z3Arg (S.TypedVariable _ t (m, _)) = z3Var m t
+
+verifyFunctions :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
+verifyFunctions = mapMDeclarations_ verifyDecl
+  where verifyDecl :: MonadZ3 z3 => SymbolizerDeclaration -> ExceptT Error z3 ()
+        verifyDecl (S.Function S.Signature{ S.isPure = True, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
+          (prePre, postPre, pre) <- conditions pres
+          (prePost, postPost, post) <- conditions posts
+          (preBody, postBody, _) <- runCondAst <$> z3Expression body
+          -- We can assume that the precondition holds.
+          assert pre
+          -- We can also assume that the postconditions all hold
+          assert postPre
+          assert postPost
+          assert postBody
+          -- Now we assert that all the preconditions of our components and our postcondition holds.
+          local $ assertHolds "precondition of the precondition: " prePre
+          local $ assertHolds "precondition of the postcondition: " prePost
+          local $ assertHolds "precondition of the body: " preBody
+          local $ assertHolds "postcondition: " post
+        verifyDecl _                                                                                                    = return ()
+        conditions conds = runCondAst <$> (combine mkAnd =<< (mapM z3Expression conds))
+        assertHolds :: MonadZ3 z3 => String -> AST -> ExceptT Error z3 ()
+        assertHolds contextName assertion = do
+          -- Assume that the assertion is NOT true.
+          assert =<< mkNot assertion
+          res <- withModel $ \model -> modelToString model
+          case res of
+            (Sat, Just s)  -> verifierError $ contextName ++ s
+            (Sat, Nothing) -> verifierError $ contextName ++ "Satisfiable, but no model attached."
+            (Unsat, _)     -> return ()
+            (Undef, _)     -> verifierError $ contextName ++ "Undefined"
 
 z3Sort :: MonadZ3 z3 => Type -> z3 Sort
 z3Sort Boolean = mkBoolSort

@@ -22,7 +22,7 @@ prop_generatesCode p = checkRight input
         untyped = clearTypes p
         checkRight :: String -> Property
         checkRight input = M.monadicIO $ do
-          actual <- M.run $ runExceptT $ compile nopReporter testfile input
+          actual <- M.run $ runExceptT $ compile False nopReporter testfile input
           let example = "\nInput:\n" ++ input ++ "\n\nActual:\n" ++ show actual
           return $ example `counterexample` liftBool (isRight actual)
 

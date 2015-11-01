@@ -22,7 +22,7 @@ isExpected _ _                   = False
 checkRight :: String -> String -> IO (Bool, String)
 checkRight fname input = do
   let expected = parseExpectation fname input
-  actual <- runExceptT $ run nopReporter fname input
+  actual <- runExceptT $ run False nopReporter fname input
   let example = "\nFile: " ++ fname
                 ++ "\n\nExpected:\n" ++ show expected
                 ++ "\n\nInput:\n" ++ input

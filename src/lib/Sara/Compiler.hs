@@ -9,7 +9,9 @@ import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
 import Sara.Meta
+import Sara.Verifier
 
+import qualified Z3.Monad as Z3
 import Control.Monad.Identity
 import Control.Monad.Except
 import Data.Int
@@ -78,19 +80,25 @@ stage report p = p >>= (\a -> lift (report a) >> return a)
 checkStage :: (SymbolizerProgram -> IO ()) -> ParserProgram -> ErrorOrIO SymbolizerProgram
 checkStage report program = stage report $ toErrorOrIO $ checkWithMain program
 
-compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a
-compile' moduleReporter reporter mod filename input = parseStage (reportParsed reporter) filename input
-                                                      >>= checkStage (reportTyped reporter)
-                                                      >>= codegenStage moduleReporter mod
+verifyStage :: SymbolizerProgram -> ErrorOrIO ()
+verifyStage prog = ExceptT $ Z3.evalZ3 (runExceptT $ verify prog)
 
-compile :: Reporter -> String -> String -> ErrorOrIO ()
-compile reporter filename input = ExceptT $ withModule filename $ \mod ->
-  runExceptT $ compile' moduleReporter reporter mod filename input
+compile' :: Bool -> (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a
+compile' verify moduleReporter reporter mod filename input =
+  do
+    p <- parseStage (reportParsed reporter) filename input
+    p' <- checkStage (reportTyped reporter) p
+    when verify (verifyStage p')
+    codegenStage moduleReporter mod p'
+
+compile :: Bool -> Reporter -> String -> String -> ErrorOrIO ()
+compile verify reporter filename input = ExceptT $ withModule filename $ \mod ->
+  runExceptT $ compile' verify moduleReporter reporter mod filename input
   where moduleReporter :: Context -> M.Module -> IO (Either Error ())
         moduleReporter _ mod = reportModule reporter mod >> return (Right ())
 
-run :: Reporter -> String -> String -> ErrorOrIO Int64
-run reporter filename input = withModule filename $ \mod ->
-  compile' runReporter reporter mod filename input
+run :: Bool -> Reporter -> String -> String -> ErrorOrIO Int64
+run verify reporter filename input = withModule filename $ \mod ->
+  compile' verify runReporter reporter mod filename input
   where runReporter :: Context -> M.Module -> IO (Either Error Int64)
         runReporter context mod = reportModule reporter mod >> runStage context mod
