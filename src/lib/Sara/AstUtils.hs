@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Sara.AstUtils ( mapFunctionMetas
                      , mapVariableMetas
                      , mapExpressionMetas
@@ -32,12 +34,12 @@ mapVariableMetas f = runIdentity . transformProgramInternal transformer
 -- | Transformation that can transform all variable and function symbols.
 -- The variable and function metadata has to be redefined, it is set to undefined initially.
 weirdTransformSymbols :: Monad m =>
-                         (TypedVariable b d -> m (m (Expression a' b' c d) -> m (Expression a' b' c d)))  -- ^ Context transformer based on a typed variable
-                         -> (Expression a' b' c d -> m (Expression a' b' c d))                            -- ^ Expression transformer
-                         -> (Signature a' b' c d -> m (Signature a' b' c d))                              -- ^ Signature transformer
-                         -> (TypedVariable b' d -> m (TypedVariable b' d))                                -- ^ TypedVariable transformer
-                         -> Program a b c d                                                               -- ^ Input program
-                         -> m (Program a' b' c d)                                                         -- ^ Output program
+                         (forall x . TypedVariable b d -> m (m x -> m x))       -- ^ Context transformer based on a typed variable
+                         -> (Expression a' b' c d -> m (Expression a' b' c d))  -- ^ Expression transformer
+                         -> (Signature a' b' c d -> m (Signature a' b' c d))    -- ^ Signature transformer
+                         -> (TypedVariable b' d -> m (TypedVariable b' d))      -- ^ TypedVariable transformer
+                         -> Program a b c d                                     -- ^ Input program
+                         -> m (Program a' b' c d)                               -- ^ Output program
 weirdTransformSymbols tVarExpTrans expTrans sigTrans tVarTrans = transformProgramInternal transformer
   where transformer = AstTransformer (const undefined) (const undefined) id id tVarExpTrans return expTrans sigTrans tVarTrans
 
@@ -45,10 +47,10 @@ weirdTransformSymbols tVarExpTrans expTrans sigTrans tVarTrans = transformProgra
 -- The expression metadata has to be redefined, it is set to undefined initially.
 -- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
 weirdTransformExpressions :: Monad m =>
-                             (Expression a b c' d -> m (Expression a b c' d))                              -- ^ Expression transformer
-                             -> (TypedVariable b d -> m (Expression a b c' d) -> m (Expression a b c' d))  -- ^ Context transformer based on a typed variable
-                             -> Program a b c d                                                            -- ^ Input program
-                             -> m (Program a b c' d)                                                       -- ^ Output program
+                             (Expression a b c' d -> m (Expression a b c' d))  -- ^ Expression transformer
+                             -> (forall x . TypedVariable b d -> m x -> m x)   -- ^ Context transformer based on a typed variable
+                             -> Program a b c d                                -- ^ Input program
+                             -> m (Program a b c' d)                           -- ^ Output program
 weirdTransformExpressions transExp tVarExpTrans = transformProgramInternal transformer
   where transformer = AstTransformer id id (const undefined) id tVarExpTrans' return transExp return return
         tVarExpTrans' v = return $ tVarExpTrans v
@@ -113,7 +115,7 @@ mapNodeMetas :: (d -> d') -> Program a b c d -> Program a b c d'
 mapNodeMetas g = runIdentity . transformProgramInternal transformer
   where transformer = AstTransformer id id id g nullTVarContextTrans return return return return
 
-nullTVarContextTrans :: Monad m => TypedVariable b d -> m (m (Expression a' b' c' d') -> m (Expression a' b' c' d'))
+nullTVarContextTrans :: Monad m => x -> m (m y -> m y)
 nullTVarContextTrans = const $ return id
 
 data AstTransformer a b c d a' b' c' d' m
@@ -122,7 +124,7 @@ data AstTransformer a b c d a' b' c' d' m
                    , expMetaTrans :: c -> c'                                                -- ^ Expression metadata transformer
                    , nodeMetaTrans :: d -> d'                                               -- ^ Node metadata transformer
                      -- | Context transformation based on a typed variable
-                   , tVarContextTrans :: TypedVariable b d -> m (m (Expression a' b' c' d') -> m (Expression a' b' c' d'))
+                   , tVarContextTrans :: forall x . TypedVariable b d -> m (m x -> m x)
                    , declTrans :: (Declaration a' b' c' d' -> m (Declaration a' b' c' d'))  -- ^ Declaration transformer
                    , expTrans :: (Expression a' b' c' d' -> m (Expression a' b' c' d'))     -- ^ Expression transformer
                    , sigTrans :: (Signature a' b' c' d' -> m (Signature a' b' c' d'))       -- ^ Signature transformer
@@ -139,8 +141,10 @@ transformProgramInternal transformer (Program decls meta) =
 -- | Powerful internal function to transform a declaration that is used to build up all the exported functions.
 transformDeclarationInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> Declaration a b c d -> m (Declaration a' b' c' d')
 transformDeclarationInternal transformer decl = declTrans transformer =<< transformedDecl
-  where transformer' = transformer{ expTrans = expTrans' }
-        expTrans' exp = foldlM (tVarContextTrans transformer) (expTrans transformer exp) (args $ signature decl)
+  where transformer' = transformer{ expTrans = expTrans', tVarTrans = tVarTrans' }
+        expTrans' exp = contextTrans $ expTrans transformer exp
+        tVarTrans' exp = contextTrans $ tVarTrans transformer exp
+        contextTrans f = foldlM (tVarContextTrans transformer) f (args $ signature decl)
         transformedDecl = transformedDeclWithoutSigAndMeta <*> transformedSig <*> pure transformedMeta
         transformedSig = transformSignatureInternal transformer' $ signature decl
         transformedMeta = nodeMetaTrans transformer $ declMeta decl
