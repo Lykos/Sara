@@ -20,7 +20,7 @@ prop_addsTypes :: TypeCheckerProgram -> Property
 prop_addsTypes p = check input expected actual
   where input = clearTypes p
         expected = return p
-        actual = checkWithoutMain input
+        actual = liftM clearSymbols $ checkWithoutMain input
 
 check :: ParserProgram -> ErrorOr TypeCheckerProgram -> ErrorOr TypeCheckerProgram -> Property
 check input expected actual = example `counterexample` liftBool (actual == expected)
@@ -51,7 +51,7 @@ complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shr
           let wrongSig = inferredSig{ retType = retTyp }
           completeProgram [Function wrongSig exp mkNodeMeta]
         input = finish complete
-        actual = checkWithoutMain . clearTypes
+        actual = liftM clearSymbols . checkWithoutMain . clearTypes
         expected = invalidRetType retTyp expTyp pos
 
 prop_complainsPureReturnTypeMismatch :: Type -> PureExpression -> Property

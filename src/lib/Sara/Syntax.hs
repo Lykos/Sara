@@ -7,16 +7,16 @@ import Sara.Operators
 
 type Name = String
 
-class ExpressionMeta a b where
+class HasExpressionMeta a b where
   expressionMeta :: a -> b
 
-class FunctionMeta a b where
+class HasFunctionMeta a b where
   functionMeta :: a -> b
 
-class VariableMeta a b where
+class HasVariableMeta a b where
   variableMeta :: a -> b
 
-class NodeMeta a b where
+class HasNodeMeta a b where
   nodeMeta :: a -> b
 
 -- | Declaration with 4 types of metadata:
@@ -29,7 +29,7 @@ data Declaration a b c d
   | Extern { signature :: Signature a b c d, declMeta :: d }
   deriving (Eq, Ord, Show)
 
-instance NodeMeta (Declaration a b c d) d where
+instance HasNodeMeta (Declaration a b c d) d where
   nodeMeta = declMeta
 
 -- | Signature with 4 types of metadata:
@@ -47,10 +47,10 @@ data Signature a b c d
               , sigMeta :: (a, d) }
   deriving (Eq, Ord, Show)
 
-instance NodeMeta (Signature a b c d) d where
+instance HasNodeMeta (Signature a b c d) d where
   nodeMeta = snd . sigMeta
 
-instance FunctionMeta (Signature a b c d) a where
+instance HasFunctionMeta (Signature a b c d) a where
   functionMeta = fst . sigMeta
 
 -- | Typed variable with 2 types of metadata:
@@ -62,10 +62,10 @@ data TypedVariable b d
                   , varMeta :: (b, d) }
   deriving (Eq, Ord, Show)
 
-instance VariableMeta (TypedVariable b d) b where
+instance HasVariableMeta (TypedVariable b d) b where
   variableMeta = fst . varMeta
 
-instance NodeMeta (TypedVariable b d) d where
+instance HasNodeMeta (TypedVariable b d) d where
   nodeMeta = snd . varMeta
 
 -- | Expression with 4 types of metadata:
@@ -87,10 +87,10 @@ data Expression a b c d
   | While { cond :: Expression a b c d, inner :: Expression a b c d, expMeta :: (c, d) }
   deriving (Eq, Ord, Show)
 
-instance ExpressionMeta (Expression a b c d) c where
+instance HasExpressionMeta (Expression a b c d) c where
   expressionMeta = fst . expMeta
 
-instance NodeMeta (Expression a b c d) d where
+instance HasNodeMeta (Expression a b c d) d where
   nodeMeta = snd . expMeta
 
 -- | Program with 4 types of metadata:
@@ -102,5 +102,5 @@ data Program a b c d
   = Program { program :: [Declaration a b c d], progMeta :: d }
   deriving (Eq, Ord, Show)
 
-instance NodeMeta (Program a b c d) d where
+instance HasNodeMeta (Program a b c d) d where
   nodeMeta = progMeta

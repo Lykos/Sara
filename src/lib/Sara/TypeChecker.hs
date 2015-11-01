@@ -4,6 +4,7 @@ module Sara.TypeChecker ( checkWithoutMain
 import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State
 import Data.Bifunctor
 import qualified Data.Map.Strict as M
 
@@ -17,7 +18,10 @@ import Sara.AstUtils
 import Sara.Errors
 import qualified Sara.Checker as C
 import Sara.PureChecker
-import Sara.Symbols
+import Sara.Symbolizer
+
+type FunctionMap = M.Map FunctionKey ParserSignature
+type VariableMap = M.Map Name ParserTypedVariable
 
 data TypeCheckerContext = TypeCheckerContext { funcs :: FunctionMap
                                              , vars :: VariableMap }
@@ -29,42 +33,33 @@ checkReturnTypes = mapMDeclarations_ checkRetType
                 sigType = retType sig
         checkRetType Extern{}              = return ()
 
-checkWithoutMain :: ParserProgram -> ErrorOr TypeCheckerProgram
+checkWithoutMain :: ParserProgram -> ErrorOr SymbolizerProgram
 checkWithoutMain prog = C.checkWithoutMain prog >> typeCheckProgram prog
 
-checkWithMain :: ParserProgram -> ErrorOr TypeCheckerProgram
+checkWithMain :: ParserProgram -> ErrorOr SymbolizerProgram
 checkWithMain prog = C.checkWithMain prog >> typeCheckProgram prog
 
-typeCheckProgram :: ParserProgram -> ErrorOr TypeCheckerProgram
+typeCheckProgram :: ParserProgram -> ErrorOr SymbolizerProgram
 typeCheckProgram p = do
   funcs <- functions p
   p' <- typeCheckExpressions funcs p
   checkReturnTypes p'
-  checkPureness funcs p'
-  return p'
+  let p'' = symbolize p'
+  checkPureness p''
+  return p''
 
 functions :: ParserProgram -> ErrorOr FunctionMap
-functions = functionsFromDecls . program
-
-functionsFromDecls :: [ParserDeclaration] -> ErrorOr FunctionMap
-functionsFromDecls = foldl addOneFunction (return M.empty)
-
-addOneFunction :: ErrorOr FunctionMap -> ParserDeclaration -> ErrorOr FunctionMap
-addOneFunction funcs decl = do
-  let sig = signature decl
-  let pos = declarationPos decl
-  funcs' <- funcs
-  let f@(FunctionKey name argTypes) = functionKey sig
-  case f `M.lookup` funcs' of
-    Just sig' -> redeclaredFunction name argTypes (signaturePos sig') pos
-    Nothing   -> return ()
-  return $ insertFunction sig funcs'
+functions prog = execStateT (mapMSignatures_ addSignature prog) M.empty
+  where addSignature sig = do
+          let f@(FunctionKey name argTypes) = functionKey sig
+          oldFunc <- gets (M.lookup f)
+          case oldFunc of
+            Just sig' -> lift $ redeclaredFunction name argTypes (signaturePos sig') (signaturePos sig)
+            Nothing   -> return ()
+          modify $ insertFunction sig
 
 insertFunction :: ParserSignature -> FunctionMap -> FunctionMap
 insertFunction sig = M.insert (functionKey sig) sig
-
-functionKey :: Signature a b c d -> FunctionKey
-functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
 
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
@@ -92,8 +87,8 @@ typeCheckExpressions funcMap program =
                 whileType condTyp condPos = lift $ invalidCondType condTyp condPos
                 typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
                 typed t = return exp{ expMeta = meta' }
-                  where meta' :: (TypeCheckerExpressionMeta, ParserNodeMeta)
-                        meta' = first (const $ TypeCheckerExpressionMeta t) (expMeta exp)
+                  where meta' :: (ExpressionMeta, NodeMeta)
+                        meta' = first (const $ ExpressionMeta t) (expMeta exp)
                 varType :: Name -> ReaderT TypeCheckerContext (ExceptT Error Identity) Type
                 varType name = do
                   vars' <- asks vars

@@ -46,7 +46,7 @@ library
                      , Sara.CodeGenerator
                      , Sara.Verifier
                      , Sara.Meta
-                     , Sara.Symbols
+                     , Sara.Symbolizer
                      , Sara.Checker
                      , Sara.PureChecker
   other-extensions:    GeneralizedNewtypeDeriving

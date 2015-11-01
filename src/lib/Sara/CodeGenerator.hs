@@ -151,7 +151,7 @@ typ T.Boolean = IntegerType booleanBits
 typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
 
-define :: TypeCheckerSignature -> [BasicBlock] -> LLVM ()
+define :: SymbolizerSignature -> [BasicBlock] -> LLVM ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
@@ -160,7 +160,7 @@ define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body =
   , basicBlocks = body
   }
 
-extern :: TypeCheckerSignature -> LLVM ()
+extern :: SymbolizerSignature -> LLVM ()
 extern = flip define []
 
 local :: Name ->  Type -> Operand
@@ -220,11 +220,11 @@ store ptr val = instr $ Store False ptr val Nothing 0 []
 load :: Operand -> Type -> Codegen Operand
 load ptr = instr $ Load False ptr Nothing 0 []
 
-codegenDeclaration :: TypeCheckerDeclaration -> LLVM ()
+codegenDeclaration :: SymbolizerDeclaration -> LLVM ()
 codegenDeclaration (S.Extern sig _)        = extern sig
 codegenDeclaration (S.Function sig body _) = codegenFunction sig body
 
-codegenFunction :: TypeCheckerSignature -> TypeCheckerExpression -> LLVM ()
+codegenFunction :: SymbolizerSignature -> SymbolizerExpression -> LLVM ()
 codegenFunction signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
@@ -238,10 +238,10 @@ codegenFunction signature body = define signature bls
         assign name var
       codegenExpression body >>= ret
 
-codegenProgram :: TypeCheckerProgram -> LLVM ()
+codegenProgram :: SymbolizerProgram -> LLVM ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
 
-codegen :: Module -> TypeCheckerProgram -> Module
+codegen :: Module -> SymbolizerProgram -> Module
 codegen mod program = runLLVM mod $ codegenProgram program
 
 withModule :: String -> (Module -> a) -> a
@@ -366,7 +366,7 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
-codegenExpression :: TypeCheckerExpression -> Codegen Operand
+codegenExpression :: SymbolizerExpression -> Codegen Operand
 codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
   S.Unit{}                             -> unit
   (S.Boolean b _)                      -> boolean b

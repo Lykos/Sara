@@ -4,40 +4,64 @@ import Text.Parsec.Pos
 import qualified Sara.Syntax as S
 import Sara.Types
 
-newtype ParserNodeMeta
-  = ParserNodeMeta { nodePos :: SourcePos }
+newtype NodeMeta
+  = NodeMeta { nodePos :: SourcePos }
   deriving (Eq, Ord, Show)
 
-newtype TypeCheckerExpressionMeta
-  = TypeCheckerExpressionMeta { expTyp :: Type }
+newtype ExpressionMeta
+  = ExpressionMeta { expTyp :: Type }
   deriving (Eq, Ord, Show)
-                                
-type ParserProgram = S.Program () () () ParserNodeMeta
 
-type ParserSignature = S.Signature () () () ParserNodeMeta
+type Id = Int
 
-type ParserExpression = S.Expression () () () ParserNodeMeta
+data FunctionMeta =
+  FunctionMeta { funcSymName :: S.Name
+               , funcSymid :: Id }
+  deriving (Eq, Ord, Show)
 
-type ParserDeclaration = S.Declaration () () () ParserNodeMeta
+data VariableMeta =
+  VariableMeta { varSymName :: S.Name
+               , varSymid :: Id }
+  deriving (Eq, Ord, Show)
 
-type ParserTypedVariable = S.TypedVariable () ParserNodeMeta
+type ParserProgram = S.Program () () () NodeMeta
 
-type TypeCheckerProgram = S.Program () () TypeCheckerExpressionMeta ParserNodeMeta
+type ParserSignature = S.Signature () () () NodeMeta
 
-type TypeCheckerSignature = S.Signature () () TypeCheckerExpressionMeta ParserNodeMeta
+type ParserExpression = S.Expression () () () NodeMeta
 
-type TypeCheckerExpression = S.Expression () () TypeCheckerExpressionMeta ParserNodeMeta
+type ParserDeclaration = S.Declaration () () () NodeMeta
 
-type TypeCheckerDeclaration = S.Declaration () () TypeCheckerExpressionMeta ParserNodeMeta
+type ParserTypedVariable = S.TypedVariable () NodeMeta
 
-expressionTyp :: S.Expression a b TypeCheckerExpressionMeta d -> Type
+type TypeCheckerProgram = S.Program () () ExpressionMeta NodeMeta
+
+type TypeCheckerSignature = S.Signature () () ExpressionMeta NodeMeta
+
+type TypeCheckerExpression = S.Expression () () ExpressionMeta NodeMeta
+
+type TypeCheckerDeclaration = S.Declaration () () ExpressionMeta NodeMeta
+
+type TypeCheckerTypedVariable = ParserTypedVariable
+
+type SymbolizerProgram = S.Program FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type SymbolizerSignature = S.Signature FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type SymbolizerExpression = S.Expression FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type SymbolizerDeclaration = S.Declaration FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type SymbolizerTypedVariable = TypeCheckerTypedVariable
+
+expressionTyp :: S.Expression a b ExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta
 
-expressionPos :: S.Expression a b c ParserNodeMeta -> SourcePos
+expressionPos :: S.Expression a b c NodeMeta -> SourcePos
 expressionPos = nodePos . S.nodeMeta
 
-signaturePos :: S.Signature a b c ParserNodeMeta -> SourcePos
+signaturePos :: S.Signature a b c NodeMeta -> SourcePos
 signaturePos = nodePos . S.nodeMeta
 
-declarationPos :: S.Declaration a b c ParserNodeMeta -> SourcePos
+declarationPos :: S.Declaration a b c NodeMeta -> SourcePos
 declarationPos = nodePos . S.nodeMeta

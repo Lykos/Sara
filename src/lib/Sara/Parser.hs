@@ -137,11 +137,11 @@ term = simpleExpression
        <|> parensToken expression
        <?> "expression"
 
-addNodeMeta :: Parser (ParserNodeMeta -> a) -> Parser a
+addNodeMeta :: Parser (NodeMeta -> a) -> Parser a
 addNodeMeta parser = do
   pos <- getPosition
   ast <- parser
-  return $ ast $ ParserNodeMeta pos
+  return $ ast $ NodeMeta pos
 
 addExpressionMeta :: Parser (ExpMeta -> a) -> Parser a
 addExpressionMeta parser = do
@@ -164,11 +164,11 @@ simpleExpression = addExpressionMeta $
 empty :: Parser Void
 empty = return undefined
 
-type ExpMeta = ((), ParserNodeMeta)
+type ExpMeta = ((), NodeMeta)
 type UntypedExpression = ExpMeta -> ParserExpression
 
 mkExpMeta :: SourcePos -> ExpMeta
-mkExpMeta pos = ((), ParserNodeMeta pos)
+mkExpMeta pos = ((), NodeMeta pos)
 
 unit :: Parser UntypedExpression
 unit = parensToken empty >> return S.Unit

@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Sara.PureChecker ( checkPureness ) where
 
 import Sara.Syntax as S
@@ -5,40 +7,56 @@ import Sara.AstUtils
 import Sara.Meta
 import Sara.Operators
 import Sara.Errors
-import Sara.Symbols
-import qualified Data.Map.Strict as M
 import Data.Maybe
+import Control.Monad
+import Control.Monad.Reader.Class
+import qualified Control.Monad.Trans.Reader as R
+import Control.Monad.Except
+import Control.Monad.Identity
+import qualified Data.Map.Strict as M
 
-checkPureness :: FunctionMap -> TypeCheckerProgram -> ErrorOr ()
-checkPureness funcs prog = checkSignatures funcs prog >> checkPureBodies funcs prog
+type PureMap = M.Map FunctionMeta Bool
 
-checkSignatures :: FunctionMap -> TypeCheckerProgram -> ErrorOr ()
-checkSignatures funcs = mapMSignatures_ checkOneSignature
+checkPureness :: SymbolizerProgram -> ErrorOr ()
+checkPureness prog = R.runReaderT (checkPureness' prog) (createPureMap prog)
+
+checkPureness' :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity)  ()
+checkPureness' prog = do
+  checkSignatures prog
+  checkPureBodies prog
+
+createPureMap :: SymbolizerProgram -> PureMap
+createPureMap = foldMapSignatures sigPure
+  where sigPure sig = M.singleton (fst $ sigMeta sig) (isPure sig)
+
+checkSignatures :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkSignatures = mapMSignatures_ checkOneSignature
   where checkOneSignature Signature{ preconditions = precs, postconditions = posts } =
           checkConditions "precondition" precs >> checkConditions "postcondition" posts
-        checkConditions name conds = mapM_ (checkPureExpression funcs name) conds
+        checkConditions name conds = mapM_ (checkPureExpression name) conds
 
-checkPureBodies :: FunctionMap -> TypeCheckerProgram -> ErrorOr ()
-checkPureBodies funcs = mapMDeclarations_ checkPureBody
+checkPureBodies :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkPureBodies = mapMDeclarations_ checkPureBody
   where checkPureBody Extern{}                                                         = return ()
         checkPureBody Function{ signature = Signature{ isPure = False } }              = return ()
-        checkPureBody Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression funcs name body
+        checkPureBody Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression name body
 
-checkPureExpression :: FunctionMap -> Name -> TypeCheckerExpression -> ErrorOr ()
-checkPureExpression funcs name = mapMExpression_ checkPureSingleExpression
-  where checkPureSingleExpression exp = if isPure exp then return () else impureExpression name (expressionPos exp)
-        isPure :: TypeCheckerExpression -> Bool
-        isPure S.Unit{}                            = True
-        isPure S.Boolean{}                         = True
-        isPure S.Integer{}                         = True
-        isPure S.Double{}                          = True
-        isPure UnaryOperation{}                    = True
-        isPure BinaryOperation{ binOp = Assign }   = False
-        isPure BinaryOperation{}                   = True
-        isPure Variable{}                          = True
-        isPure Call{ expName = n, expArgs = args } = S.isPure sig
-          where sig :: ParserSignature
-                sig = fromJust $ FunctionKey n (map expressionTyp args) `M.lookup` funcs
-        isPure Conditional{}                       = True
-        isPure Block{}                             = True
-        isPure _                                   = False
+checkPureExpression :: Name -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity)  ()
+checkPureExpression name = mapMExpression_ checkPureSingleExpression
+  where checkPureSingleExpression exp = do
+          cond <- checkPure exp
+          unless cond (lift $ impureExpression name $ expressionPos exp)
+        
+checkPure :: MonadReader PureMap r => SymbolizerExpression -> r Bool
+checkPure S.Unit{}                            = return True
+checkPure S.Boolean{}                         = return True
+checkPure S.Integer{}                         = return True
+checkPure S.Double{}                          = return True
+checkPure UnaryOperation{}                    = return True
+checkPure BinaryOperation{ binOp = Assign }   = return False
+checkPure BinaryOperation{}                   = return True
+checkPure Variable{}                          = return True
+checkPure Call{ expCallMeta = sym }           = asks $ fromJust . (M.lookup sym)
+checkPure Conditional{}                       = return True
+checkPure Block{}                             = return True
+checkPure _                                   = return False

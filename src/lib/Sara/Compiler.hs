@@ -27,7 +27,7 @@ passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
 type ErrorOrIO a = ExceptT Error IO a
 
-codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> TypeCheckerProgram -> ErrorOrIO a
+codegenStage :: (Context -> M.Module -> IO (Either Error a)) -> Module -> SymbolizerProgram -> ErrorOrIO a
 codegenStage report modl prog = ExceptT $ withContext $ \context -> codegen' context (codegen modl prog)
   where codegen' context modl' = flattenError $ runExceptT $ M.withModuleFromAST context modl' $ generate context
         generate context m = withPassManager passes $ \pm -> do
@@ -75,7 +75,7 @@ toErrorOrIO = mapExceptT $ return . runIdentity
 stage :: (b -> IO ()) -> ErrorOrIO b -> ErrorOrIO b
 stage report p = p >>= (\a -> lift (report a) >> return a)
 
-checkStage :: (TypeCheckerProgram -> IO ()) -> ParserProgram -> ErrorOrIO TypeCheckerProgram
+checkStage :: (SymbolizerProgram -> IO ()) -> ParserProgram -> ErrorOrIO SymbolizerProgram
 checkStage report program = stage report $ toErrorOrIO $ checkWithMain program
 
 compile' :: (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a

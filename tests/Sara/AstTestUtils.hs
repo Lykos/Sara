@@ -6,6 +6,7 @@ module Sara.AstTestUtils (
   , identifier
   , pos
   , clearPositions
+  , clearSymbols
   , testfile
   , inferSignature
   , completeProgram
@@ -60,11 +61,11 @@ testfile = "<testfile>"
 pos :: SourcePos
 pos = newPos testfile 0 0
 
-addNodeMeta :: Gen (ParserNodeMeta -> a) -> Gen a
+addNodeMeta :: Gen (NodeMeta -> a) -> Gen a
 addNodeMeta gen = gen <*> pure mkNodeMeta
 
 mkExpMeta :: Type -> ExpMeta
-mkExpMeta t = (TypeCheckerExpressionMeta t, ParserNodeMeta pos)
+mkExpMeta t = (ExpressionMeta t, NodeMeta pos)
 
 addExpMeta :: Type -> Gen UntypedExpression -> Gen TypeCheckerExpression
 addExpMeta t gen = gen <*> pure (mkExpMeta t)
@@ -93,7 +94,7 @@ inferSignature :: Bool -> Name -> [TypeCheckerExpression] -> [TypeCheckerExpress
 inferSignature pure name precs posts exp = Signature pure name freeVars (expressionTyp exp) precs posts ((), mkNodeMeta)
   where freeVars = concatMap freeVariables precs ++ concatMap freeVariables posts ++ freeVariables exp
 
-type UnpositionedDeclaration = ParserNodeMeta -> TypeCheckerDeclaration
+type UnpositionedDeclaration = NodeMeta -> TypeCheckerDeclaration
 
 function :: Gen UnpositionedDeclaration
 function = do
@@ -106,7 +107,7 @@ function = do
 typ :: Gen Type
 typ = elements [T.Unit, T.Boolean, T.Integer, T.Double]
 
-type ExpMeta = (TypeCheckerExpressionMeta, ParserNodeMeta)
+type ExpMeta = (ExpressionMeta, NodeMeta)
 type UntypedExpression = ExpMeta -> TypeCheckerExpression
 
 boolean :: Gen UntypedExpression
@@ -225,8 +226,8 @@ fixName :: [Name] -> Name -> Name
 fixName names name | name `elem` names = fixName names (name ++ "0")
                    | otherwise         = name
 
-mkNodeMeta :: ParserNodeMeta
-mkNodeMeta = ParserNodeMeta pos
+mkNodeMeta :: NodeMeta
+mkNodeMeta = NodeMeta pos
 
 arbitraryProgram :: Gen TypeCheckerProgram
 arbitraryProgram = do
@@ -294,7 +295,7 @@ shrinkExpression (Block stmts exp m)                = [exp]
                                                       ++ childrenWithType m stmts
                                                       ++ [Block (init stmts) (last stmts) m | not (null stmts), expressionTyp (last stmts) == expTyp (fst m)]
                                                       ++ [Block s e m | (s, e) <- shrink (stmts, exp)]
-shrinkExpression (While cond body m)                = While cond (S.Unit (TypeCheckerExpressionMeta T.Unit, mkNodeMeta)) m
+shrinkExpression (While cond body m)                = While cond (S.Unit (ExpressionMeta T.Unit, mkNodeMeta)) m
                                                       : [While c b m | (c, b) <- shrink (cond, body)]
 
 childrenWithType :: ExpMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
@@ -358,3 +359,6 @@ clearPositions = mapNodeMetas $ const $ mkNodeMeta
 
 clearTypes :: TypeCheckerProgram -> ParserProgram
 clearTypes = mapExpressionMetas $ const ()
+
+clearSymbols :: SymbolizerProgram -> TypeCheckerProgram
+clearSymbols = mapVariableMetas (const ()) . mapFunctionMetas (const ())
