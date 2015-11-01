@@ -10,7 +10,7 @@ import LLVM.General.Module
 
 process :: String -> String -> IO ()
 process fname input = do
-  result <- runExceptT $ run reporter fname input
+  result <- runExceptT $ run True reporter fname input
   case result of
     (Left err)  -> putStrLn $ showError input err
     (Right res) -> report "Result" $ show res

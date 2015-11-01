@@ -31,15 +31,16 @@ defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig
           assert =<< mkEq fApp body'
         addDecl _                                                                                                          = return ()
         addSig ::  MonadZ3 z3 => SymbolizerSignature -> z3 ()
-        addSig S.Signature{ S.args = args, S.retType = retType, S.preconditions = precs, S.postconditions = posts, S.sigMeta = (m, _) } = do
-          precs' <- conditions precs
-          posts' <- conditions posts
+        addSig S.Signature{ S.args = args, S.retType = retType, S.preconditions = pres, S.postconditions = posts, S.sigMeta = (m, _) } = do
+          pre' <- conditions pres
+          post' <- conditions posts
           args' <- z3Args args
           (funcPre, funcPost, _) <- z3FuncDecls m (map S.varType args) retType
           preApp <- mkApp funcPre args'
           postApp <- mkApp funcPost args'
-          assert =<< mkEq preApp precs'
-          assert =<< mkEq postApp posts'          
+          assert =<< mkEq preApp pre'
+          assert =<< mkEq postApp post'          
+        conditions []    = mkTrue
         conditions conds = mkAnd =<< mapM z3ExpressionAst conds
         z3ExpressionAst e = ast <$> z3Expression e
         z3Args args = mapM z3Arg args
@@ -48,7 +49,7 @@ defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig
 verifyFunctions :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
 verifyFunctions = mapMDeclarations_ verifyDecl
   where verifyDecl :: MonadZ3 z3 => SymbolizerDeclaration -> ExceptT Error z3 ()
-        verifyDecl (S.Function S.Signature{ S.isPure = True, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
+        verifyDecl (S.Function S.Signature{ S.sigName = name, S.isPure = True, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
           (prePre, postPre, pre) <- conditions pres
           (prePost, postPost, post) <- conditions posts
           (preBody, postBody, _) <- runCondAst <$> z3Expression body
@@ -59,11 +60,12 @@ verifyFunctions = mapMDeclarations_ verifyDecl
           assert postPost
           assert postBody
           -- Now we assert that all the preconditions of our components and our postcondition holds.
-          local $ assertHolds "precondition of the precondition: " prePre
-          local $ assertHolds "precondition of the postcondition: " prePost
-          local $ assertHolds "precondition of the body: " preBody
-          local $ assertHolds "postcondition: " post
+          local $ assertHolds ("precondition of the precondition of " ++ name ++" fails:\n") prePre
+          local $ assertHolds ("precondition of the postcondition of " ++ name ++" fails:\n") prePost
+          local $ assertHolds ("precondition of the body of " ++ name ++" fails:\n") preBody
+          local $ assertHolds ("postcondition of " ++ name ++" fails:\n") post
         verifyDecl _                                                                                                    = return ()
+        conditions []    = (,,) <$> mkTrue <*> mkTrue <*> mkTrue
         conditions conds = runCondAst <$> (combine mkAnd =<< (mapM z3Expression conds))
         assertHolds :: MonadZ3 z3 => String -> AST -> ExceptT Error z3 ()
         assertHolds contextName assertion = do
@@ -97,7 +99,8 @@ z3FuncDecls (FunctionMeta name index) argTypes retType = do
   funcSym <- z3Symbol "func" name index
   argSorts <- mapM z3Sort argTypes
   retSort <- z3Sort retType
-  (,,) <$> mkFuncDecl preSym argSorts retSort <*> mkFuncDecl postSym argSorts retSort <*> mkFuncDecl funcSym argSorts retSort
+  boolSort <- mkBoolSort
+  (,,) <$> mkFuncDecl preSym argSorts boolSort <*> mkFuncDecl postSym argSorts boolSort <*> mkFuncDecl funcSym argSorts retSort
 
 -- | Create an expression and its precondition and postcondition.
 z3Expression :: MonadZ3 z3 => SymbolizerExpression -> z3 CondAST
