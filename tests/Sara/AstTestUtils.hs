@@ -243,8 +243,7 @@ completeProgram decls = do
     where fixFunctionNameClashes :: TypeCheckerProgram -> TypeCheckerProgram
           fixFunctionNameClashes prog = evalState (fixFunctionNameClashes' prog) []
           fixFunctionNameClashes' :: TypeCheckerProgram -> State [Name] TypeCheckerProgram
-          fixFunctionNameClashes' prog =
-            transformProgram id id return fixExpression fixSignature return prog
+          fixFunctionNameClashes' prog = mapMExpressions fixExpression prog >>= mapMSignatures fixSignature
           fixSignature :: TypeCheckerSignature -> State [Name] TypeCheckerSignature
           fixSignature s@Signature{ S.sigName = n } = do
             n' <- fixName' n

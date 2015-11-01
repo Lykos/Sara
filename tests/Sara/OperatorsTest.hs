@@ -14,5 +14,5 @@ prop_binarySymbolInjective :: BinaryOperator -> BinaryOperator -> Property
 prop_binarySymbolInjective a b = a /= b ==> binarySymbol a /= binarySymbol b
 
 operatorsGroup :: Test
-operatorsGroup = testGroup "Operators Tests" [ testProperty "unary symbol injective" prop_unarySymbolInjective
-                                             , testProperty "binary symbol injective" prop_binarySymbolInjective ]
+operatorsGroup = testGroup "OperatorsTests" [ testProperty "unary symbol injective" prop_unarySymbolInjective
+                                            , testProperty "binary symbol injective" prop_binarySymbolInjective ]

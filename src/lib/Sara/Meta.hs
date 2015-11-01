@@ -30,14 +30,14 @@ type TypeCheckerExpression = S.Expression () () TypeCheckerExpressionMeta Parser
 
 type TypeCheckerDeclaration = S.Declaration () () TypeCheckerExpressionMeta ParserNodeMeta
 
-expressionTyp :: TypeCheckerExpression -> Type
+expressionTyp :: S.Expression a b TypeCheckerExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta
 
-expressionPos :: TypeCheckerExpression -> SourcePos
+expressionPos :: S.Expression a b c ParserNodeMeta -> SourcePos
 expressionPos = nodePos . S.nodeMeta
 
-signaturePos :: ParserSignature -> SourcePos
+signaturePos :: S.Signature a b c ParserNodeMeta -> SourcePos
 signaturePos = nodePos . S.nodeMeta
 
-declarationPos :: ParserDeclaration -> SourcePos
+declarationPos :: S.Declaration a b c ParserNodeMeta -> SourcePos
 declarationPos = nodePos . S.nodeMeta

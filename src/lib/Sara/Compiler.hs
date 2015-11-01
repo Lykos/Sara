@@ -57,7 +57,7 @@ runStage context mod = jit context $ \engine -> EE.withModuleInEngine engine mod
             (Just fn) -> do
               res <- runFn fn
               return $ Right res
-            Nothing   -> return $ Left $ OtherError "Main function not found."
+            Nothing   -> error "Main function not found."
 
 flattenError :: IO (Either String (Either Error a)) -> IO (Either Error a)
 flattenError res = do

@@ -1,13 +1,11 @@
-module Sara.TypeChecker (
-  checkWithoutMain
-  , checkWithMain) where
+module Sara.TypeChecker ( checkWithoutMain
+                        , checkWithMain ) where
 
-import Control.Monad
-import Data.Monoid
-import Data.Maybe
+import Control.Monad.Identity
+import Control.Monad.Except
+import Control.Monad.Trans.Reader
 import Data.Bifunctor
-
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
 import qualified Sara.Types as T
 import qualified Sara.Syntax as S
@@ -17,92 +15,39 @@ import Sara.Types
 import Sara.Operators
 import Sara.AstUtils
 import Sara.Errors
+import qualified Sara.Checker as C
+import Sara.PureChecker
+import Sara.Symbols
 
-data FunctionKey =
-  FunctionKey Name [Type]
-  deriving (Eq, Ord, Show)
+data TypeCheckerContext = TypeCheckerContext { funcs :: FunctionMap
+                                             , vars :: VariableMap }
 
-type FunctionMap = Map.Map FunctionKey ParserSignature
-type VariableMap = Map.Map Name ParserTypedVariable
-
-checkProgram :: ParserProgram -> ErrorOr TypeCheckerProgram
-checkProgram p@(Program decls _) = do
-  funcs <- functions p
-  decls' <- mapM (checkDeclaration funcs) decls
-  return p{ program = decls' }
+checkReturnTypes :: TypeCheckerProgram -> ErrorOr ()
+checkReturnTypes = mapMDeclarations_ checkRetType
+  where checkRetType (Function sig body _) = when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
+          where bodyType = expressionTyp body
+                sigType = retType sig
+        checkRetType Extern{}              = return ()
 
 checkWithoutMain :: ParserProgram -> ErrorOr TypeCheckerProgram
-checkWithoutMain = checkProgram
+checkWithoutMain prog = C.checkWithoutMain prog >> typeCheckProgram prog
 
 checkWithMain :: ParserProgram -> ErrorOr TypeCheckerProgram
-checkWithMain p = checkMain p >> checkProgram p
+checkWithMain prog = C.checkWithMain prog >> typeCheckProgram prog
 
-checkMain :: Program a b c d -> ErrorOr ()
-checkMain program = unless (hasMain program) noMain
-
-hasMain :: Program a b c d -> Bool
-hasMain = getAny . foldMapSignatures (\s -> Any $ sigName s == "main")
-
-checkSignature :: FunctionMap -> ParserSignature -> ErrorOr TypeCheckerSignature
-checkSignature funcs sig@(Signature isPure name args retType precs posts meta) = checkSignature' sig
-                                                                                 >> Signature isPure name args retType
-                                                                                 <$> checkConditions "precondition" precs
-                                                                                 <*> checkConditions "postcondition" posts
-                                                                                 <*> pure meta
-  where checkConditions name conds = mapM (checkCondition name) conds
-        checkCondition name cond = do
-          cond' <- typeCheckFunctionBody funcs sig cond
-          checkPureExpression funcs name cond'
-          return cond'
-        checkSignature' :: ParserSignature -> ErrorOr ()
-        checkSignature' Signature{ sigName = "main", args = [], retType = T.Integer } = return ()
-        checkSignature' s@Signature{ sigName = "main", args = [], retType = t }       = invalidMainRetType t (signaturePos s)
-        checkSignature' s@Signature{ sigName = "main", args = a }                     = invalidMainArgs (map varType a) (signaturePos s)
-        checkSignature' _                                                             = return ()
-
-checkDeclaration :: FunctionMap -> ParserDeclaration -> ErrorOr TypeCheckerDeclaration
-checkDeclaration funcs (Function sig exp meta) = do
-  exp' <- typeCheckFunctionBody funcs sig exp
-  checkPure funcs sig exp'
-  Function <$> checkSignature funcs sig <*> pure exp' <*> pure meta
-checkDeclaration funcs (Extern sig meta)       = Extern <$> checkSignature funcs sig <*> pure meta
-
-checkPure :: FunctionMap -> ParserSignature -> TypeCheckerExpression -> ErrorOr ()
-checkPure funcs sig = if isPure sig then checkExpression (checkPureExpression funcs $ sigName sig) else const $ return ()
-
-checkPureExpression :: FunctionMap -> Name -> TypeCheckerExpression -> ErrorOr ()
-checkPureExpression funcs name exp = if isPure exp then return () else impureExpression name (expressionPos exp)
-  where isPure :: TypeCheckerExpression -> Bool
-        isPure S.Unit{}                            = True
-        isPure S.Boolean{}                         = True
-        isPure S.Integer{}                         = True
-        isPure S.Double{}                          = True
-        isPure UnaryOperation{}                    = True
-        isPure BinaryOperation{ binOp = Assign }   = False
-        isPure BinaryOperation{}                   = True
-        isPure Variable{}                          = True
-        isPure Call{ expName = n, expArgs = args } = S.isPure sig
-          where sig :: ParserSignature
-                sig = fromJust $ FunctionKey n (map expressionTyp args) `Map.lookup` funcs
-        isPure Conditional{}                       = True
-        isPure Block{}                             = True
-        isPure _                                   = False
-
-typeCheckFunctionBody :: FunctionMap -> ParserSignature -> ParserExpression -> ErrorOr TypeCheckerExpression
-typeCheckFunctionBody funcs sig body = do
-  let keyedVar var@(TypedVariable varName _ _) = (varName, var)
-  let vars = Map.fromList $ map keyedVar (args sig)
-  body' <- typeCheckExpression funcs vars body
-  let bodyType = expressionTyp body'
-  let sigType = retType sig
-  when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body'))
-  return body'
+typeCheckProgram :: ParserProgram -> ErrorOr TypeCheckerProgram
+typeCheckProgram p = do
+  funcs <- functions p
+  p' <- typeCheckExpressions funcs p
+  checkReturnTypes p'
+  checkPureness funcs p'
+  return p'
 
 functions :: ParserProgram -> ErrorOr FunctionMap
 functions = functionsFromDecls . program
 
 functionsFromDecls :: [ParserDeclaration] -> ErrorOr FunctionMap
-functionsFromDecls = foldl addOneFunction (return Map.empty)
+functionsFromDecls = foldl addOneFunction (return M.empty)
 
 addOneFunction :: ErrorOr FunctionMap -> ParserDeclaration -> ErrorOr FunctionMap
 addOneFunction funcs decl = do
@@ -110,28 +55,30 @@ addOneFunction funcs decl = do
   let pos = declarationPos decl
   funcs' <- funcs
   let f@(FunctionKey name argTypes) = functionKey sig
-  case f `Map.lookup` funcs' of
+  case f `M.lookup` funcs' of
     Just sig' -> redeclaredFunction name argTypes (signaturePos sig') pos
     Nothing   -> return ()
   return $ insertFunction sig funcs'
 
 insertFunction :: ParserSignature -> FunctionMap -> FunctionMap
-insertFunction sig = Map.insert (functionKey sig) sig
+insertFunction sig = M.insert (functionKey sig) sig
 
 functionKey :: Signature a b c d -> FunctionKey
 functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
 
-typeCheckExpression :: FunctionMap -> VariableMap -> ParserExpression -> ErrorOr TypeCheckerExpression
-typeCheckExpression funcs vars = transformExpression (const undefined) id typeCheckSingleExpression
-  where typeCheckSingleExpression exp = case exp of
+typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
+typeCheckExpressions funcMap program =
+  runReaderT (weirdTransformExpressions typeCheckSingleExpression tVarContextTrans program) (TypeCheckerContext funcMap M.empty)
+  where tVarContextTrans tVar = local (addVar tVar)
+        addVar tVar context = context{ vars = vars' }
+          where vars' = M.insert (varName tVar) tVar $ vars context
+        typeCheckSingleExpression exp = case exp of
           S.Boolean{}                        -> typed T.Boolean
           S.Integer{}                        -> typed T.Integer
           S.Double{}                         -> typed T.Double
           S.Unit{}                           -> typed T.Unit
           UnaryOperation op subExp _         -> typed =<< unOpType op (expressionTyp subExp)
-          BinaryOperation op left right _    -> do
-            when (op == Assign) (checkAssignable left) -- TODO This should be done before the type checker
-            typed =<< binOpType op (expressionTyp left) (expressionTyp right)
+          BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp left) (expressionTyp right)
           Variable name _ _                  -> typed =<< varType name
           Call name args _ _                 -> typed =<< funcType name (map expressionTyp args)
           Conditional cond thenExp elseExp _ -> typed =<< condType (expressionTyp cond) (expressionTyp thenExp) (expressionTyp elseExp) (expressionPos cond)
@@ -139,30 +86,31 @@ typeCheckExpression funcs vars = transformExpression (const undefined) id typeCh
           While cond _ _                     -> typed =<< whileType (expressionTyp cond) (expressionPos cond)
           where pos = expressionPos exp
                 condType T.Boolean thenType elseType _ | thenType == elseType = return thenType
-                                                       | otherwise            = mismatchingCondTypes thenType elseType pos
-                condType condTyp _ _ condPos                                  = invalidCondType condTyp condPos
+                                                       | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
+                condType condTyp _ _ condPos                                  = lift $ invalidCondType condTyp condPos
                 whileType T.Boolean _     = return T.Unit
-                whileType condTyp condPos = invalidCondType condTyp condPos
-                checkAssignable :: TypeCheckerExpression -> ErrorOr ()
-                checkAssignable Variable{} = return ()
-                checkAssignable a          = notAssignable $ expressionPos a
-                typed :: Type -> ErrorOr TypeCheckerExpression
+                whileType condTyp condPos = lift $ invalidCondType condTyp condPos
+                typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
                 typed t = return exp{ expMeta = meta' }
                   where meta' :: (TypeCheckerExpressionMeta, ParserNodeMeta)
                         meta' = first (const $ TypeCheckerExpressionMeta t) (expMeta exp)
-                varType :: Name -> ErrorOr Type
-                varType name = case name `Map.lookup` vars of
-                  Nothing -> unknownVariable name pos
-                  Just t  -> return $ S.varType t
-                funcType :: Name -> [Type] -> ErrorOr Type
-                funcType name argTypes = case FunctionKey name argTypes `Map.lookup` funcs of
-                  Nothing  -> unknownFunction name argTypes pos
-                  Just sig -> return $ retType sig
-                unOpType :: UnaryOperator -> Type -> ErrorOr Type
-                unOpType op t = case TypedUnOp op t `Map.lookup` typedUnOps of
-                  Nothing -> unknownUnOp op t pos
+                varType :: Name -> ReaderT TypeCheckerContext (ExceptT Error Identity) Type
+                varType name = do
+                  vars' <- asks vars
+                  case name `M.lookup` vars' of
+                    Nothing -> lift $ unknownVariable name pos
+                    Just t  -> return $ S.varType t
+                funcType :: Name -> [Type] -> ReaderT TypeCheckerContext (ExceptT Error Identity) Type
+                funcType name argTypes = do
+                  funcs' <- asks funcs
+                  case FunctionKey name argTypes `M.lookup` funcs' of
+                    Nothing  -> lift $ unknownFunction name argTypes pos
+                    Just sig -> return $ retType sig
+                unOpType :: UnaryOperator -> Type -> ReaderT a (ExceptT Error Identity) Type
+                unOpType op t = case TypedUnOp op t `M.lookup` typedUnOps of
+                  Nothing -> lift $ unknownUnOp op t pos
                   Just t  -> return t
-                binOpType :: BinaryOperator -> Type -> Type -> ErrorOr Type
-                binOpType op s t = case TypedBinOp op s t `Map.lookup` typedBinOps of
-                  Nothing -> unknownBinOp op s t pos
+                binOpType :: BinaryOperator -> Type -> Type -> ReaderT a (ExceptT Error Identity) Type
+                binOpType op s t = case TypedBinOp op s t `M.lookup` typedBinOps of
+                  Nothing -> lift $ unknownBinOp op s t pos
                   Just t  -> return t

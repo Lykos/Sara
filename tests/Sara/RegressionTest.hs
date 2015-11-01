@@ -57,4 +57,4 @@ getInputs = do
   return $ saraFiles `zip` inputs
 
 regressionGroup :: Test
-regressionGroup = testGroup "Regression Tests" [ testProperty "regression tests work" prop_regressionsWork ]
+regressionGroup = testGroup "RegressionTests" [ testProperty "regression tests work" prop_regressionsWork ]

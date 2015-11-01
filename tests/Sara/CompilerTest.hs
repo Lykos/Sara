@@ -27,4 +27,4 @@ prop_generatesCode p = checkRight input
           return $ example `counterexample` liftBool (isRight actual)
 
 compilerGroup :: Test
-compilerGroup = testGroup "Compiler Tests" [ testProperty "generates code" prop_generatesCode ]
+compilerGroup = testGroup "CompilerTests" [ testProperty "generates code" prop_generatesCode ]

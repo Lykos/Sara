@@ -46,6 +46,9 @@ library
                      , Sara.CodeGenerator
                      , Sara.Verifier
                      , Sara.Meta
+                     , Sara.Symbols
+                     , Sara.Checker
+                     , Sara.PureChecker
   other-extensions:    GeneralizedNewtypeDeriving
   build-depends:       base >=4.8 && <4.9
                      , mtl >=2.2 && <2.3

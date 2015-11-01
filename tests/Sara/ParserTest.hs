@@ -31,4 +31,4 @@ prop_prettyInv xs = example `counterexample` liftBool (actual == expected)
           Right p  -> return $ clearPositions p
 
 parserGroup :: Test
-parserGroup = testGroup "Parser Tests" [ testProperty "pretty is the inverse of parse" prop_prettyInv ]
+parserGroup = testGroup "ParserTests" [ testProperty "pretty is the inverse of parse" prop_prettyInv ]

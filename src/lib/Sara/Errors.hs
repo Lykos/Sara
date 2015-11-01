@@ -1,25 +1,25 @@
-module Sara.Errors(
-  ErrorOr
-  , Error(..)
-  , PositionedError(..)
-  , UnknownElement(..)
-  , MismatchType(..)
-  , RedeclaredElement(..)
-  , showError
-  , parseError
-  , unknownVariable
-  , unknownFunction
-  , unknownUnOp
-  , unknownBinOp
-  , noMain
-  , invalidMainRetType
-  , invalidRetType
-  , impureExpression
-  , invalidMainArgs
-  , redeclaredFunction
-  , mismatchingCondTypes
-  , invalidCondType
-  , notAssignable) where
+module Sara.Errors( ErrorOr
+                  , Error(..)
+                  , PositionedError(..)
+                  , UnknownElement(..)
+                  , MismatchType(..)
+                  , RedeclaredElement(..)
+                  , showError
+                  , parseError
+                  , unknownVariable
+                  , unknownFunction
+                  , unknownUnOp
+                  , unknownBinOp
+                  , noMain
+                  , invalidMainRetType
+                  , invalidRetType
+                  , impureExpression
+                  , invalidMainArgs
+                  , redeclaredFunction
+                  , mismatchingCondTypes
+                  , invalidCondType
+                  , notAssignable
+                  , otherError ) where
 
 import Sara.Types
 import qualified Sara.Types as Ty
@@ -30,9 +30,10 @@ import qualified Sara.PrettyPrinter as P
 import qualified Data.Text as T
 import Text.Parsec.Pos
 import Control.Monad.Except
+import Control.Monad.Identity
 import qualified Text.Parsec.Error as E
 
-type ErrorOr a = Except Error a
+type ErrorOr a = ExceptT Error Identity a
 
 data Error
   = ParseError E.ParseError
@@ -206,3 +207,6 @@ impureExpression name = positionedError $ ImpureExpressionError name
 
 notAssignable :: SourcePos -> ErrorOr a
 notAssignable = positionedError AssignmentError
+
+otherError :: String -> ErrorOr a
+otherError s = throwError $ OtherError s
