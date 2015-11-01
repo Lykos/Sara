@@ -7,7 +7,6 @@ import Sara.AstUtils
 import Sara.Meta
 import Sara.Operators
 import Sara.Errors
-import Data.Maybe
 import Control.Monad
 import Control.Monad.Reader.Class
 import qualified Control.Monad.Trans.Reader as R
@@ -56,7 +55,9 @@ checkPure UnaryOperation{}                    = return True
 checkPure BinaryOperation{ binOp = Assign }   = return False
 checkPure BinaryOperation{}                   = return True
 checkPure Variable{}                          = return True
-checkPure Call{ expCallMeta = sym }           = asks $ fromJust . (M.lookup sym)
+checkPure Call{ expCallMeta = sym }           = asks $ \funcs -> case sym `M.lookup` funcs of
+  Just b  -> b
+  Nothing -> error $ "Call symbol " ++ show sym ++ " not in pure table."
 checkPure Conditional{}                       = return True
 checkPure Block{}                             = return True
 checkPure _                                   = return False

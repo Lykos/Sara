@@ -19,10 +19,12 @@ import Sara.Syntax
 import Control.Monad.Writer
 import Control.Monad.Identity
 
+-- | Maps over all function metadata.
 mapFunctionMetas :: (a -> a') -> Program a b c d -> Program a' b c d
 mapFunctionMetas f = runIdentity . transformProgramInternal transformer
   where transformer = AstTransformer f id id id nullTVarContextTrans return return return return
 
+-- | Maps over all variable metadata.
 mapVariableMetas :: (b -> b') -> Program a b c d -> Program a b' c d
 mapVariableMetas f = runIdentity . transformProgramInternal transformer
   where transformer = AstTransformer id f id id nullTVarContextTrans return return return return

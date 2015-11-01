@@ -2,6 +2,7 @@
 
 module Sara.Verifier ( verify ) where
 
+import Sara.PrettyPrinter
 import Sara.Errors
 import Sara.Z3AstUtils
 import Data.List
@@ -81,7 +82,7 @@ verifyFunctions = mapMDeclarations_ verifyDecl
 z3Sort :: MonadZ3 z3 => Type -> z3 Sort
 z3Sort Boolean = mkBoolSort
 z3Sort Integer = mkIntSort
-z3Sort _       = undefined
+z3Sort t       = error $ "Unsupported type for verifier: " ++ show t
 
 z3Symbol :: MonadZ3 z3 => String -> String -> Int -> z3 Symbol
 z3Symbol prefix name index = mkStringSymbol $ intercalate "$" [prefix, name, show index]
@@ -128,7 +129,7 @@ z3Expression c@(S.Call _ a m _)           = do
   pre <- mkApp funcPre args
   post <- mkApp funcPost args
   addPrecondition pre =<< addPostcondition post =<< combine (mkApp func) a'
-z3Expression _                            = undefined
+z3Expression exp                          = error $ "Unsupported expression for verifier: " ++ prettyRender exp
 
 mkZero :: MonadZ3 z3 => z3 AST
 mkZero = mkInteger 0
@@ -143,7 +144,7 @@ z3UnOp op = liftCond $ z3UnOp' op
           z <- mkZero
           mkSub [z, e]
         z3UnOp' LogicalNot e = mkNot e
-        z3UnOp' _ _          = undefined
+        z3UnOp' op _          = error $ "Unsupported unary operator for verifier: " ++ show op
 
 -- | Apply a function that takes a list to two arguments.
 app2 :: ([a] -> b) -> a -> a -> b
@@ -177,4 +178,4 @@ z3BinOp Implies         = \a b -> combine2 mkImplies a =<< conditionOn (ast a) b
 z3BinOp ImpliedBy       = \a b -> combine2 (flip mkImplies) b =<< conditionOn (ast b) a
 z3BinOp EquivalentTo    = combine2 $ mkEq
 z3BinOp NotEquivalentTo = combine2 $ \a b -> mkNot =<< mkEq a b
-z3BinOp _               = undefined
+z3BinOp op              = error $ "Unsupported binary operator for verifier: " ++ show op
