@@ -50,6 +50,7 @@ library
                      , Sara.Checker
                      , Sara.PureChecker
                      , Sara.Z3AstUtils
+                     , Sara.Utils
   other-extensions:    GeneralizedNewtypeDeriving
   build-depends:       base >=4.8 && <4.9
                      , mtl >=2.2 && <2.3

@@ -61,7 +61,7 @@ insertFunction sig = M.insert (functionKey sig) sig
 
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
-  runReaderT (weirdTransformExpressions typeCheckSingleExpression tVarContextTrans program) (TypeCheckerContext funcMap M.empty)
+  runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression program) (TypeCheckerContext funcMap M.empty)
   where tVarContextTrans tVar = local (addVar tVar)
         addVar tVar context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) tVar $ vars context
