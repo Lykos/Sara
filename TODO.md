@@ -7,7 +7,8 @@
 - Function pointers
 - Generated tests for errors
 - Optional semicolons
-- Remove Unit
+- Remove Unit expressions at some point after the type checker
 - Short circuit!!
 - More LLVM annotations
 - Syntactic sugar
+- Rewrite Test generators using monad transformers.
