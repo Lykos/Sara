@@ -52,7 +52,7 @@ type SymbolizerExpression = S.Expression FunctionMeta VariableMeta ExpressionMet
 
 type SymbolizerDeclaration = S.Declaration FunctionMeta VariableMeta ExpressionMeta NodeMeta
 
-type SymbolizerTypedVariable = TypeCheckerTypedVariable
+type SymbolizerTypedVariable = S.TypedVariable VariableMeta NodeMeta
 
 expressionTyp :: S.Expression a b ExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta

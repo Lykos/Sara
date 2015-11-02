@@ -4,6 +4,11 @@ module Sara.Errors( ErrorOr
                   , UnknownElement(..)
                   , MismatchType(..)
                   , RedeclaredElement(..)
+                  , ContextType(..)
+                  , PureContext(..)
+                  , VerifierFailureType(..)
+                  , VerifierFailureModel(..)
+                  , FunctionOrMethod(..)
                   , showError
                   , parseError
                   , unknownVariable
@@ -20,11 +25,12 @@ module Sara.Errors( ErrorOr
                   , invalidCondType
                   , notAssignable
                   , otherError
-                  , verifierError ) where
+                  , verifierError
+                  , unsolvableError
+                  , functionOrMethod ) where
 
 import Sara.Types
 import qualified Sara.Types as Ty
-import Sara.Syntax
 import Sara.Operators
 import qualified Sara.PrettyPrinter as P
 
@@ -35,6 +41,7 @@ import Control.Monad.Identity
 import qualified Text.Parsec.Error as E
 
 type ErrorOr a = ExceptT Error Identity a
+type Name = String
 
 data Error
   = ParseError E.ParseError
@@ -48,27 +55,58 @@ data PositionedError
   | TypeMismatchError MismatchType Type Type  -- Used if we have one expected, one actual type.
   | DifferentTypesError [Type]                -- Used if we have several actual types that should be equal but are different.
   | MainArgsError [Type]
-  | ImpureExpressionError Name
+  | ImpureExpressionError PureContext
   | RedeclaredElementError RedeclaredElement SourcePos
   | AssignmentError
-  deriving (Eq, Show)
+  | VerifierError ContextType FunctionOrMethod VerifierFailureModel VerifierFailureType
+  | UnsolvableError ContextType FunctionOrMethod
+  deriving (Eq, Ord, Show)
+
+data PureContext
+  = PureFunction Name
+  | PurePrecondition FunctionOrMethod
+  | PurePostcondition FunctionOrMethod
+  deriving (Eq, Ord, Show)
+
+data FunctionOrMethod
+  = Function Name
+  | Method Name
+  deriving (Eq, Ord, Show)
 
 data UnknownElement
   = UnknownUnOp UnaryOperator Type
   | UnknownBinOp BinaryOperator Type Type
   | UnknownVariable Name
   | UnknownFunction Name [Type]
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data MismatchType
   = Condition
   | ReturnType
   | MainReturnType
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data RedeclaredElement
-  = RedeclaredFunction Name [Type]
-  deriving (Eq, Show)
+  = RedeclaredFunction FunctionOrMethod [Type]
+  deriving (Eq, Ord, Show)
+
+data ContextType
+  = PrePrecondition
+  | PostPrecondition
+  | BodyPrecondition
+  | Postcondition
+  deriving (Eq, Ord, Show)
+
+-- | Assignment of variables that cause the failure.
+data VerifierFailureModel
+  = VerifierFailureModel [(Name, String)]  -- TODO Use something better than string.
+  deriving (Eq, Ord, Show)
+
+data VerifierFailureType
+  = DivisionByZero
+  | PreconditionViolation FunctionOrMethod
+  | PostconditionViolation
+  deriving (Eq, Ord, Show)
 
 showError :: String -> Error -> String
 showError input err = T.unpack $ renderError (T.pack input) err
@@ -94,18 +132,49 @@ renderPositionedError (DifferentTypesError types)                            =
   T.append (T.pack "Expected equal types but got ") (renderTypes types)
 renderPositionedError (MainArgsError args)                                   =
   T.append (T.pack "Expected no arguments for main function but got ") (renderTypes args)
-renderPositionedError (ImpureExpressionError name)                           =
-  T.append (T.pack "Got impure expression in pure context ") (T.pack name)
+renderPositionedError (ImpureExpressionError context)                        =
+  T.append (T.pack "Got impure expression in ") (renderPureContext context)
 renderPositionedError (RedeclaredElementError redeclaredElement originalPos) =
   T.concat [T.pack "Redeclared ", renderRedeclaredElement redeclaredElement, T.pack " which was already declared at ", renderPosition originalPos]
 renderPositionedError AssignmentError                                        =
   T.pack "Invalid assignment target"
+renderPositionedError (VerifierError contextType func model failureType)     =
+  T.unlines $ verifierInfoLine : modelLines ++ [failureTypeLine]
+  where verifierInfoLine = T.concat [T.pack "Found a possibility to fail the ", renderContextType contextType, T.pack " of ", renderFunction func, colon]
+        modelLines = renderModel model
+        failureTypeLine = renderFailureType failureType
+renderPositionedError (UnsolvableError contextType func)                     =
+  T.concat [T.pack "Couldn't determine whether it is possible to fail the ", renderContextType contextType, T.pack " of ", renderFunction func]
+
+renderModel :: VerifierFailureModel -> [T.Text]
+renderModel (VerifierFailureModel model) = map renderModelElement model
+  where renderModelElement (name, value) = spaceSep [T.pack name, equals, T.pack value]
+
+renderFailureType :: VerifierFailureType -> T.Text
+renderFailureType DivisionByZero               = T.pack "Division by zero"
+renderFailureType (PreconditionViolation func) = T.concat [T.pack "precondition of ", renderFunction func, T.pack " violated"]
+renderFailureType PostconditionViolation       = T.pack "postcondition violated"
+
+renderPureContext :: PureContext -> T.Text
+renderPureContext (PureFunction name)      = T.append (T.pack "pure function") (T.pack name)
+renderPureContext (PurePrecondition func)  = T.append (T.pack "precondition of ") (renderFunction func)
+renderPureContext (PurePostcondition func) = T.append (T.pack "postcondition of ") (renderFunction func)
+
+renderFunction :: FunctionOrMethod -> T.Text
+renderFunction (Function name) = T.append (T.pack "function ") (T.pack name)
+renderFunction (Method name)   = T.append (T.pack "method ") (T.pack name)
+
+renderContextType :: ContextType -> T.Text
+renderContextType PrePrecondition  = T.pack "preconditions of a precondition"
+renderContextType PostPrecondition = T.pack "preconditions of a postcondition"
+renderContextType BodyPrecondition = T.pack "preconditions of the body"
+renderContextType Postcondition    = T.pack "postcondition"
 
 renderTypes :: [Type] -> T.Text
 renderTypes = commaSep . map pretty
 
 renderRedeclaredElement :: RedeclaredElement -> T.Text
-renderRedeclaredElement (RedeclaredFunction name argTypes) = T.concat [T.pack "function or method ", T.pack name, parens $ renderTypes argTypes]
+renderRedeclaredElement (RedeclaredFunction func argTypes) = T.append (renderFunction func) (parens $ renderTypes argTypes)
 
 renderUnknownElement :: UnknownElement -> T.Text
 renderUnknownElement (UnknownUnOp name typ)                 = renderUnknownTyped "unary operator" (unarySymbol name) [typ]
@@ -117,8 +186,9 @@ renderUnknown :: String -> String -> T.Text
 renderUnknown elementType name = spaceSep $ map T.pack [elementType, name]
 
 renderUnknownTyped :: String -> String -> [Type] -> T.Text
-renderUnknownTyped elementType name []    = renderUnknown elementType name
-renderUnknownTyped elementType name types = T.concat [renderUnknown elementType name, T.pack " for types ", renderTypes types]
+renderUnknownTyped elementType name = renderUnknownTyped' $ renderUnknown elementType name
+  where renderUnknownTyped' name []    = name
+        renderUnknownTyped' name types = T.concat [name, T.pack " for types ", renderTypes types]
 
 extractLine :: Int -> T.Text -> T.Text
 extractLine n input = T.lines input !! (n - 1)
@@ -133,6 +203,9 @@ indicator = T.singleton '^'
 
 colon :: T.Text
 colon = T.singleton ':'
+
+equals :: T.Text
+equals = T.singleton '='
 
 spaces :: Int -> T.Text
 spaces = flip T.replicate space
@@ -161,57 +234,63 @@ dot = T.singleton '.'
 pretty :: P.Pretty a => a -> T.Text
 pretty = T.pack . P.prettyRender
 
-parseError :: E.ParseError -> ErrorOr a
+parseError :: Monad m => E.ParseError -> ExceptT Error m a
 parseError err = throwError $ ParseError err
 
-positionedError :: PositionedError -> SourcePos -> ErrorOr a
+positionedError :: Monad m => PositionedError -> SourcePos -> ExceptT Error m a
 positionedError f pos = throwError $ PositionedError f pos
 
-unknownElementError :: UnknownElement -> SourcePos -> ErrorOr a
+unknownElementError :: Monad m => UnknownElement -> SourcePos -> ExceptT Error m a
 unknownElementError = positionedError . UnknownElementError
 
-unknownUnOp :: UnaryOperator -> Type -> SourcePos -> ErrorOr a
+unknownUnOp :: Monad m => UnaryOperator -> Type -> SourcePos -> ExceptT Error m a
 unknownUnOp op t = unknownElementError $ UnknownUnOp op t
 
-unknownBinOp :: BinaryOperator -> Type -> Type -> SourcePos -> ErrorOr a
+unknownBinOp :: Monad m => BinaryOperator -> Type -> Type -> SourcePos -> ExceptT Error m a
 unknownBinOp op s t = unknownElementError $ UnknownBinOp op s t
 
-unknownVariable :: Name -> SourcePos -> ErrorOr a
+unknownVariable :: Monad m => Name -> SourcePos -> ExceptT Error m a
 unknownVariable name = unknownElementError $ UnknownVariable name
 
-unknownFunction :: Name -> [Type] -> SourcePos -> ErrorOr a
+unknownFunction :: Monad m => Name -> [Type] -> SourcePos -> ExceptT Error m a
 unknownFunction name argTypes = unknownElementError $ UnknownFunction name argTypes
 
-invalidCondType :: Type -> SourcePos -> ErrorOr a
+invalidCondType :: Monad m => Type -> SourcePos -> ExceptT Error m a
 invalidCondType t = positionedError $ TypeMismatchError Condition Ty.Boolean t
 
-invalidRetType :: Type -> Type -> SourcePos -> ErrorOr a
+invalidRetType :: Monad m => Type -> Type -> SourcePos -> ExceptT Error m a
 invalidRetType s t = positionedError $ TypeMismatchError ReturnType s t
 
-mismatchingCondTypes :: Type -> Type -> SourcePos -> ErrorOr a
+mismatchingCondTypes :: Monad m => Type -> Type -> SourcePos -> ExceptT Error m a
 mismatchingCondTypes s t = positionedError $ DifferentTypesError [s, t]
 
-redeclaredFunction :: Name -> [Type] -> SourcePos -> SourcePos -> ErrorOr a
-redeclaredFunction name argTypes pos =  positionedError $ RedeclaredElementError (RedeclaredFunction name argTypes) pos
+redeclaredFunction :: Monad m => FunctionOrMethod -> [Type] -> SourcePos -> SourcePos -> ExceptT Error m a
+redeclaredFunction func argTypes pos =  positionedError $ RedeclaredElementError (RedeclaredFunction func argTypes) pos
 
-invalidMainArgs :: [Type] -> SourcePos -> ErrorOr a
+invalidMainArgs :: Monad m => [Type] -> SourcePos -> ExceptT Error m a
 invalidMainArgs = positionedError . MainArgsError
 
-invalidMainRetType :: Type -> SourcePos -> ErrorOr a
+invalidMainRetType :: Monad m => Type -> SourcePos -> ExceptT Error m a
 invalidMainRetType t = positionedError $ TypeMismatchError MainReturnType Ty.Integer t
 
-noMain :: ErrorOr a
+noMain :: Monad m => ExceptT Error m a
 noMain = throwError NoMain
 
-impureExpression :: Name -> SourcePos -> ErrorOr a
+impureExpression :: Monad m => PureContext -> SourcePos -> ExceptT Error m a
 impureExpression name = positionedError $ ImpureExpressionError name
 
-notAssignable :: SourcePos -> ErrorOr a
+notAssignable :: Monad m => SourcePos -> ExceptT Error m a
 notAssignable = positionedError AssignmentError
 
-otherError :: String -> ErrorOr a
+otherError :: Monad m => String -> ExceptT Error m a
 otherError s = throwError $ OtherError s
 
--- TODO Make this something better than a string!
-verifierError :: Monad m => String -> ExceptT Error m a
-verifierError s = throwError $ OtherError s
+verifierError :: Monad m => ContextType -> FunctionOrMethod -> VerifierFailureModel -> VerifierFailureType -> SourcePos -> ExceptT Error m a
+verifierError context func model typ = positionedError $ VerifierError context func model typ
+
+unsolvableError :: Monad m => ContextType -> FunctionOrMethod -> SourcePos -> ExceptT Error m a
+unsolvableError context func = positionedError $ UnsolvableError context func
+
+functionOrMethod :: Bool -> Name -> FunctionOrMethod
+functionOrMethod True name  = Function name
+functionOrMethod False name = Method name

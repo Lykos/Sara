@@ -30,21 +30,22 @@ createPureMap = foldMapSignatures sigPure
 
 checkSignatures :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
 checkSignatures = mapMSignatures_ checkOneSignature
-  where checkOneSignature Signature{ preconditions = precs, postconditions = posts } =
-          checkConditions "precondition" precs >> checkConditions "postcondition" posts
+  where checkOneSignature Signature{ isPure = isPure, sigName = name, preconditions = precs, postconditions = posts } =
+          checkConditions (PurePrecondition func) precs >> checkConditions (PurePostcondition func) posts
+          where func = functionOrMethod isPure name
         checkConditions name conds = mapM_ (checkPureExpression name) conds
 
 checkPureBodies :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
 checkPureBodies = mapMDeclarations_ checkPureBody
-  where checkPureBody Extern{}                                                         = return ()
-        checkPureBody Function{ signature = Signature{ isPure = False } }              = return ()
-        checkPureBody Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression name body
+  where checkPureBody Extern{}                                                           = return ()
+        checkPureBody S.Function{ signature = Signature{ isPure = False } }              = return ()
+        checkPureBody S.Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression (PureFunction name) body
 
-checkPureExpression :: Name -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity)  ()
-checkPureExpression name = mapMExpression_ checkPureSingleExpression
+checkPureExpression :: PureContext -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity)  ()
+checkPureExpression context = mapMExpression_ checkPureSingleExpression
   where checkPureSingleExpression exp = do
           cond <- checkPure exp
-          unless cond (lift $ impureExpression name $ expressionPos exp)
+          unless cond (lift $ impureExpression context $ expressionPos exp)
         
 checkPure :: MonadReader PureMap r => SymbolizerExpression -> r Bool
 checkPure S.Unit{}                            = return True

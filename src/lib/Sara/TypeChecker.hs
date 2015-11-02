@@ -8,11 +8,9 @@ import Control.Monad.Trans.State
 import Data.Bifunctor
 import qualified Data.Map.Strict as M
 
-import qualified Sara.Types as T
-import qualified Sara.Syntax as S
 import Sara.Meta
-import Sara.Syntax
-import Sara.Types
+import Sara.Syntax as S
+import Sara.Types as T
 import Sara.Operators
 import Sara.AstUtils
 import Sara.Errors
@@ -28,7 +26,7 @@ data TypeCheckerContext = TypeCheckerContext { funcs :: FunctionMap
 
 checkReturnTypes :: TypeCheckerProgram -> ErrorOr ()
 checkReturnTypes = mapMDeclarations_ checkRetType
-  where checkRetType (Function sig body _) = when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
+  where checkRetType (S.Function sig body _) = when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
           where bodyType = expressionTyp body
                 sigType = retType sig
         checkRetType Extern{}              = return ()
@@ -54,7 +52,7 @@ functions prog = execStateT (mapMSignatures_ addSignature prog) M.empty
           let f@(FunctionKey name argTypes) = functionKey sig
           oldFunc <- gets (M.lookup f)
           case oldFunc of
-            Just sig' -> lift $ redeclaredFunction name argTypes (signaturePos sig') (signaturePos sig)
+            Just sig' -> lift $ redeclaredFunction (functionOrMethod (isPure sig') name) argTypes (signaturePos sig') (signaturePos sig)
             Nothing   -> return ()
           modify $ insertFunction sig
 

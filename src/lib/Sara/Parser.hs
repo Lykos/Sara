@@ -28,7 +28,7 @@ function = addNodeMeta $ do
   sig <- Sara.Parser.signature
   reservedOpToken "="
   body <- expression
-  return $ Function sig body
+  return $ S.Function sig body
 
 extern :: Parser ParserDeclaration
 extern = addNodeMeta $ do
