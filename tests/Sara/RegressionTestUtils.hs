@@ -34,7 +34,8 @@ reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementE
                 , "TypeMismatchError", "Condition", "ReturnType", "MainReturnType"
                 , "DifferentTypesError", "MainArgsError", "ImpureExpressionError"
                 , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
-                , "NoMain" ] ++ L.reservedNames
+                , "NoMain", "PureFunction", "PurePrecondition", "PurePostcondition"
+                , "Function", "Method" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -168,8 +169,47 @@ mainArgsError = do
 impureExpressionError :: Parser E.PositionedError
 impureExpressionError = do
   reservedToken "ImpureExpressionError"
+  context <- pureContext
+  return $ E.ImpureExpressionError context
+
+pureContext :: Parser E.PureContext
+pureContext = try pureFunction
+              <|> try purePrecondition
+              <|> purePostCondition
+              <?> "pure context type"
+
+pureFunction :: Parser E.PureContext
+pureFunction = do
+  reservedToken "PureFunction"
   name <- L.identifierToken
-  return $ E.ImpureExpressionError name
+  return $ E.PureFunction name
+
+pureFunction :: Parser E.PureContext
+pureFunction = do
+  reservedToken "PurePrecondition"
+  f <- functionOrMethod
+  return $ E.PurePrecondition f
+
+pureFunction :: Parser E.PureContext
+pureFunction = do
+  reservedToken "PurePostcondition"
+  f <- functionOrMethod
+  return $ E.PurePostcondition f
+
+functionOrMethod :: Parser E.FunctionOrMethod
+functionOrMethod = function <|> method <?> "function or method"
+
+function :: Parser E.FunctionOrMethod
+function = do
+  reservedToken "Function"
+  name <- L.identifierToken
+  return $ E.Function name
+
+function :: Parser E.FunctionOrMethod
+function = do
+  reservedToken "Method"
+  name <- L.identifierToken
+  return $ E.Method name
 
 redeclaredElementError :: Parser E.PositionedError
 redeclaredElementError = do
