@@ -1,0 +1,6 @@
+// errors PositionedError ImpureExpressionError PurePostcondition Function f 5:11
+method main(): Integer { 8 };
+
+function f(a: Integer): Integer
+  ensures while true {}
+{ a }

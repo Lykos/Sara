@@ -1,0 +1,8 @@
+// errors PositionedError ImpureExpressionError PurePostcondition Method m 5:13
+method main(): Integer { 8 };
+
+method m(a: Integer): Integer
+  ensures a = 4
+{
+  4
+}

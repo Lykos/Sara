@@ -1,0 +1,8 @@
+// errors PositionedError ImpureExpressionError PurePostcondition Method m 5:11
+method main(): Integer { 8 };
+
+method m(a: Integer): Integer
+  ensures n() > 0
+{ a };
+
+method n(): Integer { 5 }
