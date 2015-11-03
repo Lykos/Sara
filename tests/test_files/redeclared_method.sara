@@ -1,5 +1,5 @@
-// errors PositionedError RedeclaredElementError RedeclaredFunction m 3:1 4:1
-method main(): Integer = 3;
-method m(): Integer = 5;
-method m(): Integer = 3
+// errors PositionedError RedeclaredElementError RedeclaredFunction Method m 3:1 4:1
+method main(): Integer { 3 };
+method m(): Integer { 5 };
+method m(): Integer { 3 }
 

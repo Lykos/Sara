@@ -1,4 +1,4 @@
 // errors PositionedError UnknownElementError UnknownBinOp + Boolean Boolean 4:49
-method main(): Integer = f(true, false);
+method main(): Integer { f(true, false) };
 
-function f(b: Boolean, c: Boolean): Integer = b + c
+function f(b: Boolean, c: Boolean): Integer { b + c }

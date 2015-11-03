@@ -1,5 +1,4 @@
-// errors PositionedError RedeclaredElementError RedeclaredFunction f 3:1 4:1
-method main(): Integer = 3;
-function f(): Integer = 5;
-function f(): Boolean = true
-
+// errors PositionedError RedeclaredElementError RedeclaredFunction Function f 3:1 4:1
+method main(): Integer { 3 };
+function f(): Integer { 5 };
+function f(): Boolean { true }

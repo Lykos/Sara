@@ -1,2 +1,2 @@
 // returns 305
-method main(): Integer = -(34 * 5 / 3 + 23 % 3 - +334 + (3 + -35) + (+3))
+method main(): Integer { -(34 * 5 / 3 + 23 % 3 - +334 + (3 + -35) + (+3)) }

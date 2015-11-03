@@ -1,4 +1,4 @@
 // errors PositionedError UnknownElementError UnknownUnOp + Boolean 4:35
-method main(): Integer = f(true);
+method main(): Integer { f(true) };
 
-function f(b: Boolean): Integer = +b
+function f(b: Boolean): Integer { +b }

@@ -1,12 +1,12 @@
 // returns 4
-method main(): Integer = if m() && f() && h() && n() then 4 else 5;
+method main(): Integer { if m() && f() && h() && n() then 4 else 5 };
 
-method m(): Boolean = !(false ^^ false);
+method m(): Boolean { !(false ^^ false) };
 
-function f(): Boolean = g(false) && (false ==> true) && (true <== false) && (true <==> true) && (false <==> false) && (true <!=> false) && (false <!=> true);
+function f(): Boolean { g(false) && (false ==> true) && (true <== false) && (true <==> true) && (false <==> false) && (true <!=> false) && (false <!=> true) };
 
-function g(b: Boolean): Boolean = true || false || b;
+function g(b: Boolean): Boolean { true || false || b };
 
-function h(): Boolean = (false && false || true) && (true ^^ false || true) && (true ^^ true && false);
+function h(): Boolean { (false && false || true) && (true ^^ false || true) && (true ^^ true && false) };
 
-method n(): Boolean = !(false ==> false <==> false) && !(false <==> false <== false) && !(true <!=> true ==> true) && !(true <== true <!=> true)
+method n(): Boolean { !(false ==> false <==> false) && !(false <==> false <== false) && !(true <!=> true ==> true) && !(true <== true <!=> true) }

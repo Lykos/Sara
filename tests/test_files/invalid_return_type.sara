@@ -1,2 +1,2 @@
 // errors PositionedError TypeMismatchError ReturnType Integer Boolean 2:26
-method main(): Integer = true
+method main(): Integer { true }

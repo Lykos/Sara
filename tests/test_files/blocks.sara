@@ -1,14 +1,14 @@
 // returns 49
-method main(): Integer = m();
+method main(): Integer { m() };
 
-method m(): Integer = {
-  n();
+method m(): Integer {
+  { n() };
   34 + { n(); 15 }
 };
 
-method n(): Boolean = {
+method n(): Boolean {
   f();
   false
 };
 
-function f(): Integer = 5
+function f(): Integer {{ 5 }}

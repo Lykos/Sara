@@ -1,2 +1,2 @@
 // errors NoMain
-function f(): Integer = {}
+function f(): Integer {}

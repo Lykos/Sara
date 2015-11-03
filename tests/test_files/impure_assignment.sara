@@ -1,7 +1,7 @@
-// errors PositionedError ImpureExpressionError f 5:5
-method main(): Integer = 8;
+// errors PositionedError ImpureExpressionError PureFunction f 5:5
+method main(): Integer { 8 };
 
-function f(a: Integer): Integer = {
+function f(a: Integer): Integer {
   a = 4;
   4
 }

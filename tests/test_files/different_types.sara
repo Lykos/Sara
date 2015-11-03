@@ -1,2 +1,2 @@
 // errors PositionedError DifferentTypesError Double Integer 2:26
-method main(): Integer = if true then 8.8 else 8
+method main(): Integer { if true then 8.8 else 8 }

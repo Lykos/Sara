@@ -1,8 +1,9 @@
 // returns 8
-method main(): Integer = fib(5);
+method main(): Integer { fib(5) };
 
-function fib(n: Integer): Integer =
+function fib(n: Integer): Integer {
   if n <= 1 then
     1
   else
     fib(n - 1) + fib(n - 2)
+}
