@@ -12,3 +12,7 @@
 - More LLVM annotations
 - Syntactic sugar
 - Rewrite Test generators using monad transformers.
+- Optional semicolons
+- Equal argument names
+- Result variable
+- Self reference in pre/post condition.
