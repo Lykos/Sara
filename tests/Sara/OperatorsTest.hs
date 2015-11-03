@@ -1,7 +1,7 @@
 module Sara.OperatorsTest (operatorsGroup) where
 
 import Sara.Operators
-import Sara.AstTestUtils()
+import Sara.AstGenUtils()
 
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2

@@ -3,7 +3,7 @@ module Sara.TypeCheckerTest (typeCheckerGroup) where
 import Sara.Types
 import qualified Sara.Errors as E
 import Sara.PrettyPrinter
-import Sara.AstTestUtils
+import Sara.AstGenUtils
 import Sara.TypeChecker
 import qualified Sara.Syntax as S
 import Sara.Meta

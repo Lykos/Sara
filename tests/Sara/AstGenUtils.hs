@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.AstTestUtils (
+module Sara.AstGenUtils (
   clearTypes
   , identifier
   , pos
@@ -102,7 +102,7 @@ type UnpositionedDeclaration = NodeMeta -> TypeCheckerDeclaration
 function :: MonadGen g => g UnpositionedDeclaration
 function = do
   pure <- elements [True, False]
-  t <- Sara.AstTestUtils.typ
+  t <- Sara.AstGenUtils.typ
   name <- identifier
   exp <- expression pure t
   return $ Function (inferSignature pure name [] [] exp) exp
@@ -132,12 +132,12 @@ variable t = do
 call :: MonadGen g => Bool -> Type -> g UntypedExpression
 call pure _ = do
   name <- identifier
-  args <- scale pred $ Sara.AstTestUtils.args pure
+  args <- scale pred $ Sara.AstGenUtils.args pure
   return $ Call name args ()
 
 args :: MonadGen g => Bool -> g [TypeCheckerExpression]
 args pure = scale intRoot $ listOf arg
-  where arg = Sara.AstTestUtils.typ >>= expression pure
+  where arg = Sara.AstGenUtils.typ >>= expression pure
 
 intRoot :: Int -> Int
 intRoot = round . sqrt . fromIntegral
@@ -177,11 +177,11 @@ conditional pure t = liftM3 Conditional (subtree T.Boolean) (subtree t) (subtree
 
 block :: MonadGen g => Bool -> Type -> g UntypedExpression
 block pure t = liftM2 Block stmts exp
-  where stmts = scale intRoot $ listOf $ Sara.AstTestUtils.typ >>= expression pure
+  where stmts = scale intRoot $ listOf $ Sara.AstGenUtils.typ >>= expression pure
         exp = scale intRoot $ expression pure t
 
 while :: MonadGen g => g UntypedExpression
-while = liftM2 While (subtree T.Boolean) (Sara.AstTestUtils.typ >>= subtree)
+while = liftM2 While (subtree T.Boolean) (Sara.AstGenUtils.typ >>= subtree)
   where subtree t = scale (`div` 2) $ expression False t
 
 leafExpression :: MonadGen g => Type -> g UntypedExpression
@@ -334,11 +334,11 @@ newtype PureExpression
   deriving (Eq, Ord, Show)
 
 instance Q.Arbitrary TypeCheckerExpression where
-  arbitrary = Sara.AstTestUtils.typ >>= expression False
+  arbitrary = Sara.AstGenUtils.typ >>= expression False
   shrink = shrinkExpression
 
 instance Q.Arbitrary PureExpression where
-  arbitrary = Sara.AstTestUtils.typ >>= liftM PureExpression . expression True
+  arbitrary = Sara.AstGenUtils.typ >>= liftM PureExpression . expression True
   shrink = map PureExpression . shrinkExpression . runPureExpression
 
 instance Q.Arbitrary TypeCheckerDeclaration where
@@ -351,7 +351,7 @@ instance Q.Arbitrary TypeCheckerProgram where
   shrink = shrinkProgram
 
 instance Q.Arbitrary Type where
-  arbitrary = Sara.AstTestUtils.typ
+  arbitrary = Sara.AstGenUtils.typ
 
 clearPositions :: ParserProgram -> ParserProgram
 clearPositions = mapNodeMetas $ const $ mkNodeMeta

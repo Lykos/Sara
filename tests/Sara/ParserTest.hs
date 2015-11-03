@@ -2,7 +2,7 @@ module Sara.ParserTest (parserGroup) where
 
 import Sara.Meta
 import Sara.Errors
-import Sara.AstTestUtils
+import Sara.AstGenUtils
 import qualified Sara.Parser as P
 import Sara.PrettyPrinter
 
