@@ -1,15 +1,19 @@
+{-# LANGUAGE LambdaCase #-}
+
 -- |
 -- Most of the code is borrowed from 
 -- <http://haskell.1045720.n5.nabble.com/darcs-patch-GenT-monad-transformer-variant-of-Gen-QuickCheck-2-td3172136.html a mailing list discussion>.
 -- Therefor, credits go to Paul Johnson and Felix Martini.
 module Sara.GenT where
 
+import qualified Prelude as P
 import Sara.GenT.Prelude
 import qualified Test.QuickCheck.Gen as QC
 import qualified System.Random as Random
+import Test.QuickCheck.Random
 
 
-newtype GenT m a = GenT { unGenT :: Random.StdGen -> Int -> m a }
+newtype GenT m a = GenT { unGenT :: QCGen -> Int -> m a }
 
 instance (Functor m) => Functor (GenT m) where
   fmap f m = GenT $ \r n -> fmap f $ unGenT m r n
@@ -23,7 +27,7 @@ instance (Monad m) => Monad (GenT m) where
   fail msg = GenT (\_ _ -> fail msg)
 
 instance (Functor m, Monad m) => Applicative (GenT m) where
-  pure = return
+  pure = P.return
   (<*>) = ap
 
 instance MonadTrans GenT where
@@ -61,7 +65,7 @@ instance MonadGen QC.Gen where
 -- of (fst . split) and (snd . split) applications.  Every integer (including 
 -- negative ones) will give rise to a different random number generator in 
 -- log2 n steps. 
-var :: Integral n => n -> Random.StdGen -> Random.StdGen 
+var :: Integral n => n -> QCGen -> QCGen
 var k = 
   (if k == k' then id else var k') . (if even k then fst else snd) . Random.split 
   where k' = k `div` 2 

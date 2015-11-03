@@ -48,7 +48,6 @@ import Control.Monad.Identity as Exports hiding (mapM_, sequence_, forM_, msum, 
 import Control.Monad.State as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
 import Control.Monad.Reader as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
 import Control.Monad.Writer as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
-import Control.Monad.Trans as Exports
 
 
 traceM :: (Monad m) => String -> m ()
