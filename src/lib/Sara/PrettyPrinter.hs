@@ -44,10 +44,7 @@ prettyDeclaration (Function sig body _) = prettyFunction sig body
 prettyDeclaration (Extern sig _)        = text "extern" <+> prettySignature sig
 
 prettyFunction :: Signature a b c d -> Expression a b c d -> Doc
-prettyFunction sig body = case body of
-  Block{} -> sigDoc <+> prettyExpression body
-  _       -> sigDoc $+$ nest indentation (prettyExpression body)
-  where sigDoc = prettySignature sig <+> text "="
+prettyFunction sig body = prettySignature sig $+$ inBlock (prettyExpression body)
 
 prettySignature :: Signature a b c d -> Doc
 prettySignature (Signature pure name args retType preconditions postconditions _) = prettyTyped sig retType

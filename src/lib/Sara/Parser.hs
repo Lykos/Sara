@@ -24,11 +24,7 @@ declaration = try function
               <?> "declaration"
 
 function :: Parser ParserDeclaration
-function = addNodeMeta $ do
-  sig <- Sara.Parser.signature
-  reservedOpToken "="
-  body <- expression
-  return $ S.Function sig body
+function = addNodeMeta $ S.Function <$> Sara.Parser.signature <*> bracedExpression
 
 extern :: Parser ParserDeclaration
 extern = addNodeMeta $ do
@@ -221,12 +217,14 @@ while :: Parser UntypedExpression
 while = do
   reservedToken "while"
   cond <- expression
-  bodyBlock <- addExpressionMeta block
-  let body = transformBody bodyBlock
+  body <- bracedExpression
   return $ While cond body
-  where transformBody :: ParserExpression -> ParserExpression
-        transformBody (Block [] e _) = e
-        transformBody b              = b
+
+bracedExpression :: Parser ParserExpression
+bracedExpression = simplifyBlock <$> addExpressionMeta block
+  where simplifyBlock :: ParserExpression -> ParserExpression
+        simplifyBlock (Block [] e _) = e
+        simplifyBlock b              = b
 
 contents :: Parser a -> Parser a
 contents p = do

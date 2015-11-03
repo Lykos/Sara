@@ -1,11 +1,11 @@
 module Sara.TypeCheckerTest (typeCheckerGroup) where
 
 import Sara.Types
-import Sara.Errors
+import qualified Sara.Errors as E
 import Sara.PrettyPrinter
 import Sara.AstTestUtils
 import Sara.TypeChecker
-import Sara.Syntax
+import qualified Sara.Syntax as S
 import Sara.Meta
 
 import Control.Monad.Except
@@ -22,13 +22,13 @@ prop_addsTypes p = check input expected actual
         expected = return p
         actual = liftM clearSymbols $ checkWithoutMain input
 
-check :: ParserProgram -> ErrorOr TypeCheckerProgram -> ErrorOr TypeCheckerProgram -> Property
+check :: ParserProgram -> E.ErrorOr TypeCheckerProgram -> E.ErrorOr TypeCheckerProgram -> Property
 check input expected actual = example `counterexample` liftBool (actual == expected)
   where example = "\nExpected:\n" ++ render expected
                   ++ "\n\nActual:\n" ++ render actual
                   ++ "\n\nInput:\n" ++ prettyRender input
 
-render :: ErrorOr TypeCheckerProgram -> String
+render :: E.ErrorOr TypeCheckerProgram -> String
 render e = case runExcept e of
   Left e  -> show e
   Right r -> prettyRender r
@@ -48,11 +48,11 @@ complainsReturnTypeMismatch pure retTyp exp = retTyp /= expTyp ==> shrinking shr
         complete = do
           name <- identifier
           let inferredSig = inferSignature pure name [] [] exp
-          let wrongSig = inferredSig{ retType = retTyp }
-          completeProgram [Function wrongSig exp mkNodeMeta]
+          let wrongSig = inferredSig{ S.retType = retTyp }
+          completeProgram [S.Function wrongSig exp mkNodeMeta]
         input = finish complete
         actual = liftM clearSymbols . checkWithoutMain . clearTypes
-        expected = invalidRetType retTyp expTyp pos
+        expected = E.invalidRetType retTyp expTyp pos
 
 prop_complainsPureReturnTypeMismatch :: Type -> PureExpression -> Property
 prop_complainsPureReturnTypeMismatch typ exp = complainsReturnTypeMismatch True typ $ runPureExpression exp

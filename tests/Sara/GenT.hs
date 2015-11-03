@@ -74,6 +74,11 @@ var k =
 --------------------------------------------------------------------------
 -- ** Common generator combinators
 
+-- | Adjust the size parameter, by transforming it with the given
+-- function.
+scale :: MonadGen m => (Int -> Int) -> m a -> m a
+scale f g = sized (\n -> resize (f n) g)
+
 -- | Generates a value that satisfies a predicate.
 suchThat :: MonadGen m => m a -> (a -> Bool) -> m a
 gen `suchThat` p =

@@ -175,7 +175,7 @@ impureExpressionError = do
 pureContext :: Parser E.PureContext
 pureContext = try pureFunction
               <|> try purePrecondition
-              <|> purePostCondition
+              <|> purePostcondition
               <?> "pure context type"
 
 pureFunction :: Parser E.PureContext
@@ -184,14 +184,14 @@ pureFunction = do
   name <- L.identifierToken
   return $ E.PureFunction name
 
-pureFunction :: Parser E.PureContext
-pureFunction = do
+purePrecondition :: Parser E.PureContext
+purePrecondition = do
   reservedToken "PurePrecondition"
   f <- functionOrMethod
   return $ E.PurePrecondition f
 
-pureFunction :: Parser E.PureContext
-pureFunction = do
+purePostcondition :: Parser E.PureContext
+purePostcondition = do
   reservedToken "PurePostcondition"
   f <- functionOrMethod
   return $ E.PurePostcondition f
@@ -205,8 +205,8 @@ function = do
   name <- L.identifierToken
   return $ E.Function name
 
-function :: Parser E.FunctionOrMethod
-function = do
+method :: Parser E.FunctionOrMethod
+method = do
   reservedToken "Method"
   name <- L.identifierToken
   return $ E.Method name
@@ -224,9 +224,9 @@ redeclaredElement = redeclaredFunction <?> "redeclared element expectation"
 redeclaredFunction :: Parser E.RedeclaredElement
 redeclaredFunction = do
   reservedToken "RedeclaredFunction"
-  name <- L.identifierToken
+  f <- functionOrMethod
   t <- many P.typeExpression
-  return $ E.RedeclaredFunction name t
+  return $ E.RedeclaredFunction f t
 
 assignmentError :: Parser E.PositionedError
 assignmentError = do
