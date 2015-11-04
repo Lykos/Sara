@@ -39,6 +39,9 @@ instance (MonadIO m) => MonadIO (GenT m) where
 runGenT :: GenT m a -> QC.Gen (m a)
 runGenT (GenT run) = QC.MkGen run
 
+mapGenT :: (m a -> n b) -> GenT m a -> GenT n b
+mapGenT f g = GenT $ (\a b -> f $ unGenT g a b)
+
 class (Applicative g, Monad g) => MonadGen g where 
   liftGen :: QC.Gen a -> g a 
   variant :: Integral n => n -> g a -> g a 
