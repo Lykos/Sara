@@ -5,6 +5,10 @@ module Sara.ArbitraryUtils where
 import Sara.GenT
 import Data.Ratio ( (%) )
 
+-- | Generates a boolean.
+arbitraryBool :: MonadGen g => g Bool
+arbitraryBool = choose (False, True)
+
 -- | Generates a natural number. The number's maximum value depends on
 -- the size parameter.
 arbitrarySizedNatural :: (Integral a, MonadGen g) => g a

@@ -1,59 +1,60 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
-module Sara.AstGenUtils (
-  clearTypes
-  , identifier
-  , pos
-  , clearPositions
-  , clearSymbols
-  , testfile
-  , inferSignature
-  , completeProgram
-  , mkNodeMeta
-  , PureExpression(..)
-  ) where
+module Sara.AstGenUtils ( identifier
+                        , pos
+                        , clearPositions
+                        , clearSymbols
+                        , testfile
+                        , inferSignature
+                        , completeProgram
+                        , mkNodeMeta
+                        , PureExpression(..) ) where
 
 import Sara.ArbitraryUtils
 import Sara.Syntax
+import Sara.Symbolize
 import Sara.Types
 import Sara.Lexer
 import Sara.Meta
 import Sara.Operators
 import Sara.AstUtils
 import Sara.GenT
+import Sara.Utils
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 
+import qualified Data.Map as M
+import qualified Data.Set as S
 import qualified Test.QuickCheck as Q
 import Control.Monad.State.Strict
 import Text.Parsec.Pos
 import qualified Data.Map.Strict as Map
 
-iden0' :: String
-iden0' = ['a'..'z'] ++ ['A'..'Z'] ++ "_"
+-- | Valid initial letters for an identifier.
+identifierStarts :: String
+identifierStarts = ['a'..'z'] ++ ['A'..'Z'] ++ "_"
 
-iden0 :: MonadGen g => g Char
-iden0 = elements iden0'
+-- | Valid intermediate letters for an identifier.
+identifierLetters :: String
+identifierLetters = identifierStarts ++ ['0'..'9']
 
-idenN' :: String
-idenN' = iden0' ++ ['0'..'9']
-
-idenN :: MonadGen g => g String
-idenN = listOf $ elements idenN'
-
-ident :: MonadGen g => g Name
-ident = do
-  i0 <- iden0
-  iN <- idenN
+arbitraryIdentifierCandidate :: MonadGen g => g Name
+arbitraryIdentifierCandidate = do
+  i0 <- elements identifierStarts
+  iN <- listOf $ elements identifierLetters
   return (i0:iN)
 
 identifier :: MonadGen g => g Name
 identifier = ident `suchThat` isNotReserved
 
-isNotReserved :: Name -> Bool
-isNotReserved a = a /= "main" && a `notElem` reservedNames
+-- | Tests whether the identifier is not a reserved name.
+isNotReserved :: MonadState [Name] m => Name -> m Bool
+isNotReserved a = do
+  names <- get
+  return a /= "main" && a `notElem` reservedNames && a `notElem` names
 
 shrinkIdentifier :: Name -> [Name]
 shrinkIdentifier = filter (\a -> not (null a) && isNotReserved a) . Q.shrink
@@ -61,205 +62,229 @@ shrinkIdentifier = filter (\a -> not (null a) && isNotReserved a) . Q.shrink
 testfile :: String
 testfile = "<testfile>"
 
-pos :: SourcePos
-pos = newPos testfile 0 0
-
-addNodeMeta :: MonadGen g => g (NodeMeta -> a) -> g a
-addNodeMeta gen = gen <*> pure mkNodeMeta
-
-mkExpMeta :: Type -> ExpMeta
-mkExpMeta t = (ExpressionMeta t, NodeMeta pos)
-
-addExpMeta :: MonadGen g => Type -> g UntypedExpression -> g TypeCheckerExpression
-addExpMeta t gen = gen <*> pure (mkExpMeta t)
-
-declaration :: MonadGen g => g TypeCheckerDeclaration
-declaration = addNodeMeta function
-
-freeVariables :: TypeCheckerExpression -> [ParserTypedVariable]
-freeVariables = foldMapExpression freeVariable
-  where freeVariable :: TypeCheckerExpression -> [ParserTypedVariable]
-        freeVariable v@(Variable a _ _) = [TypedVariable a (expressionTyp v) ((), mkNodeMeta)]
-        freeVariable _                  = []
-
-data FunctionType =
-  FunctionType Bool Name [Type] Type
-  deriving (Eq, Ord, Show)
-
-calledFunctions :: TypeCheckerProgram -> [FunctionType]
-calledFunctions = foldMapExpressions calledFunctionsExpression
-  where calledFunctionsExpression :: TypeCheckerExpression -> [FunctionType]
-        calledFunctionsExpression c@(Call name args _ _) =
-          [FunctionType True name (map expressionTyp args) (expressionTyp c)]
-        calledFunctionsExpression _                      = []
-
-inferSignature :: Bool -> Name -> [TypeCheckerExpression] -> [TypeCheckerExpression] -> TypeCheckerExpression -> TypeCheckerSignature
-inferSignature pure name precs posts exp = Signature pure name freeVars (expressionTyp exp) precs posts ((), mkNodeMeta)
-  where freeVars = concatMap freeVariables precs ++ concatMap freeVariables posts ++ freeVariables exp
-
-type UnpositionedDeclaration = NodeMeta -> TypeCheckerDeclaration
-
-function :: MonadGen g => g UnpositionedDeclaration
-function = do
-  pure <- elements [True, False]
-  t <- Sara.AstGenUtils.typ
-  name <- identifier
-  exp <- expression pure t
-  return $ Function (inferSignature pure name [] [] exp) exp
-
-typ :: MonadGen g => g Type
-typ = elements [T.Unit, T.Boolean, T.Integer, T.Double]
-
-type ExpMeta = (ExpressionMeta, NodeMeta)
-type UntypedExpression = ExpMeta -> TypeCheckerExpression
-
-boolean :: MonadGen g => g UntypedExpression
-boolean = S.Boolean <$> choose (False, True)
-
-integer :: MonadGen g => g UntypedExpression
-integer = S.Integer <$> arbitrarySizedNatural
-
-double :: MonadGen g => g UntypedExpression
-double = liftM S.Double $ elements niceDoubles
-  where niceDoubles = [0.0, 0.1, 1.0, 1.1, 1e10, 1.1e10]
-
--- We add the type to the variable name in order to avoid name clashes.
-variable :: MonadGen g => Type -> g UntypedExpression
-variable t = do
-  id <- identifier
-  return $ Variable (id ++ show t) ()
-
-call :: MonadGen g => Bool -> Type -> g UntypedExpression
-call pure _ = do
-  name <- identifier
-  args <- scale pred $ Sara.AstGenUtils.args pure
-  return $ Call name args ()
-
-args :: MonadGen g => Bool -> g [TypeCheckerExpression]
-args pure = scale intRoot $ listOf arg
-  where arg = Sara.AstGenUtils.typ >>= expression pure
-
-intRoot :: Int -> Int
-intRoot = round . sqrt . fromIntegral
-
-invert :: (Ord k, Ord v) => Map.Map k v -> Map.Map v [k]
-invert m = Map.fromListWith (++) pairs
-  where pairs = [(v, [k]) | (k, v) <- Map.toList m]
-
-inverseFindWithDefault :: (Ord k, Ord v) => Map.Map v k -> k -> [v]
-inverseFindWithDefault map key = Map.findWithDefault [] key (invert map)
-
-typUnOps :: Type -> [TypedUnOp]
-typUnOps = inverseFindWithDefault typedUnOps
-          
-typBinOps :: Bool -> Type -> [TypedBinOp]
-typBinOps pure t = filter (\(TypedBinOp op _ _) -> not pure || op /= Assign) (inverseFindWithDefault typedBinOps t)
-          
-binaryOperations :: MonadGen g => Bool -> Type -> [g UntypedExpression]
-binaryOperations pure t = map binOp $ typBinOps pure t
-  where binOp :: MonadGen g => TypedBinOp -> g UntypedExpression
-        binOp (TypedBinOp Assign r s) = liftM2 (BinaryOperation Assign) var (subtree s)
-          where var = addExpMeta r (variable r)
-        binOp (TypedBinOp op r s)     = do
-          left <- subtree r
-          right <- subtree s
-          return $ BinaryOperation op left right
-        subtree r = scale (`div` 2) $ expression pure r
-                                 
-unaryOperations :: MonadGen g => Bool -> Type -> [g UntypedExpression]
-unaryOperations pure t = map unOp $ typUnOps t
-  where unOp (TypedUnOp op s) = liftM (UnaryOperation op) (subtree s)
-        subtree s = scale pred $ expression pure s
-
-conditional :: MonadGen g => Bool -> Type -> g UntypedExpression
-conditional pure t = liftM3 Conditional (subtree T.Boolean) (subtree t) (subtree t)
-  where subtree t = scale (`div` 3) $ expression pure t
-
-block :: MonadGen g => Bool -> Type -> g UntypedExpression
-block pure t = liftM2 Block stmts exp
-  where stmts = scale intRoot $ listOf $ Sara.AstGenUtils.typ >>= expression pure
-        exp = scale intRoot $ expression pure t
-
-while :: MonadGen g => g UntypedExpression
-while = liftM2 While (subtree T.Boolean) (Sara.AstGenUtils.typ >>= subtree)
-  where subtree t = scale (`div` 2) $ expression False t
-
-leafExpression :: MonadGen g => Type -> g UntypedExpression
-leafExpression t = oneof [constant t, variable t]
-  where constant T.Boolean = boolean
-        constant T.Integer = integer
-        constant T.Double  = double
-        constant T.Unit    = return S.Unit
-
-innerExpression :: MonadGen g => Bool -> Type -> g UntypedExpression
-innerExpression pure t =
-  -- We want the same probability to get a unary operation, a binary operation, a constant, a variable, a call or a conditional
-  frequency weighted
-  where weighted = map ((,) weight) anyTyped ++ map ((,) numUnOps) binOps ++ map ((,) numBinOps) unOps
-        anyTyped = map ($ t) [leafExpression, leafExpression, conditional pure, block pure, call pure] ++ maybeWhile
-        maybeWhile = [while | not pure && t == T.Unit]
-        binOps = binaryOperations pure t
-        unOps = unaryOperations pure t
-        numUnOps = length unOps
-        numBinOps = length binOps
-        weight = if numUnOps * numBinOps == 0 then 1 else numUnOps * numBinOps
-
-expression :: MonadGen g => Bool -> Type -> g TypeCheckerExpression
-expression pure t = addExpMeta t $ sized expression'
-  where expression' :: MonadGen g => Int -> g UntypedExpression
-        expression' 0         = leafExpression t
-        expression' n | n > 0 = innerExpression pure t
-        expression' s         = error $ "expression' for negative size " ++ show s ++ " not supported."
-
-arbitraryTypedVariable :: MonadGen g => Type -> g ParserTypedVariable
-arbitraryTypedVariable t = do
-  name <- identifier
-  return $ TypedVariable name t ((), mkNodeMeta)
-
-arbitraryExtern :: MonadGen g => FunctionType -> g TypeCheckerDeclaration
-arbitraryExtern (FunctionType pure name argTypes retType) = do
-  args <- mapM arbitraryTypedVariable argTypes
-  return $ Extern (Signature pure name args retType [] [] ((), mkNodeMeta)) mkNodeMeta
-
-fixName :: [Name] -> Name -> Name
-fixName names name | name `elem` names = fixName names (name ++ "0")
-                   | otherwise         = name
+position :: SourcePos
+position = newPos testfile 0 0
 
 mkNodeMeta :: NodeMeta
 mkNodeMeta = NodeMeta pos
 
+mkExpMeta :: Type -> ExpMeta
+mkExpMeta t = (ExpressionMeta t, NodeMeta position)
+
+-- | Creates metadata for nodes that need two types of metadata. One unit metadata and one NodeMetadata.
+mkNodePlusMeta :: ((), NodeMeta)
+mkNodePlusMeta = ((), mkNodeMeta)
+
+addExpMeta :: Monad g => Type -> g UntypedExpression -> g TypeCheckerExpression
+addExpMeta t gen = gen <*> pure (mkExpMeta t)
+
+-- | A signature where pre- and postconditions are missing.
+data PartialSignature
+  = PartialSignature { isPure :: Bool
+                     , sigName :: Name
+                     , args :: [TypeCheckerTypedVariable]
+                     , retType :: Type
+                     , sigMeta :: (a, d) }
+
+toSignature :: PartialSignature -> [TypeCheckerExpression] -> [TypeCheckerExpression] -> TypeCheckerSignature
+toSignature PartialSignature{..} pres posts = Signature isPure sigName args retType pres posts sigMeta
+
+-- | Environment for the generation of expressions. The methods and functions are keyed by return type.
+data GeneratorEnv
+  = GeneratorEnv { callables :: M.Map T.Type [PartialSignature] -- ^ In a pure context, these are the functions, otherwise, functions and methods.
+                 , functions :: M.Map T.Type [PartialSignature] -- ^ Pure functions.
+                 , variables :: M.Map T.Type [Name]
+                 , isPure :: Bool }
+
+initialEnv :: [PartialSignature] -> GeneratorEnv
+initialEnve = GeneratorEnv { methods = keyBy S.retType sigs
+                           , filter isPure methods
+                           , variables = M.empty
+                           , isPure = undefined }
+
 arbitraryProgram :: MonadGen g => g TypeCheckerProgram
-arbitraryProgram = do
-  decls <- listOf declaration
-  completeProgram decls
+arbitraryProgram = addNodeMeta $ scale intRoot $ do
+  sigs <- evalStateT (listOf arbitrarySignature) S.empty
+  decls <- runReaderT (mapM arbitraryDeclForSignature sigs) (initialEnv sigs)
 
-completeProgram :: MonadGen g => [TypeCheckerDeclaration] -> g TypeCheckerProgram
-completeProgram decls = do
-  let prog = Program decls mkNodeMeta
-  let prog' = fixFunctionNameClashes prog
-  let free = calledFunctions prog'
-  externs <- mapM arbitraryExtern free
-  return $ prog' { program = program prog' ++ externs }
-    where fixFunctionNameClashes :: TypeCheckerProgram -> TypeCheckerProgram
-          fixFunctionNameClashes prog = evalState (fixFunctionNameClashes' prog) []
-          fixFunctionNameClashes' :: TypeCheckerProgram -> State [Name] TypeCheckerProgram
-          fixFunctionNameClashes' prog = mapMExpressions fixExpression prog >>= mapMSignatures fixSignature
-          fixSignature :: TypeCheckerSignature -> State [Name] TypeCheckerSignature
-          fixSignature s@Signature{ S.sigName = n } = do
-            n' <- fixName' n
-            return $ s{ S.sigName = n' }
-          fixExpression :: TypeCheckerExpression -> State [Name] TypeCheckerExpression
-          fixExpression c@Call{ S.expName = n } = do
-            n' <- fixName' n
-            return $ c{ S.expName = n' }
-          fixExpression e                    = return e
-          fixName' :: Name -> State [Name] Name
-          fixName' name = do
-            names <- get
-            let name' = fixName names name
-            put (name' : names)
-            return name'
+arbitraryPartialSignature :: (MonadGen g, MonadState (S.Set FunctionKey) g) => g PartialSignature
+arbitraryPartialSignature = do
+  sigs <- get
+  sig <- arbitrarySignature' `suchThat` (\sig -> functionKey sig `notMember` sigs)
+  modify $ S.insert $ functionKey sig
+  return sig
+  where arbitrarySignature' = do
+          isPure <- arbitraryBoolean
+          name <- arbitraryIdentifier
+          args <- evalStateT (scale intRoot $ listOf $ arbitraryTypedVariable) S.empty
+          retType <- arbitraryType
+          return $ PartialSignature isPure name args retType mkNodePlusMeta
 
+arbitraryTypedVariable :: (MonadGen g, MonadState [Name] g) => g TypeCheckerSignature
+arbitraryTypedVariable = mkNodePlusMeta $ do
+  names <- gets
+  name <- arbitraryIdentifier `suchThat` flip notMember names
+  modify $ S.insert name
+  typ <- arbitraryType
+  return $ TypedVariable name typ mkNodePlusMeta
+
+arbitraryType :: MonadGen g => g Type
+arbitraryType = elements [T.Unit, T.Boolean, T.Integer, T.Double]
+
+-- | The transformation of the environment that a partial signature causes, i.e. the arguments are added to the local variables.
+partialSigEnvTransform :: PartialSignature -> GeneratorEnv -> GeneratorEnv
+partialSigEnvTransform sig env = env{ variables = variables', callables = callables', isPure = isPure sig }
+  where args = map S.varName $ keyBy S.varType $ args sig
+        variables' = unionWith (++) (variables env) args
+        callables' = if isPure sig then callables env else functions env
+
+arbitrarySignatureForPartialSig :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerSignature
+arbitrarySignatureForPartialSig partialSig = toSignature <$> conditions <*> conditions
+  where conditions = local (partialSigEnvTransform sig) $ scale intRoot $ listOf $ arbitraryExpression T.Boolean
+
+arbitrarySignature :: MonadGen g => g TypeCheckerSignature
+arbitrarySignature = do
+  partialSig <- evalStateT arbitraryPartialSignature S.empty
+  runReaderT (arbitrarySignatureForPartialSig sig) (initialEnv [sig])
+
+arbitraryDeclForSignature :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerDeclaration
+arbitraryDeclForSignature partialSig = do
+  sig <- arbitrarySignatureForPartialSig partialSig
+  let sig' = toSignature sig pres posts
+  body <- local envTransform $ arbitraryExpression $ retType sig
+  return $ Function sig' body mkNodeMeta
+
+arbitraryDeclaration :: MonadGen g -> g TypeCheckerDeclaration
+arbitraryDeclaration = do
+  sig <- evalStateT arbitraryPartialSignature S.empty
+  runReaderT (arbitraryDeclForSignature sig) (initialEnv [sig])
+
+type ExpMeta = (ExpressionMeta, NodeMeta)
+type UntypedExpression = ExpMeta -> TypeCheckerExpression
+
+arbitraryBoolean :: MonadGen g => g UntypedExpression
+arbitraryBoolean = S.Boolean <$> choose (False, True)
+
+-- | Generates a positive integer expression.
+-- We don't like negative numbers here because -4 gets parsed as 4 with the unary minus applied to it.
+arbitraryInteger :: MonadGen g => g UntypedExpression
+arbitraryInteger = S.Integer <$> arbitrarySizedNatural
+
+arbitraryDouble :: MonadGen g => g UntypedExpression
+arbitraryDouble = liftM S.Double $ elements niceDoubles
+  where niceDoubles = [0.0, 0.1, 1.0, 1.1, 1e10, 1.1e10]
+
+arbitraryVariable :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g Maybe UntypedExpression
+arbitraryVariable t = do
+  vars <- asks $ M.lookup t . variables
+  case vars of
+    Nothing   -> Nothing
+    Just []   -> Nothing
+    Just vars -> Variable <$> elements vars
+
+arbitraryCall :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe UntypedExpression)
+arbitraryCall t = do
+  calls <- asks $ M.lookup t . callables
+  case vars of
+    Nothing    -> []
+    Just []    -> []
+    Just calls -> do
+      call <- elements calls
+      let numArgs = length $ args call
+      as <- scale (`div` numArgs) mapM (expression . varType) (args call)
+      return $ [Call (sigName call) as ()]
+
+intRoot :: Int -> Int
+intRoot = round . sqrt . fromIntegral
+
+invert :: (Ord k, Ord v) => M.Map k v -> M.Map v [k]
+invert m = M.fromListWith (++) pairs
+  where pairs = [(v, [k]) | (k, v) <- M.toList m]
+
+invertedUnOps :: M.Map Type TypedUnOp
+invertedUnOps = invert typedUnOps
+
+invertedBinOps :: M.Map Type TypedBinOp
+invertedBinOps = invert typedBinOps
+
+findListWithDefault :: Ord k => M.Map k [v] -> k -> [v]
+findListWithDefault map key = M.findWithDefault [] key map
+
+typUnOps :: Type -> [TypedUnOp]
+typUnOps = findListWithDefault invertedUnOps
+          
+typBinOps :: Bool -> Type -> [TypedBinOp]
+typBinOps = findListWithDefault invertedUnOps
+typBinOps pure = filter (\(TypedBinOp op _ _) -> not pure || op /= Assign) . findListWithDefault invertedBinOps
+
+arbitraryAssignable t :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g TypeCheckerExpression
+arbitraryAssignable t = addExpMeta t $ variable t
+
+-- | Creates one generator for each possible binary operator for that type.
+binaryOperations :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> [g UntypedExpression]
+binaryOperations t = do
+  pure <- asks isPure
+  map binOp $ typBinOps pure t
+  where binOp :: (MonadGen g, MonadReader GeneratorEnv g) => TypedBinOp -> g UntypedExpression
+        binOp (TypedBinOp Assign r s) = BinaryOperation Assign <$> arbitraryAssignable r <*> expression s
+        binOp (TypedBinOp op r s)     = BinaryOperation op <$> subtree r <*> subtree s
+        subtree r = scale (`div` 2) $ expression r
+                                 
+-- | Creates one generator for each possible unary operator for that type.
+unaryOperations :: (MonadGen g, MonadReader GeneratorEnv g) => Bool -> Type -> [g UntypedExpression]
+unaryOperations t = map unOp $ typUnOps t
+  where unOp (TypedUnOp op s) = UnaryOperation op <$> subtree s
+        subtree s = scale pred $ expression s
+
+conditional :: (MonadGen g, MonadReader GeneratorEnv g) => Bool -> Type -> g UntypedExpression
+conditional t = Conditional <$> subtree T.Boolean <*> subtree t <*> subtree t
+  where subtree t = scale (`div` 3) $ expression t
+
+block :: (MonadGen g, MonadReader GeneratorEnv g) => Bool -> Type -> g UntypedExpression
+block t = Block <$> stmts <*> exp
+  where stmts = scale intRoot $ listOf $ arbitraryType >>= expression pure
+        exp = scale intRoot $ expression t
+
+while :: (MonadGen g, MonadReader GeneratorEnv g) => g (Maybe UntypedExpression)
+while t = do
+  pure <- asks isPure
+  if t == T.Unit and isPure then
+    Just . While <$> subtree T.Boolean <*> (arbitraryType >>= subtree)
+  else
+    return Nothing
+  where subtree t = scale (`div` 2) $ expression t
+
+leafExpression :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g UntypedExpression
+leafExpression t = oneof [arbitraryConstant t, arbitraryVariable t]
+
+arbitraryConstant :: MonadGen g => Type -> g UntypedExpression
+arbitraryConstant T.Boolean = arbitraryBoolean
+arbitraryConstant T.Integer = arbitraryInteger
+arbitraryConstant T.Double  = arbitraryDouble
+arbitraryConstant T.Unit    = return S.Unit
+
+innerExpression :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g UntypedExpression
+innerExpression t =
+  frequency weighted
+  where weighted = map ((,) weightOthers) anyTyped ++ map ((,) weightBinOps) binOps ++ map ((,) weightUnOps) unOps
+        anyTyped = map ($ t) $ [leafExpression, leafExpression, conditional, block] ++ catMaybes [call, while]
+        binOps = binaryOperations t
+        unOps = unaryOperations t
+        numUnOps = length unOps
+        numBinOps = length binOps
+        -- We want the same probability to get a unary operation, a binary operation, a constant, a variable, a call or a conditional
+        weightOthers = if numUnOps == 0 then weightUnOps else weightUnOps * weightBinOps
+        weightUnOps = if numBinOps == 0 then 1 else numBinOps
+        weightBinOps = if numUnOps == 0 then 1 else numUnOps
+
+expression :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g TypeCheckerExpression
+expression t = addExpMeta t $ sized expression'
+  where expression' :: (MonadGen g, MonadReader GeneratorEnv g) => Int -> g UntypedExpression
+        expression' 0         = leafExpression t
+        expression' n | n > 0 = innerExpression t
+        expression' s         = error $ "expression' for negative size " ++ show s ++ " not supported."
+
+-- | The most simple expression with a given type. Used for variable shrinking.
 trivial :: ExpMeta -> TypeCheckerExpression
 trivial m = trivial' (expTyp $ fst m) m
   where trivial' T.Boolean = S.Boolean False
@@ -267,11 +292,19 @@ trivial m = trivial' (expTyp $ fst m) m
         trivial' T.Double  = S.Double 0.0
         trivial' T.Unit    = S.Unit
 
-instance Q.Arbitrary UnaryOperator where
-  arbitrary = elements unaryOperators
+-- | Returns the free variables in an expression. Used to determine which declarations are shrinkable.
+freeVariables :: TypeCheckerExpression -> S.Set TypeCheckerTypedVariable
+freeVariables = foldMapExpression freeVariable
+  where freeVariable :: TypeCheckerExpression -> [ParserTypedVariable]
+        freeVariable v@(Variable a _ _) = S.singleton $ TypedVariable a (expressionTyp v) ((), mkNodeMeta)
+        freeVariable _                  = S.empty
 
-instance Q.Arbitrary BinaryOperator where
-  arbitrary = elements binaryOperators
+-- | Returns the called functions in a program. Used to determine which signatures are shrinkable.
+calledFunctions :: TypeCheckerProgram -> S.Set FunctionKey
+calledFunctions = foldMapExpressions calledFunctionsExpression
+  where calledFunctionsExpression :: TypeCheckerExpression -> [FunctionType]
+        calledFunctionsExpression c@Call{} = S.singleton $ callFunctionKey c
+        calledFunctionsExpression _        = S.empty
 
 shrinkExpression :: TypeCheckerExpression -> [TypeCheckerExpression]
 shrinkExpression b@S.Boolean{ boolValue = val }     = [b{ boolValue = v } | v <- Q.shrink val]
@@ -300,64 +333,88 @@ shrinkExpression (While cond body m)                = While cond (S.Unit (Expres
 childrenWithType :: ExpMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
 childrenWithType m = filter (\c -> expressionTyp c == (expTyp $ fst m))
 
-shrinkTypedVariable :: ParserTypedVariable -> [ParserTypedVariable]
+shrinkTypedVariable :: TypeCheckerTypedVariable -> [TypeCheckerTypedVariable]
 shrinkTypedVariable (TypedVariable var typ p) = [TypedVariable v typ p | v <- shrinkIdentifier var]
 
-shrinkSignature :: [ParserTypedVariable] -> TypeCheckerSignature -> [TypeCheckerSignature]
-shrinkSignature free (Signature pure name args typ precs posts p) =
+shrinkSignature :: Bool -> [ParserTypedVariable] -> TypeCheckerSignature -> [TypeCheckerSignature]
+shrinkSignature isRemovable free (Signature pure name args typ precs posts p) =
   [Signature pure name args typ precs' posts' p | (precs', posts') <- Q.shrink (precs, posts)]
   ++ [Signature pure name a typ precs posts p | a <- shrinkArgTypes args]
+  ++ [Signature pure n a typ precs posts p | n <- shrinkIdentifier name, isRemovable]
   where shrinkArgTypes :: [ParserTypedVariable] -> [[ParserTypedVariable]]
-        shrinkArgTypes []                     = []
-        shrinkArgTypes (x:xs) | x `elem` free = [x : ys | ys <- shrinkArgTypes xs]
-                              | otherwise     = xs : [y : xs | y <- shrinkTypedVariable x]
-                                                ++ [x : ys | ys <- shrinkArgTypes xs]
+        shrinkArgTypes []                       = []
+        shrinkArgTypes (x:xs) | x `member` free = [x : ys | ys <- shrinkArgTypes xs]
+                              | otherwise       = [xs | isRemovable]  -- We can only remove arguments if the function is never called.
+                                                  ++ [y : xs | y <- shrinkTypedVariable x]
+                                                  ++ [x : ys | ys <- shrinkArgTypes xs]
+
+isRemovableSignature :: [FunctionType] -> TypeCheckerSignature -> Bool
+isRemovableSignature sig = functionKey sig `notElem` funcs
+
+shrinkDeclaration :: [FunctionType] -> TypeCheckerDeclaration -> [TypeCheckerDeclaration]
+shrinkDeclaration funcs (Function sig body meta) = let
+  isRemovable = isRemovableSignature sig
+  free = freeVariables body
+  in [Function s body meta | s <- shrinkSignature isRemovable free]
+     ++ [Function sig b meta | b <- shrinkExpression body]
+shrinkDeclaration funcs (Extern sig meta) = let
+  isRemovable = isRemovableSignature sig
+  free = freeVariables body
+  in [Function s meta | s <- shrinkSignature isRemovable free]
 
 shrinkProgram :: TypeCheckerProgram -> [TypeCheckerProgram]
 shrinkProgram p = shrinkProgram' (calledFunctions p) p
   where meta = S.progMeta p
         shrinkProgram' _ (Program [] _)         = []
         shrinkProgram' funcs (Program (x:xs) _) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
-          where headShrinks = Q.shrink x
-                headRemovals = if isRemovable x then Program xs meta : [Program (d : xs) meta | d <- shrinkSig x] else []
-                shrinkSig (Function sig body p) = [Function s body p | s <- shrinkSignature (freeVariables body) sig]
-                shrinkSig (Extern sig p)          = [Extern s p | s <- shrinkSignature [] sig]
-                isRemovable d = isRemovableSignature $ signature d
-                isRemovableSignature Signature{ S.isPure = pure, sigName = name, S.args = args, retType = retType } =
-                  FunctionType pure name (map varType args) retType `notElem` funcs
-                appendTail y = Program (y:xs) meta
+          where headShrinks = shrinkDeclaration funcs x
                 tailShrinks = shrinkProgram' funcs $ Program xs meta
+                headRemovals = if isRemovableDeclaration funcs x then Program xs meta else []
+                isRemovableDeclaration funcs = isRemovableSignature funcs . signature
+                shrinkSig (Function sig body p) = [Function s body p | s <- shrinkSignature (freeVariables body) sig]
+                shrinkSig (Extern sig p)        = [Extern s p | s <- shrinkSignature [] sig]
+                appendTail y = Program (y:xs) meta
                 appendHead (Program ys p) = Program (x : ys) p
+
+emptyEnvWithPureness :: Bool -> GeneratorEnv
+emptyEnvWithPureness isPure' = GeneratorEnv{ callables = M.empty, functions = M.empty, variables = M.empty, isPure = isPure' }
 
 newtype PureExpression
   = PureExpression { runPureExpression :: TypeCheckerExpression }
   deriving (Eq, Ord, Show)
 
 instance Q.Arbitrary TypeCheckerExpression where
-  arbitrary = Sara.AstGenUtils.typ >>= expression False
+  arbitrary = do
+    typ <- arbitraryType
+    pure <- choose (False, True)
+    runStateT arbitraryExpression (initialEnvWithPureness pure)
   shrink = shrinkExpression
 
 instance Q.Arbitrary PureExpression where
-  arbitrary = Sara.AstGenUtils.typ >>= liftM PureExpression . expression True
+  arbitrary = arbitraryType >>= PureExpression <$> runStateT arbitraryExpression (initialEnvWithPureness True)
   shrink = map PureExpression . shrinkExpression . runPureExpression
 
+instance Q.Arbitrary TypeCheckerTypedVariable where
+  arbitrary = runStateT arbitraryTypedVariable S.empty
+  shrink = shrinkTypedVariable
+
+instance Q.Arbitrary TypeCheckerSignature where
+  arbitrary = arbitrarySignature
+  shrink = shrinkSignature True S.empty
+
 instance Q.Arbitrary TypeCheckerDeclaration where
-  arbitrary = declaration
-  shrink (Function sig body p) = [Function sig b p | b <- Q.shrink body]
-  shrink _                     = []
+  arbitrary = arbitraryDeclaration
+  shrink = shrinkDeclaration S.empty
 
 instance Q.Arbitrary TypeCheckerProgram where
   arbitrary = arbitraryProgram
   shrink = shrinkProgram
 
 instance Q.Arbitrary Type where
-  arbitrary = Sara.AstGenUtils.typ
+  arbitrary = arbitraryType
 
-clearPositions :: ParserProgram -> ParserProgram
-clearPositions = mapNodeMetas $ const $ mkNodeMeta
+instance Q.Arbitrary UnaryOperator where
+  arbitrary = elements unaryOperators
 
-clearTypes :: TypeCheckerProgram -> ParserProgram
-clearTypes = mapExpressionMetas $ const ()
-
-clearSymbols :: SymbolizerProgram -> TypeCheckerProgram
-clearSymbols = mapVariableMetas (const ()) . mapFunctionMetas (const ())
+instance Q.Arbitrary BinaryOperator where
+  arbitrary = elements binaryOperators
