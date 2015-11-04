@@ -2,6 +2,7 @@
 
 module Sara.Symbolizer ( FunctionKey(..)
                        , functionKey
+                       , callFunctionKey
                        , symbolize ) where
 
 import Sara.Syntax
@@ -31,6 +32,10 @@ data SymbolizerContext
 
 functionKey :: Signature a b c d -> FunctionKey
 functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
+
+callFunctionKey :: Expression a b ExpressionMeta d -> FunctionKey
+callFunctionKey Call{ expName = name, expArgs = args } = FunctionKey name (map expressionTyp args)
+callFunctionKey _                                      = error "Can only get the call function key for Call expressions."
 
 functions :: TypeCheckerProgram -> FunctionMap
 functions prog = execWriter (evalStateT (mapMSignatures_ addSignature prog) M.empty)
@@ -65,14 +70,14 @@ symbolize prog = runReader
         addVar tVar sym context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) (tVar, sym) $ vars context
         symbolizeExp :: SymbolizerExpression -> StateT IdMap (ReaderT SymbolizerContext Identity) SymbolizerExpression
-        symbolizeExp c@Call{ expName = name, expArgs = args} = do
+        symbolizeExp c@Call{}                           = do
           funcs' <- asks funcs
-          let callKey = FunctionKey name (map expressionTyp args)
+          let callKey = callFunctionKey c
           let expCallMeta' = case callKey `M.lookup` funcs' of
                 Just (_, meta) -> meta
                 Nothing        -> error $ "Function " ++ show callKey ++ " not found in symbol table " ++ show funcs' ++ "."
           return c{ expCallMeta = expCallMeta' }
-        symbolizeExp v@Variable{ expName = name }            = do
+        symbolizeExp v@Variable{ expName = name }       = do
           vars' <- asks vars
           let expVarMeta' = case name `M.lookup` vars' of
                 Just (_, meta) -> meta
