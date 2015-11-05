@@ -89,8 +89,9 @@ arbitraryIdentifier = do
 
 -- | Shrinks an identifier given a set of reserved names.
 shrinkIdentifier :: MonadReader (S.Set Name) m => Name -> m [Name]
-shrinkIdentifier n = filterM isNotReserved $ Q.shrink n  
-
+shrinkIdentifier n = filterM isNotReserved $ filter validIdentifier (Q.shrink n)
+  where validIdentifier []    = False
+        validIdentifier (x:_) = x `elem` identifierStarts
 -- | Tests whether the identifier is not a reserved name.
 isNotReserved :: MonadReader (S.Set Name) m => Name -> m Bool
 isNotReserved a = do
@@ -102,14 +103,15 @@ addExpMeta t gen = gen <*> pure (mkExpMeta t)
 
 -- | A signature where pre- and postconditions are missing.
 data PartialSignature
-  = PartialSignature { isPure :: Bool
+  = PartialSignature { isPureSig :: Bool
                      , sigName :: Name
                      , args :: [TypeCheckerTypedVariable]
                      , retType :: Type
                      , sigMeta :: ((), NodeMeta) }
+  deriving (Eq, Ord, Show)
 
 toSignature :: PartialSignature -> [TypeCheckerExpression] -> [TypeCheckerExpression] -> TypeCheckerSignature
-toSignature PartialSignature{..} pres posts = Signature isPure sigName args retType pres posts sigMeta
+toSignature PartialSignature{..} pres posts = Signature isPureSig sigName args retType pres posts sigMeta
 
 -- | Environment for the generation of expressions. The methods and functions are keyed by return type.
 data GeneratorEnv
@@ -117,6 +119,7 @@ data GeneratorEnv
                  , functions :: M.Map T.Type [PartialSignature] -- ^ Pure functions.
                  , variables :: M.Map T.Type [Name]
                  , isPureEnv :: Bool }
+  deriving (Eq, Ord, Show)
 
 initialEnv :: [PartialSignature] -> GeneratorEnv
 initialEnv sigs = GeneratorEnv { callables = callables'
@@ -124,7 +127,7 @@ initialEnv sigs = GeneratorEnv { callables = callables'
                                , variables = M.empty
                                , isPureEnv = undefined }
   where callables' = keyBy Sara.AstGenUtils.retType sigs
-        functions' = M.map (filter Sara.AstGenUtils.isPure) callables'
+        functions' = M.map (filter isPureSig) callables'
 
 arbitraryProgram :: MonadGen g => g TypeCheckerProgram
 arbitraryProgram = scale intRoot $ do
@@ -163,16 +166,19 @@ arbitraryType :: MonadGen g => g Type
 arbitraryType = elements [T.Unit, T.Boolean, T.Integer, T.Double]
 
 -- | The transformation of the environment that a partial signature causes, i.e. the arguments are added to the local variables.
-partialSigEnvTransform :: PartialSignature -> GeneratorEnv -> GeneratorEnv
-partialSigEnvTransform sig env = env{ variables = variables', callables = callables', isPureEnv = Sara.AstGenUtils.isPure sig }
+-- The argument pure indicates whether it should be a pure context.
+-- Note that this is not equivalent to the signature being pure since methods also have pure pre- and postconditions.
+partialSigEnvTransform :: Bool -> PartialSignature -> GeneratorEnv -> GeneratorEnv
+partialSigEnvTransform pure sig env = env{ variables = variables', callables = callables', isPureEnv = pure }
   where as :: M.Map Type [Name]
         as = M.map (map S.varName) $ keyBy S.varType $ Sara.AstGenUtils.args sig
         variables' = M.unionWith (++) (variables env) as
-        callables' = if Sara.AstGenUtils.isPure sig then callables env else functions env
+        callables' = if pure then functions env else callables env
 
 arbitrarySignatureForPartialSig :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerSignature
 arbitrarySignatureForPartialSig sig = toSignature sig <$> conditions <*> conditions
-  where conditions = local (partialSigEnvTransform sig) $ scale intRoot $ listOf $ arbitraryExpression T.Boolean
+  where conditions = local envTransform $ scale intRoot $ listOf $ arbitraryExpression T.Boolean
+        envTransform env = partialSigEnvTransform True sig env
 
 arbitrarySignature :: MonadGen g => g TypeCheckerSignature
 arbitrarySignature = do
@@ -182,7 +188,7 @@ arbitrarySignature = do
 arbitraryDeclForSignature :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerDeclaration
 arbitraryDeclForSignature partialSig = do
   sig <- arbitrarySignatureForPartialSig partialSig
-  body <- local (partialSigEnvTransform partialSig) $ arbitraryExpression $ S.retType sig
+  body <- local (partialSigEnvTransform (isPureSig partialSig) partialSig) $ arbitraryExpression $ S.retType sig
   return $ Function sig body mkNodeMeta
 
 arbitraryDeclaration :: MonadGen g => g TypeCheckerDeclaration
@@ -271,8 +277,8 @@ arbitraryBinaryOperations t = do
           var <- arbitraryAssignable r
           exp <- arbitraryExpression s
           case var of
-            Just v  | pure -> return $ Just $ BinaryOperation Assign v exp
-            _              -> return Nothing
+            Just v  | not pure -> return $ Just $ BinaryOperation Assign v exp
+            _                  -> return Nothing
         binOp (TypedBinOp op r s)     = Just <$> (BinaryOperation op <$> subtree r <*> subtree s)
         subtree r = scale (`div` 2) $ arbitraryExpression r
                                  
@@ -363,17 +369,19 @@ calledFunctions = foldMapExpressions calledFunctionsExpression
         calledFunctionsExpression _        = S.empty
 
 shrinkExpression :: TypeCheckerExpression -> [TypeCheckerExpression]
-shrinkExpression b@S.Boolean{ boolValue = val }     = [b{ boolValue = v } | v <- Q.shrink val]
-shrinkExpression n@S.Integer{ intValue = val }      = [n{ intValue = v } | v <- Q.shrink val]
-shrinkExpression d@S.Double{ doubleValue = val }    = [d{ doubleValue = v } | v <- Q.shrink val]
-shrinkExpression S.Unit{}                           = []
-shrinkExpression (Variable _ _ m)                   = [trivial m]
-shrinkExpression (BinaryOperation op left right m)  = childrenWithType m [left, right]
-                                                      ++ [BinaryOperation op l r m | (l, r) <- Q.shrink (left, right)]
-shrinkExpression (UnaryOperation op exp m)          = childrenWithType m [exp]
-                                                      ++ [UnaryOperation op e m | e <- Q.shrink exp]
-shrinkExpression (Call name args cm m)              = childrenWithType m args
-                                                      ++ [Call name a cm m | a <- shrinkArgs args]
+shrinkExpression b@S.Boolean{ boolValue = val }        = [b{ boolValue = v } | v <- Q.shrink val]
+shrinkExpression n@S.Integer{ intValue = val }         = [n{ intValue = v } | v <- Q.shrink val]
+shrinkExpression d@S.Double{ doubleValue = val }       = [d{ doubleValue = v } | v <- Q.shrink val]
+shrinkExpression S.Unit{}                              = []
+shrinkExpression (Variable _ _ m)                      = [trivial m]
+shrinkExpression (BinaryOperation Assign left right m) = childrenWithType m [left, right]
+                                                         ++ [BinaryOperation Assign left r m | r <- Q.shrink right]
+shrinkExpression (BinaryOperation op left right m)     = childrenWithType m [left, right]
+                                                         ++ [BinaryOperation op l r m | (l, r) <- Q.shrink (left, right)]
+shrinkExpression (UnaryOperation op exp m)             = childrenWithType m [exp]
+                                                         ++ [UnaryOperation op e m | e <- Q.shrink exp]
+shrinkExpression (Call name args cm m)                 = childrenWithType m args
+                                                         ++ [Call name a cm m | a <- shrinkArgs args]
   where shrinkArgs :: [TypeCheckerExpression] -> [[TypeCheckerExpression]]
         shrinkArgs []     = []
         shrinkArgs (x:xs) = [y : xs | y <- Q.shrink x] ++ [x : ys | ys <- shrinkArgs xs]

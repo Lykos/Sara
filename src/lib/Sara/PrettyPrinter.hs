@@ -48,14 +48,14 @@ prettyFunction sig body = prettySignature sig $+$ inBlock (prettyExpression body
 
 prettySignature :: Signature a b c d -> Doc
 prettySignature (Signature pure name args retType preconditions postconditions _) = prettyTyped sig retType
+                                                                                    $+$ conditions "requires" preconditions
+                                                                                    $+$ conditions "ensures" postconditions
   where sig = text keyword <+> text name
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
-              $+$ conditions "requires" preconditions
-              $+$ conditions "ensures" postconditions
         keyword = if pure then "function" else "method"
 
 conditions :: String -> [Expression a b c d] -> Doc
-conditions keyword conds = nest (2 * indentation) $ vsep $ map toCond $ conds
+conditions keyword conds = nest (2 * indentation) $ vsep $ punctuate semi $ map toCond $ conds
   where toCond cond = text keyword <+> prettyExpression cond
 
 prettyTyped :: Doc -> Type -> Doc
