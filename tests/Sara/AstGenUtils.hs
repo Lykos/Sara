@@ -5,15 +5,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Sara.AstGenUtils ( identifier
-                        , pos
-                        , clearPositions
-                        , clearSymbols
-                        , testfile
-                        , inferSignature
-                        , completeProgram
-                        , mkNodeMeta
-                        , PureExpression(..) ) where
+module Sara.AstGenUtils () where
 
 import Sara.ArbitraryUtils
 import Sara.Syntax
@@ -28,15 +20,14 @@ import Sara.Utils
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 
-import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Test.QuickCheck as Q
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer
-import Text.Parsec.Pos
 import Data.Maybe
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
+import Sara.AstTestUtils
 
 instance (MonadState s m) => MonadState s (GenT m) where
   get = lift get
@@ -89,33 +80,22 @@ arbitraryIdentifierCandidate = do
   iN <- listOf $ elements identifierLetters
   return (i0:iN)
 
-arbitraryIdentifier :: (MonadGen g, MonadState GeneratorEnv g) => g Name
+arbitraryIdentifier :: (MonadGen g, MonadState (S.Set Name) g) => g Name
 arbitraryIdentifier = do
   id <- arbitraryIdentifierCandidate
-  valid <- isNotReserved id
+  names <- get
+  valid <- runReaderT (isNotReserved id) names
   if valid then return id else arbitraryIdentifier
 
+-- | Shrinks an identifier given a set of reserved names.
+shrinkIdentifier :: MonadReader (S.Set Name) m => Name -> m [Name]
+shrinkIdentifier n = filterM isNotReserved $ Q.shrink n  
+
 -- | Tests whether the identifier is not a reserved name.
-isNotReserved :: MonadState GeneratorEnv m => Name -> m Bool
+isNotReserved :: MonadReader (S.Set Name) m => Name -> m Bool
 isNotReserved a = do
-  names <- gets variables
+  names <- ask
   return $ a /= "main" && a `notElem` reservedNames && a `S.notMember` names
-
-testfile :: String
-testfile = "<testfile>"
-
-position :: SourcePos
-position = newPos testfile 0 0
-
-mkNodeMeta :: NodeMeta
-mkNodeMeta = NodeMeta position
-
-mkExpMeta :: Type -> ExpMeta
-mkExpMeta t = (ExpressionMeta t, NodeMeta position)
-
--- | Creates metadata for nodes that need two types of metadata. One unit metadata and one NodeMetadata.
-mkNodePlusMeta :: ((), NodeMeta)
-mkNodePlusMeta = ((), mkNodeMeta)
 
 addExpMeta :: Monad g => Type -> g UntypedExpression -> g TypeCheckerExpression
 addExpMeta t gen = gen <*> pure (mkExpMeta t)
@@ -163,18 +143,21 @@ arbitraryPartialSignature = do
   return sig
   where arbitrarySignature' = do
           pur <- arbitraryBool
-          nam <- arbitraryIdentifier
+          nam <- evalStateT arbitraryIdentifier S.empty
           args <- evalStateT (scale intRoot $ listOf $ arbitraryTypedVariable) S.empty
           retType <- arbitraryType
           return $ PartialSignature pur nam args retType mkNodePlusMeta
 
-arbitraryTypedVariable :: (MonadGen g, MonadState GeneratorEnv g) => g TypeCheckerTypedVariable
+arbitraryTypedVariable :: (MonadGen g, MonadState (S.Set Name) g) => g TypeCheckerTypedVariable
 arbitraryTypedVariable = do
-  names <- gets variables
-  name <- arbitraryIdentifier `suchThat` flip S.notMember names
-  modify $ S.insert name
+  name <- arbitraryIdentifier
   typ <- arbitraryType
   return $ TypedVariable name typ mkNodePlusMeta
+
+shrinkTypedVariable :: MonadReader (S.Set Name) m => TypeCheckerTypedVariable -> m [TypeCheckerTypedVariable]
+shrinkTypedVariable (TypedVariable v t m) = do
+  vs <- shrinkIdentifier v
+  return [TypedVariable v' t m | v' <- vs]
 
 arbitraryType :: MonadGen g => g Type
 arbitraryType = elements [T.Unit, T.Boolean, T.Integer, T.Double]
@@ -207,7 +190,6 @@ arbitraryDeclaration = do
   sig <- evalStateT arbitraryPartialSignature S.empty
   runReaderT (arbitraryDeclForSignature sig) (initialEnv [sig])
 
-type ExpMeta = (ExpressionMeta, NodeMeta)
 type UntypedExpression = ExpMeta -> TypeCheckerExpression
 
 arbitraryBoolean :: MonadGen g => g UntypedExpression
@@ -407,15 +389,23 @@ shrinkExpression (While cond body m)                = While cond (S.Unit (Expres
 childrenWithType :: ExpMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
 childrenWithType m = filter (\c -> expressionTyp c == (expTyp $ fst m))
 
-shrinkSignature :: Bool -> S.Set ParserTypedVariable -> TypeCheckerSignature -> [TypeCheckerSignature]
-shrinkSignature isRemovable free (Signature pure name args typ precs posts p) =
-  [Signature pure name args typ precs' posts' p | (precs', posts') <- Q.shrink (precs, posts)]
-  ++ [Signature pure name a typ precs posts p | a <- shrinkArgTypes args]
-  where shrinkArgTypes :: [ParserTypedVariable] -> [[ParserTypedVariable]]
-        shrinkArgTypes []                         = []
-        shrinkArgTypes (x:xs) | x `S.member` free = [x : ys | ys <- shrinkArgTypes xs]
-                              | otherwise         = [xs | isRemovable]  -- We can only remove arguments if the function is never called.
-                                                    ++ [x : ys | ys <- shrinkArgTypes xs]
+shrinkSignature :: MonadReader (S.Set FunctionKey) m => S.Set ParserTypedVariable -> TypeCheckerSignature -> m [TypeCheckerSignature]
+shrinkSignature free sig@(Signature pure name args typ precs posts p) = do
+  functionNames <- asks $ S.map funcName
+  isRemovable <- asks $ flip isRemovableSignature sig
+  let shrinkedConds = [Signature pure name args typ precs' posts' p | (precs', posts') <- Q.shrink (precs, posts)]
+  let shrinkedArgs = [Signature pure name args' typ precs posts p | args' <- shrinkArgs isRemovable args]
+  shrinkedNameIdentifiers <- runReaderT (shrinkIdentifier name) functionNames
+  let shrinkedNames = [Signature pure name' args typ precs posts p | name' <- shrinkedNameIdentifiers]
+  return $ shrinkedConds ++ shrinkedArgs ++ shrinkedNames
+  where shrinkArgs :: Bool -> [ParserTypedVariable] -> [[ParserTypedVariable]]
+        shrinkArgs isRemovable args = shrinkArgs' isRemovable args $ S.fromList $ map varName args
+        shrinkArgs' :: Bool -> [ParserTypedVariable] -> S.Set Name -> [[ParserTypedVariable]]
+        shrinkArgs' _ [] _                                          = []
+        shrinkArgs' isRemovable (x:xs) argNames | x `S.member` free = [x : ys | ys <- shrinkArgs' isRemovable xs argNames]
+                                                | otherwise         = [xs | isRemovable]  -- We can only remove arguments if the function is never called.
+                                                                      ++ [y : xs | y <- runReader (shrinkTypedVariable x) argNames]
+                                                                      ++ [x : ys | ys <- shrinkArgs' isRemovable xs argNames]
 
 isRemovableSignature :: S.Set FunctionKey -> TypeCheckerSignature -> Bool
 isRemovableSignature funcs sig = functionKey sig `S.notMember` funcs
@@ -424,23 +414,21 @@ condFreeVariables :: TypeCheckerSignature -> S.Set TypeCheckerTypedVariable
 condFreeVariables Signature{..} = freeVars preconditions `S.union` freeVars postconditions
   where freeVars = foldr S.union S.empty . map freeVariables
 
-shrinkDeclaration :: S.Set FunctionKey -> TypeCheckerDeclaration -> [TypeCheckerDeclaration]
-shrinkDeclaration funcs (Function sig body meta) = let
-  isRemovable = isRemovableSignature funcs sig
-  free = condFreeVariables sig `S.union` freeVariables body
-  in [Function s body meta | s <- shrinkSignature isRemovable free sig]
-     ++ [Function sig b meta | b <- shrinkExpression body]
-shrinkDeclaration funcs (Extern sig meta) = let
-  isRemovable = isRemovableSignature funcs sig
-  free = condFreeVariables sig
-  in [Extern s meta | s <- shrinkSignature isRemovable free sig]
+shrinkDeclaration :: MonadReader (S.Set FunctionKey) m => TypeCheckerDeclaration -> m [TypeCheckerDeclaration]
+shrinkDeclaration (Function sig body meta) = do
+  sigShrinks <- map (\s -> Extern s meta) <$> shrinkSignature free sig
+  return $ sigShrinks ++ [Function sig b meta | b <- shrinkExpression body]
+  where free = condFreeVariables sig `S.union` freeVariables body
+shrinkDeclaration (Extern sig meta)        = do
+  map (\s -> Extern s meta) <$> shrinkSignature free sig
+  where free = condFreeVariables sig
 
 shrinkProgram :: TypeCheckerProgram -> [TypeCheckerProgram]
 shrinkProgram p = shrinkProgram' (calledFunctions p) p
   where meta = S.progMeta p
         shrinkProgram' _ (Program [] _)         = []
         shrinkProgram' funcs (Program (x:xs) _) = headRemovals ++ map appendTail headShrinks ++ map appendHead tailShrinks
-          where headShrinks = shrinkDeclaration funcs x
+          where headShrinks = runReader (shrinkDeclaration x) funcs
                 tailShrinks = shrinkProgram' funcs $ Program xs meta
                 headRemovals = [Program xs meta | isRemovableDeclaration funcs x]
                 isRemovableDeclaration funcs = isRemovableSignature funcs . signature
@@ -458,7 +446,7 @@ instance Q.Arbitrary TypeCheckerExpression where
   arbitrary = do
     typ <- arbitraryType
     pure <- choose (False, True)
-    evalStateT (arbitraryExpression typ) (emptyEnvWithPureness pure)
+    runReaderT (arbitraryExpression typ) (emptyEnvWithPureness pure)
   shrink = shrinkExpression
 
 instance Q.Arbitrary PureExpression where
@@ -469,15 +457,15 @@ instance Q.Arbitrary PureExpression where
 
 instance Q.Arbitrary TypeCheckerTypedVariable where
   arbitrary = evalStateT arbitraryTypedVariable S.empty
-  shrink = Q.shrinkNothing
+  shrink v = runReader (shrinkTypedVariable v) S.empty
 
 instance Q.Arbitrary TypeCheckerSignature where
   arbitrary = arbitrarySignature
-  shrink = shrinkSignature True S.empty
+  shrink sig = runReader (shrinkSignature S.empty sig) S.empty
 
 instance Q.Arbitrary TypeCheckerDeclaration where
   arbitrary = arbitraryDeclaration
-  shrink = shrinkDeclaration S.empty
+  shrink decl = runReader (shrinkDeclaration decl) S.empty
 
 instance Q.Arbitrary TypeCheckerProgram where
   arbitrary = arbitraryProgram

@@ -1,7 +1,8 @@
 module Sara.CompilerTest (compilerGroup) where
 
 import Sara.PrettyPrinter
-import Sara.AstGenUtils
+import Sara.AstGenUtils()
+import Sara.AstTestUtils
 import Sara.Compiler
 import Sara.TestUtils
 import Sara.Meta

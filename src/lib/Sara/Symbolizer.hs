@@ -18,7 +18,7 @@ import Data.Bifunctor
 import qualified Data.Map.Strict as M
 
 data FunctionKey =
-  FunctionKey Name [Type]
+  FunctionKey { funcName :: Name, funcType :: [Type] }
   deriving (Eq, Ord, Show)
 
 type FunctionMap = M.Map FunctionKey (TypeCheckerSignature, FunctionMeta)
