@@ -51,22 +51,22 @@ class ASTWrapper a b | a -> b where
 -- | Ast Wrapper for proof obligations.
 -- We use this to store additional information with the AST and to ensure better type safety.
 newtype ProofObligation
-  = ProofObligation { unPre :: FailureTrackableAST }
+  = ProofObligation { unObl :: FailureTrackableAST }
   deriving (Eq, Ord, Show)
 
 -- | Ast Wrapper for assumptions.
 -- We use this to for better type safety.
 newtype Assumption
-  = Assumption { unPost :: TrackableAST () }
+  = Assumption { unAss :: TrackableAST () }
   deriving (Eq, Ord, Show)
 
 instance ASTWrapper ProofObligation (VerifierFailureType, SourcePos) where
   wrap = ProofObligation
-  unwrap = unPre
+  unwrap = unObl
 
 instance ASTWrapper Assumption () where
   wrap = Assumption
-  unwrap = unPost
+  unwrap = unAss
 
 instance ASTWrapper (TrackableAST b) b where
   unwrap = id
@@ -121,14 +121,18 @@ findFailure model (Condition cond sub)   = do
     Just False -> return Nothing
 
 -- | An AST and his proof obligations and assumptions.
-data CondAST = CondAST { pre :: ProofObligation, post :: Assumption, ast :: AST }
+data CondAST
+  = CondAST { obl :: ProofObligation
+            , ass :: Assumption
+            , ast :: AST }
+  deriving (Eq, Ord, Show)
 
 runCondAst :: MonadZ3 z3 => CondAST -> z3 (FailureTrackableAST, AST, AST)
-runCondAst (CondAST pre post ast) = (,,) (unwrap pre) <$> runAst post <*> pure ast
+runCondAst (CondAST obl ass ast) = (,,) (unwrap obl) <$> runAst ass <*> pure ast
 
 -- | Transforms the proof obligations and assumptions to be conditioned on the given condition.
 conditionOn :: MonadZ3 z3 => AST -> CondAST -> z3 CondAST
-conditionOn cond (CondAST pre post ast) = return $ CondAST (condition cond pre) (condition cond post) ast
+conditionOn cond (CondAST obl ass ast) = return $ CondAST (condition cond obl) (condition cond ass) ast
 
 -- | Transforms the proof obligations and assumption to be conditioned on NOT the given condition.
 conditionOnNot :: MonadZ3 z3 => AST -> CondAST -> z3 CondAST
@@ -136,28 +140,28 @@ conditionOnNot cond condAst = mkNot cond >>= flip conditionOn condAst
 
 -- | Combine the ast using the given function and conjunct the proof obligations and assumptions.
 combine2 :: MonadZ3 z3 => (AST -> AST -> z3 AST) -> CondAST -> CondAST -> z3 CondAST
-combine2 f (CondAST preA postA a) (CondAST preB postB b) =
-  CondAST (conjunct [preA, preB]) (conjunct [postA, postB]) <$> f a b
+combine2 f (CondAST oblA assA a) (CondAST oblB assB b) =
+  CondAST (conjunct [oblA, oblB]) (conjunct [assA, assB]) <$> f a b
 
 -- | Combine the ast using the given function and conjunct the proof obligations and assumptions.
 combine3 :: MonadZ3 z3 => (AST -> AST -> AST -> z3 AST) -> CondAST -> CondAST -> CondAST -> z3 CondAST
-combine3 f (CondAST preA postA a) (CondAST preB postB b) (CondAST preC postC c) =
-  CondAST (conjunct [preA, preB, preC]) (conjunct [postA, postB, postC]) <$> f a b c
+combine3 f (CondAST oblA assA a) (CondAST oblB assB b) (CondAST oblC assC c) =
+  CondAST (conjunct [oblA, oblB, oblC]) (conjunct [assA, assB, assC]) <$> f a b c
 
 -- | Combine the ast using the given function and conjunct the proof obligations and assumptions.
 combine :: MonadZ3 z3 => ([AST] -> z3 AST) -> [CondAST] -> z3 CondAST
-combine f conds = CondAST (conjunct (map pre conds)) (conjunct (map post conds)) <$> f (map ast conds)
+combine f conds = CondAST (conjunct (map obl conds)) (conjunct (map ass conds)) <$> f (map ast conds)
 
 -- | Map the expression, leave the proof obligations and assumptions untouched.
 liftCond :: MonadZ3 z3 => (AST -> z3 AST) -> CondAST -> z3 CondAST
-liftCond f (CondAST pre post ast) = CondAST pre post <$> f ast
+liftCond f (CondAST obl ass ast) = CondAST obl ass <$> f ast
 
 -- | Adds the first argument as the proof obligation to the second argument.
 addProofObligation :: MonadZ3 z3 => AST -> VerifierFailureType -> SourcePos -> CondAST -> z3 CondAST
-addProofObligation newPre failureType pos (CondAST pre post ast) = return $ CondAST (conjunct [newPre', pre]) post ast
-  where newPre' = singleton newPre (failureType, pos)
+addProofObligation newObl failureType pos (CondAST obl ass ast) = return $ CondAST (conjunct [newObl', obl]) ass ast
+  where newObl' = singleton newObl (failureType, pos)
 
 -- | Adds the first argument as the assumption to the second argument.
 addAssumption :: MonadZ3 z3 => AST -> CondAST -> z3 CondAST
-addAssumption newPost (CondAST pre post ast) = return $ CondAST pre (conjunct [newPost', post]) ast
-  where newPost' = singleton newPost ()
+addAssumption newAss (CondAST obl ass ast) = return $ CondAST obl (conjunct [newAss', ass]) ast
+  where newAss' = singleton newAss ()

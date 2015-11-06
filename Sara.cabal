@@ -46,6 +46,7 @@ library
                      , Sara.CodeGenerator
                      , Sara.Verifier
                      , Sara.Meta
+                     , Sara.AstWrapper
                      , Sara.Symbolizer
                      , Sara.Checker
                      , Sara.PureChecker
