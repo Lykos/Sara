@@ -17,14 +17,9 @@ process fname input = do
 
 reporter :: Reporter
 reporter = Reporter reportParsed reportTyped reportModule
-           where reportParsed _    = return () -- reportProgram "Parsed Program"
-                 reportTyped _     = return () -- reportProgram "Typed Program"
+           where reportParsed      = reportProgram "Parsed Program"
+                 reportTyped       = reportProgram "Typed Program"
                  reportModule modl = moduleLLVMAssembly modl >>= report "LLVM Code"
-                 -- reportProgram :: String -> Program -> IO ()
-                 -- reportProgram name program = report name $ prettyRender program
-
-report :: String -> String -> IO ()
-report name program = putStrLn $ "\n" ++ name ++ ":\n" ++ program
 
 processFile :: String -> IO ()
 processFile fname = readFile fname >>= process fname

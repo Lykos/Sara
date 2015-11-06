@@ -1,0 +1,43 @@
+// returns 1
+method main(): Integer {
+  if m(0, 0) && n(0) && o(0, 0) && p(0, 0) && q(0) && r(0) && s(0, 0) then 1 else 0
+};
+
+method m(a: Integer, b: Integer): Boolean {
+  { a = 1; false } && { a = 2; true };
+  { b = 4; true } && { b = 8; true };
+  a + b == 1 + 8
+};
+
+method n(a: Integer): Boolean {
+  { a = 1; false } ^^ { a = 2; true };
+  a == 2
+};
+
+method o(a: Integer, b: Integer): Boolean {
+  { a = 1; false } || { a = 2; true };
+  { b = 4; true } || { b = 8; true };
+  a + b == 2 + 4
+};
+
+method p(a: Integer, b: Integer): Boolean {
+  { a = 1; false } ==> { a = 2; true };
+  { b = 4; true } ==> { b = 8; true };
+  a + b == 1 + 8
+};
+
+method q(a: Integer): Boolean {
+  { a = 1; false } <==> { a = 2; true };
+  a == 2
+};
+
+method r(a: Integer): Boolean {
+  { a = 1; false } <!=> { a = 2; true };
+  a == 2
+};
+
+method s(a: Integer, b: Integer): Boolean {
+  { a = 1; true } <== { a = 2; true };
+  { b = 4; false } <== { b = 8; true };
+  a + b == 1 + 8
+}

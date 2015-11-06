@@ -1,7 +1,7 @@
-module Sara.Compiler (
-  run
-  , compile) where
+module Sara.Compiler ( run
+                     , compile) where
 
+import Debug.Trace
 import Sara.Parser
 import Sara.TypeChecker
 import Sara.Syntax
@@ -84,12 +84,11 @@ verifyStage :: SymbolizerProgram -> ErrorOrIO ()
 verifyStage prog = ExceptT $ Z3.evalZ3 (runExceptT $ verify prog)
 
 compile' :: Bool -> (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a
-compile' verify moduleReporter reporter mod filename input =
-  do
-    p <- parseStage (reportParsed reporter) filename input
-    p' <- checkStage (reportTyped reporter) p
-    when verify (verifyStage p')
-    codegenStage moduleReporter mod p'
+compile' verify moduleReporter reporter mod filename input = do
+  p <- parseStage (reportParsed reporter) filename input
+  p' <- checkStage (reportTyped reporter) p
+  when verify (verifyStage p')
+  codegenStage moduleReporter mod p'
 
 compile :: Bool -> Reporter -> String -> String -> ErrorOrIO ()
 compile verify reporter filename input = ExceptT $ withModule filename $ \mod ->

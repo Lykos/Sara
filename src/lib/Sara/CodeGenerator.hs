@@ -1,8 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Sara.CodeGenerator (
-  codegen
-  , withModule) where
+module Sara.CodeGenerator ( codegen, PredeterminedForValue(..), ValueWhenPredetermined(..), ValueWhenNotPredetermined(..)
+                          , withModule) where
 
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
@@ -97,8 +96,7 @@ addBlock bname = do
 
   modify $ \s -> s { blocks = Map.insert (Name qname) new bls
                    , blockCount = ix + 1
-                   , names = supply
-                   }
+                   , names = supply }
   return (Name qname)
 
 setBlock :: Name -> Codegen Name
@@ -133,11 +131,7 @@ type Names = Map.Map String Int
 uniqueName :: String -> Names -> (String, Names)
 uniqueName nm ns = case Map.lookup nm ns of
   Nothing -> (nm,  Map.insert nm 1 ns)
-  Just ix -> uniqueName' nm ns ix
-    where uniqueName' :: String -> Names -> Int -> (String, Names)
-          uniqueName' nm ns ix = case Map.lookup nm ns of
-            Nothing -> (nm ++ show ix, Map.insert nm (ix + 1) ns)
-            Just ix -> uniqueName' nm ns (ix + 1)
+  Just ix -> (nm ++ show ix, Map.insert nm (ix+1) ns)
 
 booleanBits :: Word32
 booleanBits = 1
@@ -150,6 +144,9 @@ typ T.Unit    = IntegerType booleanBits
 typ T.Boolean = IntegerType booleanBits
 typ T.Integer = IntegerType integerBits
 typ T.Double  = FloatingPointType 64 IEEE
+
+booleanType :: Type
+booleanType = typ T.Boolean
 
 define :: SymbolizerSignature -> [BasicBlock] -> LLVM ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
@@ -222,7 +219,9 @@ load ptr = instr $ Load False ptr Nothing 0 []
 
 codegenDeclaration :: SymbolizerDeclaration -> LLVM ()
 codegenDeclaration (S.Extern sig _)        = extern sig
-codegenDeclaration (S.Function sig body _) = codegenFunction sig body
+codegenDeclaration (S.Function sig body _) = do
+  f <- codegenFunction sig body
+  return f
 
 codegenFunction :: SymbolizerSignature -> SymbolizerExpression -> LLVM ()
 codegenFunction signature body = define signature bls
@@ -278,6 +277,11 @@ double d = return $ cons $ C.Float $ F.Double d
 doubleZero :: Codegen Operand
 doubleZero = double 0
 
+logicalNot :: Operand -> Codegen Operand
+logicalNot a = do
+  true <- true1
+  (instr $ Xor true a []) booleanType
+
 unaryInstruction :: T.TypedUnOp -> Operand -> Type -> Codegen Operand
 unaryInstruction (T.TypedUnOp UnaryPlus T.Integer) a _  = return a
 unaryInstruction (T.TypedUnOp UnaryPlus T.Double) a _   = return a
@@ -290,9 +294,7 @@ unaryInstruction (T.TypedUnOp UnaryMinus T.Double) a t  = do
 unaryInstruction (T.TypedUnOp BitwiseNot T.Integer) a t = do
   true <- true64
   (instr $ Xor true a []) t
-unaryInstruction (T.TypedUnOp LogicalNot T.Boolean) a t = do
-  true <- true1
-  (instr $ Xor true a []) t
+unaryInstruction (T.TypedUnOp LogicalNot T.Boolean) a _ = logicalNot a
 unaryInstruction unop _ _                               = error $ "Unsupported unary operation " ++ show unop ++ "."
 
 binaryInstruction :: T.TypedBinOp -> Operand -> Operand -> Type -> Codegen Operand
@@ -350,21 +352,50 @@ binaryInstruction (T.TypedBinOp NotEqualTo T.Integer T.Integer) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction (T.TypedBinOp NotEqualTo T.Double T.Double) a b =
   instr $ FCmp FP.ONE a b []
-binaryInstruction (T.TypedBinOp LogicalAnd T.Boolean T.Boolean) a b =
-  instr $ And a b []
 binaryInstruction (T.TypedBinOp LogicalXor T.Boolean T.Boolean) a b =
   instr $ Xor a b []
-binaryInstruction (T.TypedBinOp LogicalOr T.Boolean T.Boolean) a b =
-  instr $ Or a b []
-binaryInstruction (T.TypedBinOp Implies T.Boolean T.Boolean) a b =
-  instr $ ICmp IP.ULE a b []
-binaryInstruction (T.TypedBinOp ImpliedBy T.Boolean T.Boolean) a b =
-  instr $ ICmp IP.UGE a b []
 binaryInstruction (T.TypedBinOp EquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.EQ a b []
 binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
+
+data PredeterminedForValue = PredeterminedForFalse | PredeterminedForTrue
+data ValueWhenPredetermined = LeftSideWhenPredetermined | NotLeftSideWhenPredetermined
+data ValueWhenNotPredetermined = RightSideWhenNotPredetermined | NotRightSideWhenNotPredetermined
+
+shortCircuit :: String
+                -> PredeterminedForValue
+                -> ValueWhenPredetermined
+                -> ValueWhenNotPredetermined
+                -> SymbolizerExpression
+                -> SymbolizerExpression
+                -> Codegen Operand
+shortCircuit name predeterminedForValue valueWhenPredetermined valueWhenNotPredetermined left right = do
+  rightBlock <- addBlock $ name ++ ".right"
+  exitBlock <- addBlock $ name ++ ".exit"
+
+  left' <- codegenExpression left
+  return left'
+  
+  leftResult <- case valueWhenPredetermined of
+    LeftSideWhenPredetermined    -> return left'
+    NotLeftSideWhenPredetermined -> logicalNot left'
+  case predeterminedForValue of
+    PredeterminedForFalse -> cbr left' rightBlock exitBlock
+    PredeterminedForTrue  -> cbr left' exitBlock rightBlock
+  leftBlock <- getBlock
+
+  setBlock rightBlock
+  right' <- codegenExpression right
+  rightResult <- case valueWhenNotPredetermined of
+    RightSideWhenNotPredetermined    -> return right'
+    NotRightSideWhenNotPredetermined -> logicalNot right'
+  br exitBlock
+  rightBlock <- getBlock
+
+  setBlock exitBlock
+  phi [(leftResult, leftBlock), (rightResult, rightBlock)] booleanType
 
 codegenExpression :: SymbolizerExpression -> Codegen Operand
 codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
@@ -377,10 +408,20 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     exp' <- codegenExpression exp
     op' exp' t'
   (S.BinaryOperation Assign var val _) -> do
-    let (S.Variable name _ _) = var
+    let name = case var of
+          (S.Variable name _ _) -> name
+          _                     -> error $ "Unsupported assignment lhs " ++ show var ++ "."
     var' <- getVar name
     val' <- codegenExpression val
     store var' val' t'
+  (S.BinaryOperation LogicalAnd left right _) ->
+    shortCircuit "and" PredeterminedForFalse LeftSideWhenPredetermined RightSideWhenNotPredetermined left right
+  (S.BinaryOperation LogicalOr left right _) ->
+    shortCircuit "or" PredeterminedForTrue LeftSideWhenPredetermined RightSideWhenNotPredetermined left right
+  (S.BinaryOperation Implies left right _) ->
+    shortCircuit "implies" PredeterminedForFalse NotLeftSideWhenPredetermined RightSideWhenNotPredetermined left right
+  (S.BinaryOperation ImpliedBy left right _) ->
+    shortCircuit "impliedby" PredeterminedForTrue LeftSideWhenPredetermined NotRightSideWhenNotPredetermined left right
   (S.BinaryOperation op left right _)  -> do
     let op' = binaryInstruction (T.TypedBinOp op (expressionTyp left) (expressionTyp right))
     left' <- codegenExpression left
