@@ -470,3 +470,4 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
 
     setBlock exitBlock
     unit
+  S.Assertion{}                        -> unit

@@ -69,6 +69,15 @@ instance HasVariableMeta (TypedVariable b d) b where
 instance HasNodeMeta (TypedVariable b d) d where
   nodeMeta = snd . varMeta
 
+data AssertionKind
+  = Assert
+  | Assume
+  | AssertAndCollapse
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+assertionKinds :: [AssertionKind]
+assertionKinds = enumFrom minBound
+
 -- | Expression with 4 types of metadata:
 -- [a:] The metadata used for signatures and calls.
 -- [b:] The metadata used for variables and variable declarations.
@@ -76,6 +85,7 @@ instance HasNodeMeta (TypedVariable b d) d where
 -- [d:] The metadata used for all nodes.
 data Expression a b c d
   = Unit { expMeta :: (c, d) }
+  | Assertion { assertionKind :: AssertionKind, inner :: Expression a b c d, expMeta :: (c, d) }
   | Boolean { boolValue :: Bool, expMeta :: (c, d) }
   | Integer { intValue :: Integer, expMeta :: (c, d) }
   | Double { doubleValue :: Double, expMeta :: (c, d) }

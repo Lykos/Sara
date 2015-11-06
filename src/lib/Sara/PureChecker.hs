@@ -23,6 +23,7 @@ checkPureness' :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity
 checkPureness' prog = do
   checkSignatures prog
   checkPureBodies prog
+  checkPureAssertions prog
 
 createPureMap :: SymbolizerProgram -> PureMap
 createPureMap = foldMapSignatures sigPure
@@ -40,6 +41,11 @@ checkPureBodies = mapMDeclarations_ checkPureBody
   where checkPureBody Extern{}                                                           = return ()
         checkPureBody S.Function{ signature = Signature{ isPure = False } }              = return ()
         checkPureBody S.Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression (PureFunction name) body
+
+checkPureAssertions :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkPureAssertions = mapMExpressions_ checkOneExpression
+  where checkOneExpression S.Assertion{ assertionKind = kind, inner = exp } = checkPureExpression (PureAssertion kind) exp
+        checkOneExpression _                                                = return ()
 
 checkPureExpression :: PureContext -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity)  ()
 checkPureExpression context = mapMExpression_ checkPureSingleExpression

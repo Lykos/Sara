@@ -168,7 +168,7 @@ z3Expression c@(S.Call name a m _)          = do
   post <- mkApp funcPost args
   let pos = expressionPos c
   let failureType = PreconditionViolation (E.Function name)
-  addPrecondition pre failureType pos =<< addPostcondition post =<< combine (mkApp func) a'
+  addProofObligation pre failureType pos =<< addAssumption post =<< combine (mkApp func) a'
 z3Expression exp                            = error $ "Unsupported expression for verifier: " ++ prettyRender exp
 
 mkZero :: MonadZ3 z3 => z3 AST
@@ -194,7 +194,7 @@ z3DivOp :: MonadZ3 z3 => SourcePos -> (AST -> AST -> z3 AST) -> CondAST -> CondA
 z3DivOp pos f l r = do
   neZero <- mkNeZero (ast r)
   result <- combine2 f l r
-  addPrecondition neZero DivisionByZero pos result
+  addProofObligation neZero DivisionByZero pos result
 
 appConds2 :: MonadZ3 z3 => ([AST] -> z3 AST) -> CondAST -> CondAST -> z3 CondAST
 appConds2 = combine2 . app2

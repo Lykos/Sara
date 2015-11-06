@@ -33,6 +33,7 @@ module Sara.Errors( ErrorOr
 import Sara.Types
 import qualified Sara.Types as Ty
 import Sara.Operators
+import Sara.Syntax ( AssertionKind(..) )
 import qualified Sara.PrettyPrinter as P
 
 import qualified Data.Text as T
@@ -67,6 +68,7 @@ data PureContext
   = PureFunction Name
   | PurePrecondition FunctionOrMethod
   | PurePostcondition FunctionOrMethod
+  | PureAssertion AssertionKind
   deriving (Eq, Ord, Show)
 
 data FunctionOrMethod
@@ -158,9 +160,12 @@ renderFailureType (PreconditionViolation func) = T.concat [T.pack "precondition 
 renderFailureType PostconditionViolation       = T.pack "postcondition violated"
 
 renderPureContext :: PureContext -> T.Text
-renderPureContext (PureFunction name)      = T.append (T.pack "pure function") (T.pack name)
-renderPureContext (PurePrecondition func)  = T.append (T.pack "precondition of ") (renderFunction func)
-renderPureContext (PurePostcondition func) = T.append (T.pack "postcondition of ") (renderFunction func)
+renderPureContext (PureFunction name)               = T.append (T.pack "pure function") (T.pack name)
+renderPureContext (PurePrecondition func)           = T.append (T.pack "precondition of ") (renderFunction func)
+renderPureContext (PurePostcondition func)          = T.append (T.pack "postcondition of ") (renderFunction func)
+renderPureContext (PureAssertion Assert)            = T.pack "assert"
+renderPureContext (PureAssertion Assume)            = T.pack "assume"
+renderPureContext (PureAssertion AssertAndCollapse) = T.pack "assertAndCollapse"
 
 renderFunction :: FunctionOrMethod -> T.Text
 renderFunction (Function name) = T.append (T.pack "function ") (T.pack name)

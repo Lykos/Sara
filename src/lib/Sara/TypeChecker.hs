@@ -13,6 +13,7 @@ import Sara.Syntax as S
 import Sara.Types as T
 import Sara.Operators
 import Sara.AstUtils
+import Sara.Utils
 import Sara.Errors
 import qualified Sara.Checker as C
 import Sara.PureChecker
@@ -74,15 +75,16 @@ typeCheckExpressions funcMap program =
           BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp left) (expressionTyp right)
           Variable name _ _                  -> typed =<< varType name
           Call name args _ _                 -> typed =<< funcType name (map expressionTyp args)
-          Conditional cond thenExp elseExp _ -> typed =<< condType (expressionTyp cond) (expressionTyp thenExp) (expressionTyp elseExp) (expressionPos cond)
+          Conditional cond thenExp elseExp _ -> typed =<< conditionalType (expressionTyp cond) (expressionTyp thenExp) (expressionTyp elseExp) (expressionPos cond)
           Block _ exp _                      -> typed (expressionTyp exp)
-          While cond _ _                     -> typed =<< whileType (expressionTyp cond) (expressionPos cond)
+          While cond _ _                     -> typed T.Unit << condType (expressionTyp cond) (expressionPos cond)
+          Assertion _ cond _                 -> typed T.Unit << condType (expressionTyp cond) (expressionPos cond)
           where pos = expressionPos exp
-                condType T.Boolean thenType elseType _ | thenType == elseType = return thenType
-                                                       | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
-                condType condTyp _ _ condPos                                  = lift $ invalidCondType condTyp condPos
-                whileType T.Boolean _     = return T.Unit
-                whileType condTyp condPos = lift $ invalidCondType condTyp condPos
+                conditionalType T.Boolean thenType elseType _ | thenType == elseType = return thenType
+                                                              | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
+                conditionalType condTyp _ _ condPos                                  = lift $ invalidCondType condTyp condPos
+                condType T.Boolean _     = return ()
+                condType condTyp condPos = lift $ invalidCondType condTyp condPos
                 typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
                 typed t = return exp{ expMeta = meta' }
                   where meta' :: (ExpressionMeta, NodeMeta)

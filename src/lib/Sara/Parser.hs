@@ -155,6 +155,9 @@ simpleExpression = addExpressionMeta $
                    <|> try conditional
                    <|> try block
                    <|> try while
+                   <|> try assert
+                   <|> try assume
+                   <|> try assertAndCollapse
                    <|> variable
 
 empty :: Parser Void
@@ -219,6 +222,21 @@ while = do
   cond <- expression
   body <- bracedExpression
   return $ While cond body
+
+assert :: Parser UntypedExpression
+assert = assertion "assert" Assert
+
+assume :: Parser UntypedExpression
+assume = assertion "assume" Assume
+
+assertAndCollapse :: Parser UntypedExpression
+assertAndCollapse = assertion "assertAndCollapse" AssertAndCollapse
+
+assertion :: String -> AssertionKind -> Parser UntypedExpression
+assertion keyword kind = do
+  reservedToken keyword
+  cond <- expression
+  return $ Assertion kind cond
 
 bracedExpression :: Parser ParserExpression
 bracedExpression = simplifyBlock <$> addExpressionMeta block

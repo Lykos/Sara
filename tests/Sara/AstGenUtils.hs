@@ -169,11 +169,9 @@ arbitraryType = elements [T.Unit, T.Boolean, T.Integer, T.Double]
 -- The argument pure indicates whether it should be a pure context.
 -- Note that this is not equivalent to the signature being pure since methods also have pure pre- and postconditions.
 partialSigEnvTransform :: Bool -> PartialSignature -> GeneratorEnv -> GeneratorEnv
-partialSigEnvTransform pure sig env = env{ variables = variables', callables = callables', isPureEnv = pure }
-  where as :: M.Map Type [Name]
-        as = M.map (map S.varName) $ keyBy S.varType $ Sara.AstGenUtils.args sig
+partialSigEnvTransform pure sig env = envWithPureness pure $ env{ variables = variables' }
+  where as = M.map (map S.varName) $ keyBy S.varType $ Sara.AstGenUtils.args sig
         variables' = M.unionWith (++) (variables env) as
-        callables' = if pure then functions env else callables env
 
 arbitrarySignatureForPartialSig :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerSignature
 arbitrarySignatureForPartialSig sig = toSignature sig <$> conditions <*> conditions
@@ -219,6 +217,16 @@ arbitraryVariable t = do
     Just vs -> do
       v <- elements vs
       return $ Just $ Variable v ()
+
+arbitraryAssertionKind :: MonadGen g => g AssertionKind
+arbitraryAssertionKind = elements assertionKinds
+
+arbitraryAssertion :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe UntypedExpression)
+arbitraryAssertion t = do
+  pure <- asks isPureEnv
+  case t of
+    T.Unit | not pure -> liftM Just $ Assertion <$> arbitraryAssertionKind <*> local (envWithPureness True) (arbitraryExpression T.Boolean)
+    _                 -> return Nothing
 
 arbitraryCall :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe UntypedExpression)
 arbitraryCall t = do
@@ -332,7 +340,7 @@ arbitraryInnerExpression t = do
         (0, k) -> k
         (k, 0) -> k
         (k, l) -> k * l
-  unreliableArbitraries <- catMaybes <$> sequence [arbitraryCall t, arbitraryWhile t]
+  unreliableArbitraries <- catMaybes <$> sequence [arbitraryCall t, arbitraryWhile t, arbitraryAssertion t]
   let anyTyped = map ($ t) [arbitraryLeafExpression, arbitraryLeafExpression, arbitraryConditional, arbitraryBlock]
                  ++ map return unreliableArbitraries
   -- We want the same probability to get a unary operation, a binary operation, a constant, a variable, a call or a conditional
@@ -388,11 +396,12 @@ shrinkExpression (Call name args cm m)                 = childrenWithType m args
 shrinkExpression (Conditional cond ifExp elseExp m) = childrenWithType m [cond, ifExp, elseExp]
                                                       ++ [Conditional c i e m | (c, i, e) <- Q.shrink (cond, ifExp, elseExp)]
 shrinkExpression (Block stmts exp m)                = [exp]
-                                                      ++ childrenWithType m stmts
                                                       ++ [Block (init stmts) (last stmts) m | not (null stmts), expressionTyp (last stmts) == expTyp (fst m)]
                                                       ++ [Block s e m | (s, e) <- Q.shrink (stmts, exp)]
-shrinkExpression (While cond body m)                = While cond (S.Unit (ExpressionMeta T.Unit, mkNodeMeta)) m
-                                                      : [While c b m | (c, b) <- Q.shrink (cond, body)]
+shrinkExpression (While cond body m)                = S.Unit m
+                                                      : childrenWithType m [body]
+                                                      ++ [While c b m | (c, b) <- Q.shrink (cond, body)]
+shrinkExpression (Assertion k exp m)                = S.Unit m : [Assertion k e m | e <- Q.shrink exp]
 
 childrenWithType :: ExpMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
 childrenWithType m = filter (\c -> expressionTyp c == (expTyp $ fst m))
@@ -443,8 +452,12 @@ shrinkProgram p = shrinkProgram' (calledFunctions p) p
                 appendTail y = Program (y:xs) meta
                 appendHead (Program ys p) = Program (x : ys) p
 
-emptyEnvWithPureness :: Bool -> GeneratorEnv
-emptyEnvWithPureness isPure = GeneratorEnv{ callables = M.empty, functions = M.empty, variables = M.empty, isPureEnv = isPure }
+initialEnvWithPureness :: Bool -> GeneratorEnv
+initialEnvWithPureness isPure = GeneratorEnv{ callables = M.empty, functions = M.empty, variables = M.empty, isPureEnv = isPure }
+
+envWithPureness :: Bool -> GeneratorEnv -> GeneratorEnv
+envWithPureness isPure env = env{ callables = callables', isPureEnv = isPure }
+  where callables' = if isPure then functions env else callables env
 
 newtype PureExpression
   = PureExpression { runPureExpression :: TypeCheckerExpression }
@@ -454,13 +467,13 @@ instance Q.Arbitrary TypeCheckerExpression where
   arbitrary = do
     typ <- arbitraryType
     pure <- choose (False, True)
-    runReaderT (arbitraryExpression typ) (emptyEnvWithPureness pure)
+    runReaderT (arbitraryExpression typ) (initialEnvWithPureness pure)
   shrink = shrinkExpression
 
 instance Q.Arbitrary PureExpression where
   arbitrary = do
     typ <- arbitraryType
-    PureExpression <$> runReaderT (arbitraryExpression typ) (emptyEnvWithPureness True)
+    PureExpression <$> runReaderT (arbitraryExpression typ) (initialEnvWithPureness True)
   shrink = map PureExpression . shrinkExpression . runPureExpression
 
 instance Q.Arbitrary TypeCheckerTypedVariable where

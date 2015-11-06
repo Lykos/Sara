@@ -185,3 +185,4 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
             Integer n _                      -> return $ Integer n
             Double d _                       -> return $ Double d
             Unit _                           -> return $ Unit
+            Assertion k exp _                -> Assertion k <$> transformSubExp exp

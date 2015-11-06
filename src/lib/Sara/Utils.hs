@@ -1,5 +1,7 @@
 -- | Module for all the common Haskell functions that have nothing to do with a compiler.
-module Sara.Utils (foldlM, keyBy) where
+module Sara.Utils ( foldlM
+                  , keyBy
+                  , (<<) ) where
 
 import qualified Data.Map as M
 
@@ -19,3 +21,7 @@ foldlM f xs m = foldl (\ a b -> (f b) >>= ($a)) m xs
 -- fromList [(0,[2,4]),(1,[1,3])]
 keyBy :: Ord k => (a -> k) -> [a] -> M.Map k [a]
 keyBy f = M.fromListWith (++) . map (\a -> (f a, [a]))
+
+-- | Flipped version of `>>`.
+(<<) :: Monad m => m a -> m b -> m a
+(<<) = flip (>>)

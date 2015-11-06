@@ -3,6 +3,7 @@ module Sara.RegressionTestUtils (
   , parseExpectation) where
 
 import Sara.Operators
+import Sara.Syntax ( AssertionKind(..) )
 import qualified Sara.Errors as E
 import qualified Sara.Parser as P
 import qualified Sara.Lexer as L
@@ -35,7 +36,8 @@ reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementE
                 , "DifferentTypesError", "MainArgsError", "ImpureExpressionError"
                 , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
                 , "NoMain", "PureFunction", "PurePrecondition", "PurePostcondition"
-                , "Function", "Method", "RedeclaredArgument" ] ++ L.reservedNames
+                , "Function", "Method", "RedeclaredArgument", "PureAssertion", "Assert"
+                , "Assume", "AssertAndCollapse" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -175,7 +177,8 @@ impureExpressionError = do
 pureContext :: Parser E.PureContext
 pureContext = try pureFunction
               <|> try purePrecondition
-              <|> purePostcondition
+              <|> try purePostcondition
+              <|> try pureAssertion
               <?> "pure context type"
 
 pureFunction :: Parser E.PureContext
@@ -195,6 +198,18 @@ purePostcondition = do
   reservedToken "PurePostcondition"
   f <- functionOrMethod
   return $ E.PurePostcondition f
+
+pureAssertion :: Parser E.PureContext
+pureAssertion = do
+  reservedToken "PureAssertion"
+  k <- assertionKind
+  return $ E.PureAssertion k
+
+assertionKind :: Parser AssertionKind
+assertionKind = do
+  try (reservedToken "Assert" >> return Assert)
+  <|> try (reservedToken "Assume" >> return Assume)
+  <|> (reservedToken "AssertAndCollapse" >> return AssertAndCollapse)
 
 functionOrMethod :: Parser E.FunctionOrMethod
 functionOrMethod = function <|> method <?> "function or method"
