@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError PureAssertion Assert 3:10
+method main(): Integer {
+  assert n();
+  8
+};
+
+method n(): Boolean { true }

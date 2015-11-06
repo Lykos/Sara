@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError PureAssertion AssertAndCollapse 3:21
+method main(): Integer {
+  assertAndCollapse n();
+  8
+};
+
+method n(): Boolean { true }

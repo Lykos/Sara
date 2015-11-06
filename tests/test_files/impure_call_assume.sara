@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError PureAssertion Assume 3:10
+method main(): Integer {
+  assume n();
+  8
+};
+
+method n(): Boolean { true }

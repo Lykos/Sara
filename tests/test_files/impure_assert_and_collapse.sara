@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError PureFunction f 5:3
+method main(): Integer { 8 };
+
+function f(a: Integer): Integer {
+  assertAndCollapse true;
+  a
+}
