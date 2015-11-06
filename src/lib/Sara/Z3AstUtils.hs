@@ -50,22 +50,22 @@ class ASTWrapper a b | a -> b where
 
 -- | Ast Wrapper for preconditions.
 -- We use this to store additional information with the AST and to ensure better type safety.
-newtype PreAST
-  = PreAST { unPre :: FailureTrackableAST }
+newtype ProofObligation
+  = ProofObligation { unPre :: FailureTrackableAST }
   deriving (Eq, Ord, Show)
 
 -- | Ast Wrapper for postconditions.
 -- We use this to for better type safety.
-newtype PostAST
-  = PostAST { unPost :: TrackableAST () }
+newtype Assumption
+  = Assumption { unPost :: TrackableAST () }
   deriving (Eq, Ord, Show)
 
-instance ASTWrapper PreAST (VerifierFailureType, SourcePos) where
-  wrap = PreAST
+instance ASTWrapper ProofObligation (VerifierFailureType, SourcePos) where
+  wrap = ProofObligation
   unwrap = unPre
 
-instance ASTWrapper PostAST () where
-  wrap = PostAST
+instance ASTWrapper Assumption () where
+  wrap = Assumption
   unwrap = unPost
 
 instance ASTWrapper (TrackableAST b) b where
@@ -120,8 +120,8 @@ findFailure model (Condition cond sub)   = do
     Just True  -> findFailure model sub
     Just False -> return Nothing
 
--- | An AST and his pre- and postcondition.
-data CondAST = CondAST { pre :: PreAST, post :: PostAST, ast :: AST }
+-- | An AST and his proof obligations and assumptions.
+data CondAST = CondAST { pre :: ProofObligation, post :: Assumption, ast :: AST }
 
 runCondAst :: MonadZ3 z3 => CondAST -> z3 (FailureTrackableAST, AST, AST)
 runCondAst (CondAST pre post ast) = (,,) (unwrap pre) <$> runAst post <*> pure ast
