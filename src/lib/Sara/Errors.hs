@@ -21,6 +21,7 @@ module Sara.Errors( ErrorOr
                   , impureExpression
                   , invalidMainArgs
                   , redeclaredFunction
+                  , redeclaredArgument
                   , mismatchingCondTypes
                   , invalidCondType
                   , notAssignable
@@ -88,6 +89,7 @@ data MismatchType
 
 data RedeclaredElement
   = RedeclaredFunction FunctionOrMethod [Type]
+  | RedeclaredArgument Name FunctionOrMethod
   deriving (Eq, Ord, Show)
 
 data ContextType
@@ -175,6 +177,7 @@ renderTypes = commaSep . map pretty
 
 renderRedeclaredElement :: RedeclaredElement -> T.Text
 renderRedeclaredElement (RedeclaredFunction func argTypes) = T.append (renderFunction func) (parens $ renderTypes argTypes)
+renderRedeclaredElement (RedeclaredArgument name func)     = T.concat [T.pack "argument ", T.pack name, T.pack " in ", renderFunction func]
 
 renderUnknownElement :: UnknownElement -> T.Text
 renderUnknownElement (UnknownUnOp name typ)                 = renderUnknownTyped "unary operator" (unarySymbol name) [typ]
@@ -266,6 +269,9 @@ mismatchingCondTypes s t = positionedError $ DifferentTypesError [s, t]
 
 redeclaredFunction :: Monad m => FunctionOrMethod -> [Type] -> SourcePos -> SourcePos -> ExceptT Error m a
 redeclaredFunction func argTypes pos =  positionedError $ RedeclaredElementError (RedeclaredFunction func argTypes) pos
+
+redeclaredArgument :: Monad m => Name -> FunctionOrMethod -> SourcePos -> SourcePos -> ExceptT Error m a
+redeclaredArgument name func pos =  positionedError $ RedeclaredElementError (RedeclaredArgument name func) pos
 
 invalidMainArgs :: Monad m => [Type] -> SourcePos -> ExceptT Error m a
 invalidMainArgs = positionedError . MainArgsError

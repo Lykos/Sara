@@ -1,0 +1,8 @@
+// errors PositionedError RedeclaredElementError RedeclaredArgument a Function f 6:12 6:24
+method main(): Integer {
+  2
+};
+
+function f(a: Integer, a: Integer): Integer {
+  2
+}

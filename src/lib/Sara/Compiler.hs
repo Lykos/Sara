@@ -1,7 +1,6 @@
 module Sara.Compiler ( run
                      , compile) where
 
-import Debug.Trace
 import Sara.Parser
 import Sara.TypeChecker
 import Sara.Syntax

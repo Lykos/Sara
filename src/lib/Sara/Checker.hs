@@ -1,8 +1,16 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Sara.Checker ( checkWithoutMain
                     , checkWithMain ) where
 
+import Text.Parsec.Pos
 import Control.Monad
+import Control.Monad.Identity
+import Control.Monad.Except
+import Control.Monad.State.Strict
 import Data.Monoid
+import qualified Data.Map as M
 import Sara.AstUtils
 import Sara.Meta
 import Sara.Operators
@@ -30,7 +38,20 @@ checkSignatures = mapMSignatures_ checkSignature
   where checkSignature Signature{ sigName = "main", args = [], retType = T.Integer } = return ()
         checkSignature s@Signature{ sigName = "main", args = [], retType = t }       = invalidMainRetType t (signaturePos s)
         checkSignature s@Signature{ sigName = "main", args = a }                     = invalidMainArgs (map varType a) (signaturePos s)
-        checkSignature _                                                             = return ()
+        checkSignature Signature{..}                                                 = checkArgs args $ functionOrMethod isPure sigName
+
+checkArgs :: [TypedVariable b NodeMeta] -> FunctionOrMethod -> ErrorOr ()
+checkArgs args functionOrMethod = evalStateT (mapM_ checkArg args) M.empty
+  where checkArg :: TypedVariable b NodeMeta -> StateT (M.Map Name SourcePos) (ExceptT Error Identity) ()
+        checkArg var = do
+          let name = varName var
+          let pos = typedVarPos var
+          previousPos <- gets $ M.lookup name
+          case previousPos of
+            Just pos' -> lift $ redeclaredArgument name functionOrMethod pos' pos
+            Nothing   -> return ()
+          modify $ M.insert name pos
+          return ()
 
 checkAssignments :: Program a b c NodeMeta -> ErrorOr ()
 checkAssignments = mapMExpressions_ checkAssignment

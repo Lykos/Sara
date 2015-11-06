@@ -35,7 +35,7 @@ reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementE
                 , "DifferentTypesError", "MainArgsError", "ImpureExpressionError"
                 , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
                 , "NoMain", "PureFunction", "PurePrecondition", "PurePostcondition"
-                , "Function", "Method" ] ++ L.reservedNames
+                , "Function", "Method", "RedeclaredArgument" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -219,7 +219,9 @@ redeclaredElementError = do
   return $ E.RedeclaredElementError r pos
 
 redeclaredElement :: Parser E.RedeclaredElement
-redeclaredElement = redeclaredFunction <?> "redeclared element expectation"
+redeclaredElement = try redeclaredFunction
+                    <|> redeclaredArgument
+                    <?> "redeclared element expectation"
 
 redeclaredFunction :: Parser E.RedeclaredElement
 redeclaredFunction = do
@@ -227,6 +229,13 @@ redeclaredFunction = do
   f <- functionOrMethod
   t <- many P.typeExpression
   return $ E.RedeclaredFunction f t
+
+redeclaredArgument :: Parser E.RedeclaredElement
+redeclaredArgument = do
+  reservedToken "RedeclaredArgument"
+  name <- L.identifierToken
+  f <- functionOrMethod
+  return $ E.RedeclaredArgument name f
 
 assignmentError :: Parser E.PositionedError
 assignmentError = do

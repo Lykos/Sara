@@ -60,6 +60,9 @@ expressionTyp = expTyp . S.expressionMeta
 expressionPos :: S.Expression a b c NodeMeta -> SourcePos
 expressionPos = nodePos . S.nodeMeta
 
+typedVarPos :: S.TypedVariable b NodeMeta -> SourcePos
+typedVarPos = nodePos . S.nodeMeta
+
 signaturePos :: S.Signature a b c NodeMeta -> SourcePos
 signaturePos = nodePos . S.nodeMeta
 
