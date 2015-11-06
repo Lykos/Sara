@@ -1,0 +1,44 @@
+-- | Simple common Z3 utilities that are used by multiple modules.
+
+module Sara.Z3Utils ( z3Sort
+                    , z3VarName
+                    , z3Var
+                    , z3FuncDecls ) where
+
+import Z3.Monad
+import Sara.Meta
+import Sara.Types
+import Data.List
+
+-- | Translates a type to a Z3 sort.
+z3Sort :: MonadZ3 z3 => Type -> z3 Sort
+z3Sort Boolean = mkBoolSort
+z3Sort Integer = mkIntSort
+z3Sort t       = error $ "Unsupported type for verifier: " ++ show t
+
+-- | Creates a Z3 variable name from the given components.
+z3VarName :: [String] -> String
+z3VarName = intercalate "$"
+
+z3Symbol :: MonadZ3 z3 => String -> String -> Int -> z3 Symbol
+z3Symbol prefix name index = mkStringSymbol $ z3VarName [prefix, name, show index]
+
+z3Var :: MonadZ3 z3 => VariableMeta -> Type -> z3 AST
+z3Var (VariableMeta name index) typ = do
+  sym <- z3Symbol "var" name index
+  sort <- z3Sort typ
+  mkVar sym sort
+
+-- | Creates three function declarations for a function or method in the source file:
+-- * One function declarations for the function or method itself.
+-- * One function that evaluates its preconditions as a boolean.
+-- * One function that evaluates its postconditions as a boolean.
+z3FuncDecls :: MonadZ3 z3 => FunctionMeta -> [Type] -> Type -> z3 (FuncDecl, FuncDecl, FuncDecl)
+z3FuncDecls (FunctionMeta name index) argTypes retType = do
+  preSym <- z3Symbol "pre" name index
+  postSym <- z3Symbol "post" name index
+  funcSym <- z3Symbol "func" name index
+  argSorts <- mapM z3Sort argTypes
+  retSort <- z3Sort retType
+  boolSort <- mkBoolSort
+  (,,) <$> mkFuncDecl preSym argSorts boolSort <*> mkFuncDecl postSym argSorts boolSort <*> mkFuncDecl funcSym argSorts retSort

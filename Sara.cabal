@@ -47,10 +47,13 @@ library
                      , Sara.Verifier
                      , Sara.Meta
                      , Sara.AstWrapper
+                     , Sara.SymbolicState
                      , Sara.Symbolizer
                      , Sara.Checker
                      , Sara.PureChecker
                      , Sara.Z3AstUtils
+                     , Sara.Z3Utils
+                     , Sara.Z3Expression
                      , Sara.Utils
   other-extensions:    GeneralizedNewtypeDeriving
   build-depends:       base >=4.8 && <4.9
