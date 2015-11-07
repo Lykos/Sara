@@ -1,15 +1,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.Verifier ( verify ) where
+module Sara.Z3.Verifier ( verify ) where
 
 import Sara.Errors as E
-import Sara.Z3AstUtils
-import Sara.Z3Utils
-import Sara.Z3Expression
+import Sara.AstUtils
+import Sara.Z3.AstWrapper
+import Sara.Z3.Utils
+import Sara.Z3.PureExpression
 import Control.Monad.Except
 import qualified Sara.Syntax as S
 import Sara.Meta
-import Sara.AstUtils
+import Sara.Z3.CondAst
 import Z3.Monad
 
 instance MonadZ3 m => MonadZ3 (ExceptT a m) where

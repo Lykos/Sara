@@ -3,16 +3,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 -- | Data structures to keep track of some properties of the Z3 AST structure.
-module Sara.AstWrapper ( ProofObligation
-                       , Assumption
-                       , FailureTrackableAST
-                       , empty
-                       , singleton
-                       , conjunct
-                       , conditionOn
-                       , runAst
-                       , findFailure ) where
+module Sara.Z3.AstWrapper ( ProofObligation
+                          , Assumption
+                          , FailureTrackableAST
+                          , empty
+                          , singleton
+                          , conjunct
+                          , conditionOn
+                          , runAst
+                          , runProofObligation
+                          , findFailure ) where
 
+import Sara.Z3.Utils
 import Data.Maybe
 import Z3.Monad
 import Sara.Errors (VerifierFailureType)
@@ -81,11 +83,8 @@ runAst a = runAst' (unwrap a)
         runAst' (Conjunction as)  = conjunctAsts =<< mapM runAst' as
         runAst' (Condition ast a) = mkImplies ast =<< runAst' a
 
--- | Conjuncts the given asts, but pays attention to empty or singleton lists because Z3 doesn't like empty or singleton conjunctions.
-conjunctAsts :: MonadZ3 z3 => [AST] -> z3 AST
-conjunctAsts []    = mkTrue
-conjunctAsts [ast] = return ast
-conjunctAsts as    = mkAnd as
+runProofObligation :: ProofObligation -> FailureTrackableAST
+runProofObligation = unwrap
 
 findFailure :: MonadZ3 z3 => Model -> TrackableAST a -> z3 (Maybe a)
 findFailure _ Empty                      = return Nothing

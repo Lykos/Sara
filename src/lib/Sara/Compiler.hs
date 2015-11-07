@@ -8,7 +8,7 @@ import Sara.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
 import Sara.Meta
-import Sara.Verifier
+import Sara.Z3.Verifier
 
 import qualified Z3.Monad as Z3
 import Control.Monad.Identity

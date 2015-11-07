@@ -44,17 +44,17 @@ library
                      , Sara.Operators
                      , Sara.Lexer
                      , Sara.CodeGenerator
-                     , Sara.Verifier
                      , Sara.Meta
-                     , Sara.AstWrapper
-                     , Sara.SymbolicState
                      , Sara.Symbolizer
                      , Sara.Checker
                      , Sara.PureChecker
-                     , Sara.Z3AstUtils
-                     , Sara.Z3Utils
-                     , Sara.Z3Expression
                      , Sara.Utils
+                     , Sara.Z3.SymbolicState
+                     , Sara.Z3.Verifier
+                     , Sara.Z3.AstWrapper
+                     , Sara.Z3.CondAst
+                     , Sara.Z3.Utils
+                     , Sara.Z3.PureExpression
   other-extensions:    GeneralizedNewtypeDeriving
   build-depends:       base >=4.8 && <4.9
                      , mtl >=2.2 && <2.3

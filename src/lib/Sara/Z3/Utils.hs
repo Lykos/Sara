@@ -1,14 +1,21 @@
 -- | Simple common Z3 utilities that are used by multiple modules.
 
-module Sara.Z3Utils ( z3Sort
-                    , z3VarName
-                    , z3Var
-                    , z3FuncDecls ) where
+module Sara.Z3.Utils ( z3Sort
+                     , z3VarName
+                     , z3Var
+                     , z3FuncDecls
+                     , conjunctAsts ) where
 
 import Z3.Monad
 import Sara.Meta
 import Sara.Types
 import Data.List
+
+-- | Conjuncts the given asts, but pays attention to empty or singleton lists because Z3 doesn't like empty or singleton conjunctions.
+conjunctAsts :: MonadZ3 z3 => [AST] -> z3 AST
+conjunctAsts []    = mkTrue
+conjunctAsts [ast] = return ast
+conjunctAsts as    = mkAnd as
 
 -- | Translates a type to a Z3 sort.
 z3Sort :: MonadZ3 z3 => Type -> z3 Sort

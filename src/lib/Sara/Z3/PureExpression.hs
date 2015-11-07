@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.Z3Expression ( z3Expression ) where
+module Sara.Z3.PureExpression ( z3Expression ) where
 
 import Sara.PrettyPrinter
 import Sara.Errors as E
-import Sara.Z3AstUtils
-import Sara.Z3Utils
+import Sara.Z3.CondAst
+import Sara.Z3.Utils
 import Sara.Operators
 import qualified Sara.Syntax as S
 import Sara.Meta

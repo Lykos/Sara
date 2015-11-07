@@ -4,21 +4,21 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -- | Helper functions to be used by the verifier to transform our AST into a Z3 AST.
-module Sara.SymbolicState ( SymbolicExecutionStart
-                          , SymbolicState
-                          , empty
-                          , getVar
-                          , setVar
-                          , getOrCreateVar
-                          , addProofObligation
-                          , addAssumption ) where
+module Sara.Z3.SymbolicState ( SymbolicExecutionStart
+                             , SymbolicState
+                             , empty
+                             , getVar
+                             , setVar
+                             , getOrCreateVar
+                             , addProofObligation
+                             , addAssumption ) where
 
 import qualified Data.Map as M
 import Z3.Monad
 import Sara.Errors (VerifierFailureType)
-import Sara.Z3Utils
+import Sara.Z3.Utils
 import Sara.Types
-import qualified Sara.AstWrapper as W
+import qualified Sara.Z3.AstWrapper as W
 import Sara.Meta
 import Text.Parsec.Pos
 
@@ -49,6 +49,7 @@ setVar v a s@SymbolicState{..} = let insertVar = M.insert v a
   Just _  -> s'
   Nothing -> s'{ variableInitialStates = insertVar variableInitialStates }
 
+-- | Sets the 
 getOrCreateVar :: MonadZ3 z3 => VariableMeta -> Type -> SymbolicState -> z3 (SymbolicState, AST)
 getOrCreateVar v t s@SymbolicState{..} = case getVar v s of
   Just ast -> return (s, ast)
