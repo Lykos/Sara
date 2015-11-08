@@ -1,95 +1,90 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Sara.Z3.SymbolicExecutor where
 
+import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Sara.Meta
-import Sara.Syntax (Name)
+import Sara.Types ( Type (..) )
 import Sara.Z3.Utils
+import Sara.Z3.SymbolicStateSpace
+import Sara.Z3.PureExpression
+import Sara.Z3.CondAst ( runCondAst )
 import qualified Sara.Z3.SymbolicState as S
+import qualified Sara.Errors as E
 import qualified Sara.Syntax as S
 import Sara.Z3.Operators
+import Sara.Operators
+import Z3.Monad
 
-type ResultTmpVar = VariableMeta
+shortCircuitExecution :: (MonadState SymbolicStateSpace m, MonadZ3 m, MaybeNegation a) => [String] -> a -> ResultTmpVar -> m ResultTmpVar
+shortCircuitExecution nameComponents a e | isPositive a = return e
+                                         | otherwise    = computeTmp1 ("negate" : nameComponents) Boolean mkNot e
 
--- | We intentionally use a name with multiple components to ensure that there are no clashes with user variables.
-tmpName :: [String] -> Name
-tmpName nameComponents = z3VarName $ ["tmp"] ++ nameComponents
-
-data SymbolicExecutionState = SymbolicExecutionState { tmpIndex :: Id, states :: [S.SymbolicState] }
-
-shortCircuitExecution :: (MonadState SymbolicExecutionState m, MonadZ3 m) => String -> ShortCircuitKind -> ResultTmpVar -> m ResultTmpVar
-shortCircuitExecution name ShortCircuitKind{..} l = do
-  assumption = case predeterminedForValue of
-    PredeterminedForFalse -> computeTmp1 ["notLeftSideAssumption", "shortCircuit", name] mkNot l
-    PredeterminedForTrue  -> return l
-  addAssumption assumption
-  case valueWhenPredetermined of
-    LeftSideWhenPredetermined    -> return l
-    NotLeftSideWhenPredetermined -> computeTmp1 ["notLeftSideResult", "shortCircuit", name] mkNot r'
-
-notShortCircuitExecution :: (MonadState SymbolicExecutionState m, MonadZ3 m) => String -> ShortCircuitKind -> ResultTmpVar -> SymbolizerExpression -> m ResultTmpVar
-notShortCircuitExecution name ShortCircuitKind{..} l r = do
-  assumption = case predeterminedForValue of
-    PredeterminedForTrue  -> computeTmp1 ["notLeftSideAssumption", "notShortCircuit", name] mkNot l
-    PredeterminedForFalse -> return l
-  addAssumption assumption
-  r' <- symbolicExecute r
-  case valueWhenPredetermined of
-    RightSideWhenNotPredetermined    -> return r'
-    NotRightSideWhenNotPredetermined -> computeTmp1 ["notRightSideResult", "notShortCircuit", name] mkNot r'
-
-symbolicExecute :: (MonadState SymbolicExecutionState m, MonadZ3 m) => SymbolizerExpression -> m ResultTmpVar
-symbolicExecute (S.Boolean b _)                                 = computeTmp1 ["boolean"] mkBool b
-symbolicExecute (S.Integer n _)                                 = computeTmp1 ["integer"] mkInteger n
-symbolicExecute (S.UnaryOperation op e _)                       = computeTmp1 [show op] (z3UnaryOperator op) =<< symbolicExecute e
-symbolicExecute (S.BinaryOperation Assign (Variable _ m _) e _) = do
+symbolicExecute :: (MonadState SymbolicStateSpace m, MonadZ3 m) => SymbolizerExpression -> m ResultTmpVar
+symbolicExecute (S.Boolean b _)                                              = setNewTmpVar ["boolean"] Boolean =<< mkBool b
+symbolicExecute (S.Integer n _)                                              = setNewTmpVar ["integer"] Integer =<< mkInteger n
+symbolicExecute (S.UnaryOperation op e (Typed t))                            = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
+symbolicExecute (S.BinaryOperation Assign (S.Variable _ m _) e (Typed t))    = do
   e' <- symbolicExecute e
-  assignVar m e'
+  assignVar (m, t) e'
   return e'
-symbolicExecute (S.BinaryOperation op@(shortCircuitKind -> Just kind) l r _) = do
-  l' <- symbolicExecute e
+symbolicExecute (S.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r (Typed t)) = do
+  l' <- symbolicExecute l
   let name = show op
-  splitStates name (shortCircuitExecution name kind l') (notShortCircuitExecution name kind l' r)
-symbolicExecute (S.BinaryOperation op l r) = do
+  let executionWhenShortCircuit    = shortCircuitExecution ["whenShortCircuit", name] valueWhenPredetermined l'
+  let executionWhenNotShortCircuit = shortCircuitExecution ["whenNotShortCircuit", name] valueWhenNotPredetermined =<< symbolicExecute r
+  let splitStates = splitStatesOn ["split", name] t l'
+  case predeterminedForValue of
+    PredeterminedForFalse -> splitStates executionWhenShortCircuit executionWhenNotShortCircuit
+    PredeterminedForTrue  -> splitStates executionWhenNotShortCircuit executionWhenShortCircuit
+symbolicExecute (S.BinaryOperation op l r (ExpressionMeta t, NodeMeta p))    = do
   l' <- symbolicExecute l
   r' <- symbolicExecute r
-  computeTmp2 [show op] (z3BinaryOperator op) l' r'
+  result <- computeTmp2 [show op] t (z3BinaryOperator op) l' r'
+  case proofObligation op of
+    Just (failureType, proofObl) -> do
+      proofObl' <- computeTmp2 ["proofObligation", show op] Boolean proofObl l' r'
+      addProofObligation proofObl' failureType p
+    Nothing                      -> return ()
+  return result
+symbolicExecute (S.Call name args m (ExpressionMeta t, NodeMeta p))          = do
+  args' <- mapM symbolicExecute args
+  let aTyps = map expressionTyp args
+  (funcPre, funcPost, func) <- z3FuncDecls m aTyps t
+  pre <- computeTmpN ["preconditionApp", name] Boolean (mkApp funcPre) args'
+  post <- computeTmpN ["postconditionApp", name] Boolean (mkApp funcPost) args'
+  let pure = funcSymPure m
+  let failureType = E.PreconditionViolation $ E.functionOrMethod pure name
+  addProofObligation pre failureType p
+  addAssumption post
+  case pure of
+    True  -> computeTmpN ["funcApp", name] t (mkApp func) args'
+    False -> newTmpVar ["methodResult", name] t
+symbolicExecute (S.Variable _ m (Typed t))                                   = return (m, t)
+symbolicExecute (S.Conditional cond thenExp elseExp (Typed t))               = do
+  cond' <- symbolicExecute cond
+  splitStatesOn ["split", "if"] t cond' (symbolicExecute thenExp) (symbolicExecute elseExp)
+symbolicExecute (S.While invs cond body (_, NodeMeta p))                     = do
+  invs' <- ["loop", "entry", "invariant"] Boolean
+  mapM (addProofObligation E.LoopEntryInvariantViolation p) invs
+  collapse LoopEntry p
+  mapM addAssumption invs
+  cond' <- symbolicExecute cond
+  addAssumption cond
+  symbolicExecute body
+  mapM (addProofObligation E.LoopExitInvariantViolation p) invs
+  collapse LoopExit p
+  return $ error "A while loop doesn't have a return value."
 
-newTmpVar :: MonadState SymbolicExecutionState m => [String] -> m ResultTmpVar
-newTmpVar nameComponents = do
-  modify $ \s@SymbolicExecutionState{ tmpIndex = idx } -> s{ tmpIndex = idx + 1 }
-  idx <- gets tmpIndex
-  return VariableMeta (tmpName nameComponents) idx
-
-setNewTmpVar :: MonadState SymbolicExecutionState m => [String] -> AST -> m ResultTmpVar
-setNewTmpVar nameComponents ast = do
-  var <- newTmpVar nameComponents
-  modifyStates $ S.setVar var ast
-  return var
-
-computeTmp1 :: (MonadState SymbolicExecutionState m, MonadZ3 m) => [String] -> (AST -> m AST) -> ResultTmpVar -> m ResultTmpVar
-computeTmp1 nameComponents transform1 input = setNewTmpVar nameComponents =<< transform1 =<< S.getOrCreateVar input
-
-computeTmp2 :: (MonadState SymbolicExecutionState m, MonadZ3 m) => [String] -> (AST -> AST -> m AST) -> ResultTmpVar -> ResultTmpVar -> m ResultTmpVar
-computeTmp2 nameComponents transform2 left right = setNewTmpVar nameComponents =<< transform2 =<< S.getOrCreateVar left <*> S.getOrCreateVar right
-
-computeTmpN :: (MonadState SymbolicExecutionState m, MonadZ3 m) => [String] -> ([AST] -> m AST) -> [ResultTmpVar] -> m ResultTmpVar
-computeTmpN nameComponents transformN inputs = setNewTmpVar nameComponents =<< transformN =<< mapM S.getOrCreateVar inputs
-
-assignVar :: MonadState SymbolicExecutionState m => ResultTmpVar -> ResultTmpVar -> m ()
-assignVar lhs rhs = modifyStates $ S.setVar lhs $ S.getOrCreateVar rhs
-
--- | Modify the states by applying the given function to every state.
-modifyStates :: (MonadState SymbolicExecutionState m) => (SymbolicState -> SymbolicState) -> m ()
-modifyStates f = modify $ \s@SymbolicExecutionState{ states = oldStates } -> s{ states = map f oldStates }
-
--- | Models a nondeterministic choice between two possible executions.
-splitStates :: (MonadState SymbolicExecutionState m, MonadZ3 z3) => [String] -> m ResultTmpVar -> m ResultTmpVar -> m ResultTmpVar
-splitStates name f g = do
-  resultVar <- newTmpVar ["splitStates", name]
-  s@(SymbolicExecutionState id oldStates) <- get
-  let SymbolicExecutionState idAfterF statesAfterF = execStateT (assignVar resultVar =<< f) s
-  let SymbolicExecutionState idAfterG statesAfterG = execStateT (assignVar resultVar =<< g) (SymbolicExecutionState idAfterF oldStates)
-  put SymbolicExecutionState idAfterG [statesAfterF, statesAfterG]
-  return resultVar
+symbolicExecutePure :: (MonadState SymbolicStateSpace m, MonadZ3 m) => SymbolizerExpression -> m ResultTmpVar
+symbolicExecutePure exp = computeToTmpVar $ do
+  vars <- gets S.variableStates
+  (obl, ass, ast) <- runCondAst <$> runReaderT (z3Expression exp) vars
+  S.addProofObligation obl
+  S.addAssumption ass
+  return ast
+  

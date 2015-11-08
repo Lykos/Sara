@@ -8,6 +8,10 @@ module Sara.Z3.Utils ( z3Sort
                      , mkZero
                      , mkNeZero ) where
 
+import Control.Monad.Except
+import Control.Monad.State.Strict
+import Control.Monad.Reader
+import Control.Monad.Writer
 import Z3.Monad
 import Sara.Meta
 import Sara.Types
@@ -43,10 +47,12 @@ z3Var (VariableMeta name index) typ = do
 -- * One function that evaluates its preconditions as a boolean.
 -- * One function that evaluates its postconditions as a boolean.
 z3FuncDecls :: MonadZ3 z3 => FunctionMeta -> [Type] -> Type -> z3 (FuncDecl, FuncDecl, FuncDecl)
-z3FuncDecls (FunctionMeta name index) argTypes retType = do
+z3FuncDecls (FunctionMeta pure name index) argTypes retType = do
   preSym <- z3Symbol "pre" name index
   postSym <- z3Symbol "post" name index
-  funcSym <- z3Symbol "func" name index
+  funcSym <- case pure of
+    True  -> z3Symbol "func" name index
+    False -> return $ error "Non-pure functions cannot be called in Z3."
   argSorts <- mapM z3Sort argTypes
   retSort <- z3Sort retType
   boolSort <- mkBoolSort
@@ -57,4 +63,19 @@ mkZero = mkInteger 0
 
 mkNeZero :: MonadZ3 z3 => AST -> z3 AST
 mkNeZero b = mkNot =<< mkEq b =<< mkZero
+
+instance MonadZ3 m => MonadZ3 (ExceptT a m) where
+  getSolver = lift getSolver
+  getContext = lift getContext
+
+instance MonadZ3 m => MonadZ3 (StateT s m) where
+  getSolver = lift getSolver
+  getContext = lift getContext
+
+instance MonadZ3 m => MonadZ3 (ReaderT s m) where
+  getSolver = lift getSolver
+  getContext = lift getContext
   
+instance (Monoid w, MonadZ3 m) => MonadZ3 (WriterT w m) where
+  getSolver = lift getSolver
+  getContext = lift getContext

@@ -45,9 +45,10 @@ checkPureBodies = mapMDeclarations_ checkPureBody
 checkPureAssertions :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
 checkPureAssertions = mapMExpressions_ checkOneExpression
   where checkOneExpression S.Assertion{ assertionKind = kind, inner = exp } = checkPureExpression (PureAssertion kind) exp
+        checkOneExpression S.While{ invariants = invs }                     = mapM_ (checkPureExpression PureInvariant) invs
         checkOneExpression _                                                = return ()
 
-checkPureExpression :: PureContext -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity)  ()
+checkPureExpression :: PureContext -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity) ()
 checkPureExpression context = mapMExpression_ checkPureSingleExpression
   where checkPureSingleExpression exp = do
           cond <- checkPure exp

@@ -15,13 +15,13 @@ z3UnaryOperator LogicalNot e = mkNot e
 z3UnaryOperator op _         = error $ "Unsupported unary operator for Z3 verifier: " ++ show op
 
 -- | Returns the proof obligation of a bianary operator, if there is one.
-proofObligation :: MonadZ3 z3 => BinaryOperator -> AST -> AST -> Maybe (VerifierFailureType, z3 AST)
-proofObligation DividedBy _ = divisionByZeroObl
-proofObligation Modulo _    = divisionByZeroObl
-proofObligation _ _         = const Nothing
+proofObligation :: MonadZ3 z3 => BinaryOperator -> Maybe (VerifierFailureType, AST -> AST -> z3 AST)
+proofObligation DividedBy = divisionByZeroObl
+proofObligation Modulo    = divisionByZeroObl
+proofObligation _         = Nothing
 
-divisionByZeroObl :: MonadZ3 z3 => AST -> Maybe (VerifierFailureType, z3 AST)
-divisionByZeroObl b = Just (DivisionByZero, mkNeZero b)
+divisionByZeroObl :: MonadZ3 z3 => Maybe (VerifierFailureType, AST -> AST -> z3 AST)
+divisionByZeroObl = Just (DivisionByZero, const mkNeZero)
 
 -- | Returns the Z3 equivalent for binary operators and possibly their proof obligation.
 z3BinaryOperator :: MonadZ3 z3 => BinaryOperator -> AST -> AST -> z3 AST

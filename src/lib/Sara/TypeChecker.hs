@@ -27,9 +27,12 @@ data TypeCheckerContext = TypeCheckerContext { funcs :: FunctionMap
 
 checkReturnTypes :: TypeCheckerProgram -> ErrorOr ()
 checkReturnTypes = mapMDeclarations_ checkRetType
-  where checkRetType (S.Function sig body _) = when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
-          where bodyType = expressionTyp body
-                sigType = retType sig
+  where checkRetType (S.Function sig body _) = do
+          let bodyType = expressionTyp body
+          let sigType = retType sig
+          when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
+          typeCheckCondTypes $ S.preconditions sig
+          typeCheckCondTypes $ S.postconditions sig
         checkRetType Extern{}              = return ()
 
 checkWithoutMain :: ParserProgram -> ErrorOr SymbolizerProgram
@@ -60,6 +63,16 @@ functions prog = execStateT (mapMSignatures_ addSignature prog) M.empty
 insertFunction :: ParserSignature -> FunctionMap -> FunctionMap
 insertFunction sig = M.insert (functionKey sig) sig
 
+-- | Checks that the type of a condition is a boolean.
+typeCheckCondType :: TypeCheckerExpression -> ErrorOr ()
+typeCheckCondType cond = let condPos = expressionPos cond in
+  case expressionTyp cond of
+    T.Boolean -> return ()
+    condTyp   -> lift $ invalidCondType condTyp condPos
+
+typeCheckCondTypes :: [TypeCheckerExpression] -> ErrorOr ()
+typeCheckCondTypes = mapM typeCheckCondType
+
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
   runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression program) (TypeCheckerContext funcMap M.empty)
@@ -75,16 +88,17 @@ typeCheckExpressions funcMap program =
           BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp left) (expressionTyp right)
           Variable name _ _                  -> typed =<< varType name
           Call name args _ _                 -> typed =<< funcType name (map expressionTyp args)
-          Conditional cond thenExp elseExp _ -> typed =<< conditionalType (expressionTyp cond) (expressionTyp thenExp) (expressionTyp elseExp) (expressionPos cond)
+          Conditional cond thenExp elseExp _ -> typed
+                                                =<< conditionalType (expressionTyp thenExp) (expressionTyp elseExp)
+                                                << typeCheckCondType cond
           Block _ exp _                      -> typed (expressionTyp exp)
-          While cond _ _                     -> typed T.Unit << condType (expressionTyp cond) (expressionPos cond)
-          Assertion _ cond _                 -> typed T.Unit << condType (expressionTyp cond) (expressionPos cond)
+          While invs cond _ _                -> typed T.Unit
+                                                << typeCheckCondType cond
+                                                << typeCheckCondTypes invs
+          Assertion _ cond _                 -> typed T.Unit << typeCheckCondType cond
           where pos = expressionPos exp
-                conditionalType T.Boolean thenType elseType _ | thenType == elseType = return thenType
-                                                              | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
-                conditionalType condTyp _ _ condPos                                  = lift $ invalidCondType condTyp condPos
-                condType T.Boolean _     = return ()
-                condType condTyp condPos = lift $ invalidCondType condTyp condPos
+                conditionalType thenType elseType _ | thenType == elseType = return thenType
+                                                    | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
                 typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
                 typed t = return exp{ expMeta = meta' }
                   where meta' :: (ExpressionMeta, NodeMeta)

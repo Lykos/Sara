@@ -16,7 +16,8 @@ reservedOpNames = map unarySymbol unaryOperators
 reservedNames :: [String]
 reservedNames = [ "function", "extern", "method", "if", "then"
                 , "else", "while", "true", "false", "requires"
-                , "ensures", "assert", "assume", "assertAndCollapse"] ++ map show types
+                , "ensures", "assert", "assume", "assertAndCollapse"
+                , "invariant"] ++ map show types
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style

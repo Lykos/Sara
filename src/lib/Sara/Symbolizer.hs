@@ -45,7 +45,7 @@ functions prog = execWriter (evalStateT (mapMSignatures_ addSignature prog) M.em
           tell $ M.singleton (functionKey sig) (sig, sym)
 
 getNewFunctionSymbol :: MonadState IdMap s => Signature a b c d -> s FunctionMeta
-getNewFunctionSymbol Signature{ sigName = name } = getNewSymbol FunctionMeta name
+getNewFunctionSymbol Signature{ sigName = name, isPure = pure } = getNewSymbol (FunctionMeta pure) name
 
 getNewVariableSymbol :: MonadState IdMap s => TypedVariable b d -> s VariableMeta
 getNewVariableSymbol TypedVariable{ varName = name } = getNewSymbol VariableMeta name

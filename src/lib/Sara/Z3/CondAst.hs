@@ -34,8 +34,8 @@ data CondAST
 trivial :: MonadZ3 z3 => AST -> z3 CondAST
 trivial ast = return $ CondAST W.empty W.empty ast
 
-runCondAst :: MonadZ3 z3 => CondAST -> z3 (W.FailureTrackableAST, AST, AST)
-runCondAst (CondAST obl ass ast) = (,,) (W.runProofObligation obl) <$> W.runAst ass <*> pure ast
+runCondAst :: CondAST -> (W.ProofObligation, W.Assumption, AST)
+runCondAst (CondAST obl ass ast) = (obl, ass, ast)
 
 -- | Transforms the proof obligations and assumptions to be conditioned on the given condition.
 conditionOn :: MonadZ3 z3 => AST -> CondAST -> z3 CondAST

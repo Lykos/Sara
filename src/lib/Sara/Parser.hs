@@ -219,9 +219,10 @@ block = do
 while :: Parser UntypedExpression
 while = do
   reservedToken "while"
+  invs <- conditions "invariant"
   cond <- expression
   body <- bracedExpression
-  return $ While cond body
+  return $ While invs cond body
 
 assert :: Parser UntypedExpression
 assert = assertion "assert" Assert

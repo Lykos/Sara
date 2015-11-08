@@ -444,7 +444,7 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
   (S.Block stmts exp _)                -> do
     mapM codegenExpression stmts
     codegenExpression exp
-  (S.While cond body _)                -> do
+  (S.While _ cond body _)              -> do
     whileBlock <- addBlock "while.body"
     exitBlock <- addBlock "while.exit"
     

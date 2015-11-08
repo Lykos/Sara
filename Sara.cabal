@@ -50,10 +50,13 @@ library
                      , Sara.PureChecker
                      , Sara.Utils
                      , Sara.Z3.SymbolicState
+                     , Sara.Z3.SymbolicExecutor
+                     , Sara.Z3.SymbolicStateSpace
                      , Sara.Z3.Verifier
                      , Sara.Z3.AstWrapper
                      , Sara.Z3.CondAst
                      , Sara.Z3.Operators
+                     , Sara.Z3.ProofPart
                      , Sara.Z3.Utils
                      , Sara.Z3.PureExpression
   other-extensions:    GeneralizedNewtypeDeriving

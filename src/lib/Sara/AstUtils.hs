@@ -179,7 +179,7 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
             Conditional cond ifExp elseExp _ -> Conditional <$> transformSubExp cond <*> transformSubExp ifExp <*> transformSubExp elseExp
             Call name args callMeta _        -> Call name <$> mapM transformSubExp args <*> pure (funcMetaTrans transformer $ callMeta)
             Block stmts exp _                -> Block <$> mapM transformSubExp stmts <*> transformSubExp exp
-            While cond body _                -> While <$> transformSubExp cond <*> transformSubExp body
+            While invs cond body _           -> While <$> mapM transformSubExp invs <*> transformSubExp cond <*> transformSubExp body
             Variable name varMeta _          -> return $ Variable name (varMetaTrans transformer $ varMeta)
             Boolean b _                      -> return $ Boolean b
             Integer n _                      -> return $ Integer n

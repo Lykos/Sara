@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Sara.Meta where
 
 import Text.Parsec.Pos
@@ -15,7 +17,8 @@ newtype ExpressionMeta
 type Id = Int
 
 data FunctionMeta =
-  FunctionMeta { funcSymName :: S.Name
+  FunctionMeta { funcSymPure :: Bool
+               , funcSymName :: S.Name
                , funcSymid :: Id }
   deriving (Eq, Ord, Show)
 
@@ -68,3 +71,5 @@ signaturePos = nodePos . S.nodeMeta
 
 declarationPos :: S.Declaration a b c NodeMeta -> SourcePos
 declarationPos = nodePos . S.nodeMeta
+
+pattern Typed t <- (ExpressionMeta t, _)

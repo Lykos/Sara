@@ -112,7 +112,9 @@ prettyUntypedExpression (Conditional cond ifExp elseExp _) = text "if"
                                                              <+> prettyExpression elseExp
 prettyUntypedExpression (Block [] S.Unit{} _)              = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
 prettyUntypedExpression (Block stmts exp _)                = inBlock (vsep . punctuate semi . map prettyExpression $ stmts ++ [exp])
-prettyUntypedExpression (While cond body _)                = text "while" <+> prettyExpression cond <+> inBlock (prettyExpression body)
+prettyUntypedExpression (While invs cond body _)           = text "while" <+> prettyExpression cond
+                                                             $+$ conditions "invariant" invs
+                                                             $+$ inBlock (prettyExpression body)
 prettyUntypedExpression (Assertion kind exp _)             = assertKeyword kind <+> prettyExpression exp
 
 assertKeyword :: AssertionKind -> Doc

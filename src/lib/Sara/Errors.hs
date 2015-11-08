@@ -4,7 +4,7 @@ module Sara.Errors( ErrorOr
                   , UnknownElement(..)
                   , MismatchType(..)
                   , RedeclaredElement(..)
-                  , ContextType(..)
+                  , VerifierContextType(..)
                   , PureContext(..)
                   , VerifierFailureType(..)
                   , VerifierFailureModel(..)
@@ -60,8 +60,8 @@ data PositionedError
   | ImpureExpressionError PureContext
   | RedeclaredElementError RedeclaredElement SourcePos
   | AssignmentError
-  | VerifierError ContextType FunctionOrMethod VerifierFailureModel VerifierFailureType
-  | UnsolvableError ContextType FunctionOrMethod
+  | VerifierError VerifierContextType FunctionOrMethod VerifierFailureModel VerifierFailureType
+  | UnsolvableError VerifierContextType FunctionOrMethod
   deriving (Eq, Ord, Show)
 
 data PureContext
@@ -69,6 +69,7 @@ data PureContext
   | PurePrecondition FunctionOrMethod
   | PurePostcondition FunctionOrMethod
   | PureAssertion AssertionKind
+  | PureInvariant
   deriving (Eq, Ord, Show)
 
 data FunctionOrMethod
@@ -94,7 +95,7 @@ data RedeclaredElement
   | RedeclaredArgument Name FunctionOrMethod
   deriving (Eq, Ord, Show)
 
-data ContextType
+data VerifierContextType
   = PrePrecondition
   | PostPrecondition
   | BodyPrecondition
@@ -110,6 +111,8 @@ data VerifierFailureType
   = DivisionByZero
   | PreconditionViolation FunctionOrMethod
   | PostconditionViolation
+  | LoopEntryInvariantViolation
+  | LoopExitInvariantViolation
   deriving (Eq, Ord, Show)
 
 showError :: String -> Error -> String
@@ -144,11 +147,11 @@ renderPositionedError AssignmentError                                        =
   T.pack "Invalid assignment target"
 renderPositionedError (VerifierError contextType func model failureType)     =
   T.unlines $ verifierInfoLine : modelLines ++ [failureTypeLine]
-  where verifierInfoLine = T.concat [T.pack "Found a possibility to fail the ", renderContextType contextType, T.pack " of ", renderFunction func, colon]
+  where verifierInfoLine = T.concat [T.pack "Found a possibility to fail the ", renderVerifierContextType contextType, T.pack " of ", renderFunction func, colon]
         modelLines = renderModel model
         failureTypeLine = renderFailureType failureType
 renderPositionedError (UnsolvableError contextType func)                     =
-  T.concat [T.pack "Couldn't determine whether it is possible to fail the ", renderContextType contextType, T.pack " of ", renderFunction func]
+  T.concat [T.pack "Couldn't determine whether it is possible to fail the ", renderVerifierContextType contextType, T.pack " of ", renderFunction func]
 
 renderModel :: VerifierFailureModel -> [T.Text]
 renderModel (VerifierFailureModel model) = map renderModelElement model
@@ -158,6 +161,8 @@ renderFailureType :: VerifierFailureType -> T.Text
 renderFailureType DivisionByZero               = T.pack "Division by zero"
 renderFailureType (PreconditionViolation func) = T.concat [T.pack "precondition of ", renderFunction func, T.pack " violated"]
 renderFailureType PostconditionViolation       = T.pack "postcondition violated"
+renderFailureType LoopEntryInvariantViolation  = T.pack "invariant violated at loop entry"
+renderFailureType LoopExitInvariantViolation   = T.pack "loop invariant not preserved"
 
 renderPureContext :: PureContext -> T.Text
 renderPureContext (PureFunction name)               = T.append (T.pack "pure function") (T.pack name)
@@ -166,16 +171,17 @@ renderPureContext (PurePostcondition func)          = T.append (T.pack "postcond
 renderPureContext (PureAssertion Assert)            = T.pack "assert"
 renderPureContext (PureAssertion Assume)            = T.pack "assume"
 renderPureContext (PureAssertion AssertAndCollapse) = T.pack "assertAndCollapse"
+renderPureContext PureInvariant                     = T.pack "invariant"
 
 renderFunction :: FunctionOrMethod -> T.Text
 renderFunction (Function name) = T.append (T.pack "function ") (T.pack name)
 renderFunction (Method name)   = T.append (T.pack "method ") (T.pack name)
 
-renderContextType :: ContextType -> T.Text
-renderContextType PrePrecondition  = T.pack "preconditions of a precondition"
-renderContextType PostPrecondition = T.pack "preconditions of a postcondition"
-renderContextType BodyPrecondition = T.pack "preconditions of the body"
-renderContextType Postcondition    = T.pack "postcondition"
+renderVerifierContextType :: VerifierContextType -> T.Text
+renderVerifierContextType PrePrecondition  = T.pack "preconditions of a precondition"
+renderVerifierContextType PostPrecondition = T.pack "preconditions of a postcondition"
+renderVerifierContextType BodyPrecondition = T.pack "preconditions of the body"
+renderVerifierContextType Postcondition    = T.pack "postcondition"
 
 renderTypes :: [Type] -> T.Text
 renderTypes = commaSep . map pretty
@@ -296,10 +302,10 @@ notAssignable = positionedError AssignmentError
 otherError :: Monad m => String -> ExceptT Error m a
 otherError s = throwError $ OtherError s
 
-verifierError :: Monad m => ContextType -> FunctionOrMethod -> VerifierFailureModel -> VerifierFailureType -> SourcePos -> ExceptT Error m a
+verifierError :: Monad m => VerifierContextType -> FunctionOrMethod -> VerifierFailureModel -> VerifierFailureType -> SourcePos -> ExceptT Error m a
 verifierError context func model typ = positionedError $ VerifierError context func model typ
 
-unsolvableError :: Monad m => ContextType -> FunctionOrMethod -> SourcePos -> ExceptT Error m a
+unsolvableError :: Monad m => VerifierContextType -> FunctionOrMethod -> SourcePos -> ExceptT Error m a
 unsolvableError context func = positionedError $ UnsolvableError context func
 
 functionOrMethod :: Bool -> Name -> FunctionOrMethod

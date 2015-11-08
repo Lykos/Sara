@@ -1,11 +1,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 
--- | Helper functions to be used by the verifier to transform our AST into a Z3 AST.
-module Sara.Z3.SymbolicState ( SymbolicExecutionStart
+-- | Representation of one single symbolic execution state.
+module Sara.Z3.SymbolicState ( SymbolicExecutionStart(..)
                              , SymbolicState
+                             , variableStates
+                             , toProofPart
                              , empty
                              , getVar
                              , setVar
@@ -13,10 +16,11 @@ module Sara.Z3.SymbolicState ( SymbolicExecutionStart
                              , addProofObligation
                              , addAssumption ) where
 
+import Control.Monad.State
 import qualified Data.Map as M
 import Z3.Monad
-import Sara.Errors (VerifierFailureType)
 import Sara.Z3.Utils
+import Sara.Z3.ProofPart
 import Sara.Types
 import qualified Sara.Z3.AstWrapper as W
 import Sara.Meta
@@ -25,6 +29,7 @@ import Text.Parsec.Pos
 data SymbolicExecutionStart
   = MethodEntry
   | LoopEntry
+  | LoopExit
   | AssertAndCollapse
   deriving (Eq, Ord, Show, Enum, Bounded)
 
@@ -37,41 +42,45 @@ data SymbolicState
                   , assumption :: W.Assumption }
   deriving (Eq, Ord, Show)
 
+toProofPart :: SymbolicState -> ProofPart
+toProofPart SymbolicState{..} = ProofPart assumption proofObligation
+
 -- | An empty symbolic state with no variable states, assumptions and proof obligation.
 empty :: SourcePos -> SymbolicExecutionStart -> SymbolicState
-empty pos start = SymbolicState pos start M.empty M.empty W.empty W.empty
+empty pos entryType = SymbolicState pos entryType M.empty M.empty W.empty W.empty
 
 -- | Sets the variable to the given value. If this variable is not set yet, then this will also be set as the initial value.
-setVar :: VariableMeta -> AST -> SymbolicState -> SymbolicState
-setVar v a s@SymbolicState{..} = let insertVar = M.insert v a
-                                     s' = s{ variableStates = insertVar variableStates }
-                                 in case getVar v s of
-  Just _  -> s'
-  Nothing -> s'{ variableInitialStates = insertVar variableInitialStates }
+setVar :: MonadState SymbolicState m => VariableMeta -> AST -> m ()
+setVar v a = do
+  let insertVar = M.insert v a
+  modify $ \s@SymbolicState{..} -> s{ variableStates = insertVar variableStates }
+  v' <- getVar v
+  case v' of
+    Just _  -> return ()
+    Nothing -> modify $ \s@SymbolicState{..} -> s{ variableInitialStates = insertVar variableInitialStates }
 
--- | Sets the 
-getOrCreateVar :: MonadZ3 z3 => VariableMeta -> Type -> SymbolicState -> z3 (SymbolicState, AST)
-getOrCreateVar v t s@SymbolicState{..} = case getVar v s of
-  Just ast -> return (s, ast)
-  Nothing  -> do
-    ast <- mkFreshVar (havocVarName v s) =<< z3Sort t
-    let s' = setVar v ast s
-    return (s', ast)
+-- | If the variable exists, returns its value, otherwise, creates a temporary Z3 variable and returns it.
+getOrCreateVar :: (MonadZ3 m, MonadReader SymbolicState m) => VariableMeta -> Type -> m AST
+getOrCreateVar v t = do
+  v' <- getVar v
+  case v' of
+    Just ast -> return ast
+    Nothing  -> do
+      name <- gets $ havocVarName v
+      ast <- mkFreshVar name =<< z3Sort t
+      return ast
   where havocVarName (VariableMeta name index) SymbolicState{..} =
           z3VarName [ "havocedVar", show startType
                     , sourceName startPos, show $ sourceLine startPos, show $ sourceColumn startPos
                     , name, show index]
 
-getVar :: VariableMeta -> SymbolicState -> Maybe AST
-getVar v SymbolicState{..} = M.lookup v variableStates
+getVar :: MonadState SymbolicState m => VariableMeta -> m (Maybe AST)
+getVar v = gets $ M.lookup v . variableStates
 
 -- | Adds the first argument as the proof obligation to the second argument.
-addProofObligation :: MonadZ3 z3 => AST -> VerifierFailureType -> SourcePos -> SymbolicState -> z3 SymbolicState
-addProofObligation newObl failureType pos s@SymbolicState{ proofObligation = obl } =
-  return $ s{ proofObligation = W.conjunct [newObl', obl] }
-  where newObl' = W.singleton newObl (failureType, pos)
+addProofObligation :: MonadState SymbolicState m => W.ProofObligation -> m ()
+addProofObligation newObl = modify $ \s@SymbolicState{ proofObligation = obl } -> s{ proofObligation = W.conjunct [newObl, obl] }
 
 -- | Adds the first argument as the assumption to the second argument.
-addAssumption :: MonadZ3 z3 => AST -> SymbolicState -> z3 SymbolicState
-addAssumption newAss s@SymbolicState{ assumption = ass } = return $ s{ assumption = W.conjunct [newAss', ass] }
-  where newAss' = W.singleton newAss ()
+addAssumption :: MonadState SymbolicState m => W.Assumption -> m ()
+addAssumption newAss = modify $ \s@SymbolicState{ assumption = ass } -> s{ assumption = W.conjunct [newAss, ass] }

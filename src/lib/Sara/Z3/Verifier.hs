@@ -13,18 +13,14 @@ import Sara.Meta
 import Sara.Z3.CondAst
 import Z3.Monad
 
-instance MonadZ3 m => MonadZ3 (ExceptT a m) where
-  getSolver = lift getSolver
-  getContext = lift getContext
-
 verify :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
 verify prog = defineEverything prog >> verifyFunctions prog
 
 defineEverything :: MonadZ3 z3 => SymbolizerProgram -> z3 ()
 defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig prog
-  where addDecl ::  MonadZ3 z3 => SymbolizerDeclaration -> z3 ()
+  where addDecl :: MonadZ3 z3 => SymbolizerDeclaration -> z3 ()
         addDecl (S.Function S.Signature{ S.isPure = True, S.args = args, S.retType = retType, S.sigMeta = (m, _) } body _) = do
-          body' <- z3ExpressionAst body
+          body' <- z3Expression body
           args' <- z3Args args
           (_, _, func) <- z3FuncDecls m (map S.varType args) retType
           fApp <- mkApp func args'
@@ -43,13 +39,17 @@ defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig
         conditions []    = mkTrue
         conditions conds = mkAnd =<< mapM z3ExpressionAst conds
         z3ExpressionAst e = ast <$> z3Expression e
-        z3Args args = mapM z3Arg args
-        z3Arg (S.TypedVariable _ t (m, _)) = z3Var m t
+
+setArgs :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [SymbolizerTypedVariable] -> m ()
+setArgs args = mapM setArg args
+  where setArg (S.TypedVariable _ t (m, _)) = setVar (m, t) $ z3Var m t
 
 verifyFunctions :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
 verifyFunctions = mapMDeclarations_ verifyDecl
   where verifyDecl :: MonadZ3 z3 => SymbolizerDeclaration -> ExceptT Error z3 ()
-        verifyDecl (S.Function sig@S.Signature{ S.args = args, S.isPure = True, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
+        verifyDecl (S.Function sig@S.Signature{ S.args = args, S.isPure = pure, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
+          let m = expMeta body
+          S.Block [S.Assert] S.Unit posts
           (prePre, postPre, pre) <- preconditions pres
           (prePost, postPost, post) <- postconditions posts
           (preBody, postBody, _) <- runCondAst =<< z3Expression body

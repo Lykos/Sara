@@ -3,19 +3,21 @@
 
 module Sara.Z3.PureExpression ( z3Expression ) where
 
+import Control.Monad.State.Strict
 import Sara.PrettyPrinter
 import Sara.Errors as E
 import Sara.Z3.CondAst
 import Sara.Z3.Utils
 import Sara.Z3.Operators
 import Sara.Operators
+import qualified Sara.Z3.SymbolicState as S
 import qualified Sara.Syntax as S
 import Sara.Meta
 import Z3.Monad
 import Text.Parsec.Pos (SourcePos)
 
 -- | Create an expression and its precondition and postcondition.
-z3Expression :: MonadZ3 z3 => SymbolizerExpression -> z3 CondAST
+z3Expression :: (MonadState S.SymbolicState z3, MonadZ3 z3) => SymbolizerExpression -> z3 CondAST
 z3Expression (S.Boolean b _)                = trivial =<< mkBool b
 z3Expression (S.Integer n _)                = trivial =<< mkInteger n
 z3Expression (S.UnaryOperation op e _)      = do
@@ -26,7 +28,7 @@ z3Expression b@(S.BinaryOperation op l r _) = do
   r' <- z3Expression r
   let pos = expressionPos b
   z3BinOp pos op l' r'
-z3Expression v@(S.Variable _ m _)           = trivial =<< z3Var m (expressionTyp v)
+z3Expression (S.Variable _ m (Typed t))     = trivial =<< S.getOrCreateVar m t
 z3Expression (S.Conditional c t e _)        = do
   c' <- z3Expression c
   t' <- conditionOn (ast c') =<< z3Expression t
@@ -55,8 +57,8 @@ z3BinOp p op a b         = do
     Just (ShortCircuitKind PredeterminedForTrue _ _)  -> conditionOnNot (ast a) b
     Nothing                                           -> return b
   result <- combine2 (z3BinaryOperator op) a b'
-  case proofObligation op (ast a) (ast b') of
+  case proofObligation op of
     Just (failureType, proofObl) -> do
-      proofObl' <- proofObl
+      proofObl' <- proofObl (ast a) (ast b')
       addProofObligation proofObl' failureType p result
     Nothing                      -> return result

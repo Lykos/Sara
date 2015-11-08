@@ -84,6 +84,17 @@ data ValueWhenPredetermined = LeftSideWhenPredetermined | NotLeftSideWhenPredete
 data ValueWhenNotPredetermined = RightSideWhenNotPredetermined | NotRightSideWhenNotPredetermined
                                deriving (Eq, Ord, Show, Enum, Bounded)
 
+class MaybeNegation a where
+  isPositive :: a -> Bool
+
+instance MaybeNegation ValueWhenPredetermined where
+  isPositive LeftSideWhenPredetermined = True
+  isPositive NotLeftSideWhenPredetermined = False
+
+instance MaybeNegation ValueWhenNotPredetermined where
+  isPositive RightSideWhenNotPredetermined = True
+  isPositive NotRightSideWhenNotPredetermined = False
+
 -- | Description of the behavior of a short circuit operator.
 data ShortCircuitKind
   = ShortCircuitKind { predeterminedForValue :: PredeterminedForValue
