@@ -9,63 +9,60 @@ import Sara.Operators
 import Sara.Errors
 import Control.Monad
 import Control.Monad.Reader.Class
-import qualified Control.Monad.Trans.Reader as R
 import Control.Monad.Except
 import Control.Monad.Identity
 import qualified Data.Map.Strict as M
 
-type PureMap = M.Map FunctionMeta Bool
+checkPureness :: SymbolizerProgram -> ErrorOr PureCheckerProgram
+checkPureness prog = do
+  prog' <- addPureAnnotations prog
+  checkSignatures prog'
+  checkPureBodies prog'
+  checkPureAssertions prog'
+  return prog'
 
-checkPureness :: SymbolizerProgram -> ErrorOr ()
-checkPureness prog = R.runReaderT (checkPureness' prog) (createPureMap prog)
+addPureAnnotations :: SymbolizerProgram -> PureCheckerProgram
+addPureAnnotations = mapExpressions addAnnotation . mapExpressionMetas changeMeta
+  where changeMeta = mapExpressionMeta (\TypMeta t -> ExpressionMeta t (error "Pure annotation is not defined yet."))
+        addAnnotation exp = exp{ expMeta = expMeta' }
+          where expMeta' = ExpressionMeta (expressionTyp exp) (isPure exp)
 
-checkPureness' :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity)  ()
-checkPureness' prog = do
-  checkSignatures prog
-  checkPureBodies prog
-  checkPureAssertions prog
-
-createPureMap :: SymbolizerProgram -> PureMap
-createPureMap = foldMapSignatures sigPure
-  where sigPure sig = M.singleton (fst $ sigMeta sig) (isPure sig)
-
-checkSignatures :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkSignatures :: PureCheckerProgram -> ErrorOr ()
 checkSignatures = mapMSignatures_ checkOneSignature
   where checkOneSignature Signature{ isPure = isPure, sigName = name, preconditions = precs, postconditions = posts } =
           checkConditions (PurePrecondition func) precs >> checkConditions (PurePostcondition func) posts
           where func = functionOrMethod isPure name
-        checkConditions name conds = mapM_ (checkPureExpression name) conds
+        checkConditions context conds = mapM_ (checkPureExpression context) conds
 
-checkPureBodies :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkPureBodies :: PureCheckerProgram -> ErrorOr ()
 checkPureBodies = mapMDeclarations_ checkPureBody
-  where checkPureBody Extern{}                                                           = return ()
-        checkPureBody S.Function{ signature = Signature{ isPure = False } }              = return ()
-        checkPureBody S.Function{ body = body, signature = Signature{ sigName = name } } = checkPureExpression (PureFunction name) body
+  where checkPureBody S.Function{ body = body, signature = Signature{ isPure = True, sigName = name } } =| 
+          checkPureExpression (PureFunction name) body
+        checkPureBody _                                                                                 =
+          return ()
 
-checkPureAssertions :: SymbolizerProgram -> R.ReaderT PureMap (ExceptT Error Identity) ()
+checkPureAssertions :: PureCheckerProgram -> ErrorOr ()
 checkPureAssertions = mapMExpressions_ checkOneExpression
   where checkOneExpression S.Assertion{ assertionKind = kind, inner = exp } = checkPureExpression (PureAssertion kind) exp
         checkOneExpression S.While{ invariants = invs }                     = mapM_ (checkPureExpression PureInvariant) invs
         checkOneExpression _                                                = return ()
 
-checkPureExpression :: PureContext -> SymbolizerExpression -> R.ReaderT PureMap (ExceptT Error Identity) ()
-checkPureExpression context = mapMExpression_ checkPureSingleExpression
-  where checkPureSingleExpression exp = do
-          cond <- checkPure exp
-          unless cond (lift $ impureExpression context $ expressionPos exp)
-        
-checkPure :: MonadReader PureMap r => SymbolizerExpression -> r Bool
-checkPure S.Unit{}                            = return True
-checkPure S.Boolean{}                         = return True
-checkPure S.Integer{}                         = return True
-checkPure S.Double{}                          = return True
-checkPure UnaryOperation{}                    = return True
-checkPure BinaryOperation{ binOp = Assign }   = return False
-checkPure BinaryOperation{}                   = return True
-checkPure Variable{}                          = return True
-checkPure Call{ expCallMeta = sym }           = asks $ \funcs -> case sym `M.lookup` funcs of
-  Just b  -> b
-  Nothing -> error $ "Call symbol " ++ show sym ++ " not in pure table."
-checkPure Conditional{}                       = return True
-checkPure Block{}                             = return True
-checkPure _                                   = return False
+checkPureExpression :: PureContext -> PureCheckerExpression -> ErrorOr ()
+checkPureExpression context exp | not isPureExp $ expMeta exp = impureExpression context $ expressionPos exp
+checkPureExpression _                                         = return ()
+
+-- | Checks if the given expression is pure.
+isPure :: PureCheckerExpression -> Bool
+isPure exp = all (isPureExp . expMeta) (children exp) && isPure' exp
+  where isPure' S.Unit{}                          = True
+        isPure' S.Boolean{}                       = True
+        isPure' S.Integer{}                       = True
+        isPure' S.Double{}                        = True
+        isPure' UnaryOperation{}                  = True
+        isPure' BinaryOperation{ binOp = Assign } = False
+        isPure' BinaryOperation{}                 = True
+        isPure' Variable{}                        = True
+        isPure' Call{ expCallMeta = sym }         = isPureSym sym
+        isPure' Conditional{}                     = True
+        isPure' Block{}                           = True
+        isPure' _                                 = False

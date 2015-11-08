@@ -153,7 +153,7 @@ typ T.Double  = FloatingPointType 64 IEEE
 booleanType :: Type
 booleanType = typ T.Boolean
 
-define :: SymbolizerSignature -> [BasicBlock] -> LLVM ()
+define :: PureCheckerSignature -> [BasicBlock] -> LLVM ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
@@ -162,7 +162,7 @@ define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body =
   , basicBlocks = body
   }
 
-extern :: SymbolizerSignature -> LLVM ()
+extern :: PureCheckerSignature -> LLVM ()
 extern = flip define []
 
 local :: Name ->  Type -> Operand
@@ -222,13 +222,13 @@ store ptr val = instr $ Store False ptr val Nothing 0 []
 load :: Operand -> Type -> Codegen Operand
 load ptr = instr $ Load False ptr Nothing 0 []
 
-codegenDeclaration :: SymbolizerDeclaration -> LLVM ()
+codegenDeclaration :: PureCheckerDeclaration -> LLVM ()
 codegenDeclaration (S.Extern sig _)        = extern sig
 codegenDeclaration (S.Function sig body _) = do
   f <- codegenFunction sig body
   return f
 
-codegenFunction :: SymbolizerSignature -> SymbolizerExpression -> LLVM ()
+codegenFunction :: PureCheckerSignature -> PureCheckerExpression -> LLVM ()
 codegenFunction signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
@@ -242,10 +242,10 @@ codegenFunction signature body = define signature bls
         assign name var
       codegenExpression body >>= ret
 
-codegenProgram :: SymbolizerProgram -> LLVM ()
+codegenProgram :: PureCheckerProgram -> LLVM ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
 
-codegen :: Module -> SymbolizerProgram -> Module
+codegen :: Module -> PureCheckerProgram -> Module
 codegen mod program = runLLVM mod $ codegenProgram program
 
 withModule :: String -> (Module -> a) -> a
@@ -365,7 +365,7 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
-shortCircuit :: String -> ShortCircuitKind -> SymbolizerExpression -> SymbolizerExpression -> Codegen Operand
+shortCircuit :: String -> ShortCircuitKind -> PureCheckerExpression -> PureCheckerExpression -> Codegen Operand
 shortCircuit name ShortCircuitKind{..} left right = do
   rightBlock <- addBlock $ name ++ ".right"
   exitBlock <- addBlock $ name ++ ".exit"
@@ -392,7 +392,7 @@ shortCircuit name ShortCircuitKind{..} left right = do
   setBlock exitBlock
   phi [(leftResult, leftBlock), (rightResult, rightBlock)] booleanType
 
-codegenExpression :: SymbolizerExpression -> Codegen Operand
+codegenExpression :: PureCheckerExpression -> Codegen Operand
 codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
   S.Unit{}                             -> unit
   (S.Boolean b _)                      -> boolean b

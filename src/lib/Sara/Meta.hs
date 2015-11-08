@@ -10,8 +10,12 @@ newtype NodeMeta
   = NodeMeta { nodePos :: SourcePos }
   deriving (Eq, Ord, Show)
 
-newtype ExpressionMeta
-  = ExpressionMeta { expTyp :: Type }
+newtype TypMeta
+  = TypMeta { typTyp :: Type }
+  deriving (Eq, Ord, Show)
+
+data ExpressionMeta
+  = ExpressionMeta { expTyp :: Type, expPure :: Bool }
   deriving (Eq, Ord, Show)
 
 type Id = Int
@@ -37,25 +41,35 @@ type ParserDeclaration = S.Declaration () () () NodeMeta
 
 type ParserTypedVariable = S.TypedVariable () NodeMeta
 
-type TypeCheckerProgram = S.Program () () ExpressionMeta NodeMeta
+type TypeCheckerProgram = S.Program () () TypMeta NodeMeta
 
-type TypeCheckerSignature = S.Signature () () ExpressionMeta NodeMeta
+type TypeCheckerSignature = S.Signature () () TypMeta NodeMeta
 
-type TypeCheckerExpression = S.Expression () () ExpressionMeta NodeMeta
+type TypeCheckerExpression = S.Expression () () TypMeta NodeMeta
 
-type TypeCheckerDeclaration = S.Declaration () () ExpressionMeta NodeMeta
+type TypeCheckerDeclaration = S.Declaration () () TypMeta NodeMeta
 
 type TypeCheckerTypedVariable = ParserTypedVariable
 
-type SymbolizerProgram = S.Program FunctionMeta VariableMeta ExpressionMeta NodeMeta
+type SymbolizerProgram = S.Program FunctionMeta VariableMeta TypMeta NodeMeta
 
-type SymbolizerSignature = S.Signature FunctionMeta VariableMeta ExpressionMeta NodeMeta
+type SymbolizerSignature = S.Signature FunctionMeta VariableMeta TypMeta NodeMeta
 
-type SymbolizerExpression = S.Expression FunctionMeta VariableMeta ExpressionMeta NodeMeta
+type SymbolizerExpression = S.Expression FunctionMeta VariableMeta TypMeta NodeMeta
 
-type SymbolizerDeclaration = S.Declaration FunctionMeta VariableMeta ExpressionMeta NodeMeta
+type SymbolizerDeclaration = S.Declaration FunctionMeta VariableMeta TypMeta NodeMeta
 
 type SymbolizerTypedVariable = S.TypedVariable VariableMeta NodeMeta
+
+type PureCheckerProgram = S.Program FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type PureCheckerSignature = S.Signature FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type PureCheckerExpression = S.Expression FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type PureCheckerDeclaration = S.Declaration FunctionMeta VariableMeta ExpressionMeta NodeMeta
+
+type PureCheckerTypedVariable = S.TypedVariable VariableMeta NodeMeta
 
 expressionTyp :: S.Expression a b ExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta
@@ -72,4 +86,4 @@ signaturePos = nodePos . S.nodeMeta
 declarationPos :: S.Declaration a b c NodeMeta -> SourcePos
 declarationPos = nodePos . S.nodeMeta
 
-pattern Typed t <- (ExpressionMeta t, _)
+pattern Typed t <- (ExpressionMeta t _, _)

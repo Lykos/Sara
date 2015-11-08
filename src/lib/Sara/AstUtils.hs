@@ -4,6 +4,7 @@ module Sara.AstUtils ( mapFunctionMetas
                      , mapVariableMetas
                      , mapExpressionMetas
                      , mapNodeMetas
+                     , mapExpressions
                      , mapMExpression_
                      , mapMExpressions_
                      , mapMSignatures_
@@ -14,7 +15,8 @@ module Sara.AstUtils ( mapFunctionMetas
                      , weirdTransformExpressions
                      , foldMapSignatures
                      , foldMapExpression
-                     , foldMapExpressions ) where
+                     , foldMapExpressions
+                     , children ) where
 
 import Data.Bifunctor
 import Sara.Syntax
@@ -32,28 +34,37 @@ mapVariableMetas :: (b -> b') -> Program a b c d -> Program a b' c d
 mapVariableMetas f = runIdentity . transformProgramInternal transformer
   where transformer = AstTransformer id f id id nullTVarContextTrans return return return return
 
+-- | Maps over all expression metadata in the abstract syntax tree.
+mapExpressionMetas :: (c -> c') -> Program a b c d -> Program a b c' d
+mapExpressionMetas f = runIdentity . transformProgramInternal transformer
+  where transformer = AstTransformer id id f id nullTVarContextTrans return return return return
+
+-- | Maps over all node metadata in the abstract syntax tree.
+mapNodeMetas :: (d -> d') -> Program a b c d -> Program a b c d'
+mapNodeMetas g = runIdentity . transformProgramInternal transformer
+  where transformer = AstTransformer id id id g nullTVarContextTrans return return return return
+
 -- | Transformation that can transform all variable and function symbols.
--- The variable and function metadata has to be redefined, it is set to undefined initially.
+-- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
 weirdTransformSymbols :: Monad m =>
-                         (forall x . TypedVariable b d -> m (m x -> m x))       -- ^ Context transformer based on a typed variable
+                         (forall x . TypedVariable b' d -> m (m x -> m x))       -- ^ Context transformer based on a typed variable
                          -> (Expression a' b' c d -> m (Expression a' b' c d))  -- ^ Expression transformer
                          -> (Signature a' b' c d -> m (Signature a' b' c d))    -- ^ Signature transformer
                          -> (TypedVariable b' d -> m (TypedVariable b' d))      -- ^ TypedVariable transformer
-                         -> Program a b c d                                     -- ^ Input program
+                         -> Program a' b' c d                                   -- ^ Input program
                          -> m (Program a' b' c d)                               -- ^ Output program
 weirdTransformSymbols tVarExpTrans expTrans sigTrans tVarTrans = transformProgramInternal transformer
-  where transformer = AstTransformer (const undefined) (const undefined) id id tVarExpTrans return expTrans sigTrans tVarTrans
+  where transformer = AstTransformer id id id id tVarExpTrans return expTrans sigTrans tVarTrans
 
 -- | Performs a transformation on all expressions in the AST.
--- The expression metadata has to be redefined, it is set to undefined initially.
 -- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
 weirdTransformExpressions :: Monad m =>
                              (forall x . TypedVariable b d -> m x -> m x)         -- ^ Context transformer based on a typed variable
                              -> (Expression a b c' d -> m (Expression a b c' d))  -- ^ Expression transformer
-                             -> Program a b c d                                   -- ^ Input program
+                             -> Program a b c' d                                  -- ^ Input program
                              -> m (Program a b c' d)                              -- ^ Output program
 weirdTransformExpressions tVarExpTrans transExp = transformProgramInternal transformer
-  where transformer = AstTransformer id id (const undefined) id tVarExpTrans' return transExp return return
+  where transformer = AstTransformer id id id id tVarExpTrans' return transExp return return
         tVarExpTrans' v = return $ tVarExpTrans v
 
 -- | Monadic map over all signatures.
@@ -70,6 +81,10 @@ mapMSignatures_ sigTrans prog = mapMSignatures sigTrans' prog >> return ()
 mapMExpressions :: Monad m => (Expression a b c d -> m (Expression a b c d)) -> Program a b c d -> m (Program a b c d)
 mapMExpressions expTrans = transformProgramInternal transformer
   where transformer = AstTransformer id id id id nullTVarContextTrans return expTrans return return
+
+-- | Map over all expressions
+mapExpressions :: (Expression a b c d -> Expression a b c d) -> Program a b c d -> Program a b c d
+mapExpressions f = runIdentity . mapMExpressions f
 
 -- | Monadic map over all expressions and discard the result.
 mapMExpressions_ :: Monad m => (Expression a b c d -> m ()) -> Program a b c d -> m ()
@@ -105,16 +120,6 @@ foldMapExpressions f = execWriter . transformProgramInternal transformer
 
 accumulate :: Monoid m => (a -> m) -> a -> Writer m a
 accumulate f a = tell (f a) >> return a
-
--- | Maps over all expression metadata in the abstract syntax tree.
-mapExpressionMetas :: (c -> c') -> Program a b c d -> Program a b c' d
-mapExpressionMetas f = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer id id f id nullTVarContextTrans return return return return
-
--- | Maps over all node metadata in the abstract syntax tree.
-mapNodeMetas :: (d -> d') -> Program a b c d -> Program a b c d'
-mapNodeMetas g = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer id id id g nullTVarContextTrans return return return return
 
 nullTVarContextTrans :: Monad m => x -> m (m y -> m y)
 nullTVarContextTrans = const $ return id
@@ -186,3 +191,18 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
             Double d _                       -> return $ Double d
             Unit _                           -> return $ Unit
             Assertion k exp _                -> Assertion k <$> transformSubExp exp
+
+-- | Returns the direct children of an expression.
+children :: Expression a b c d -> [Expression a b c d]
+children (BinaryOperation _ left right _)  = [left, right]
+children (UnaryOperation _ exp _)          = [exp]
+children (Conditional cond ifExp elseExp _ = [cond, ifExp, elseExp]
+children (Call _ args _ _)                 = args
+children (Block stmts exp _)               = stmts ++ exp
+children (While invs cond body _)          = invs ++ [cond, body]
+children Variable{}                        = []
+children Boolean{}                         = []
+children Integer{}                         = []
+children Double{}                          = []
+children Unit{}                            = []
+children (Assertion _ exp _)               = [exp]
