@@ -4,7 +4,9 @@ module Sara.Z3.Utils ( z3Sort
                      , z3VarName
                      , z3Var
                      , z3FuncDecls
-                     , conjunctAsts ) where
+                     , conjunctAsts
+                     , mkZero
+                     , mkNeZero ) where
 
 import Z3.Monad
 import Sara.Meta
@@ -49,3 +51,10 @@ z3FuncDecls (FunctionMeta name index) argTypes retType = do
   retSort <- z3Sort retType
   boolSort <- mkBoolSort
   (,,) <$> mkFuncDecl preSym argSorts boolSort <*> mkFuncDecl postSym argSorts boolSort <*> mkFuncDecl funcSym argSorts retSort
+
+mkZero :: MonadZ3 z3 => z3 AST
+mkZero = mkInteger 0
+
+mkNeZero :: MonadZ3 z3 => AST -> z3 AST
+mkNeZero b = mkNot =<< mkEq b =<< mkZero
+  

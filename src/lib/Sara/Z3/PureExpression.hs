@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Sara.Z3.PureExpression ( z3Expression ) where
 
@@ -6,6 +7,7 @@ import Sara.PrettyPrinter
 import Sara.Errors as E
 import Sara.Z3.CondAst
 import Sara.Z3.Utils
+import Sara.Z3.Operators
 import Sara.Operators
 import qualified Sara.Syntax as S
 import Sara.Meta
@@ -43,51 +45,18 @@ z3Expression c@(S.Call name a m _)          = do
   addProofObligation pre failureType pos =<< addAssumption post =<< combine (mkApp func) a'
 z3Expression exp                            = error $ "Unsupported expression for verifier: " ++ prettyRender exp
 
-mkZero :: MonadZ3 z3 => z3 AST
-mkZero = mkInteger 0
-
-mkNeZero :: MonadZ3 z3 => AST -> z3 AST
-mkNeZero b = mkNot =<< mkEq b =<< mkZero
-  
 z3UnOp :: MonadZ3 z3 => UnaryOperator -> CondAST -> z3 CondAST
-z3UnOp op = liftCond $ z3UnOp' op
-  where z3UnOp' UnaryPlus e  = return e
-        z3UnOp' UnaryMinus e = do
-          z <- mkZero
-          mkSub [z, e]
-        z3UnOp' LogicalNot e = mkNot e
-        z3UnOp' op _          = error $ "Unsupported unary operator for verifier: " ++ show op
-
--- | Apply a function that takes a list to two arguments.
-app2 :: ([a] -> b) -> a -> a -> b
-app2 f a b = f [a, b]
-
-z3DivOp :: MonadZ3 z3 => SourcePos -> (AST -> AST -> z3 AST) -> CondAST -> CondAST -> z3 CondAST
-z3DivOp pos f l r = do
-  neZero <- mkNeZero (ast r)
-  result <- combine2 f l r
-  addProofObligation neZero DivisionByZero pos result
-
-appConds2 :: MonadZ3 z3 => ([AST] -> z3 AST) -> CondAST -> CondAST -> z3 CondAST
-appConds2 = combine2 . app2
+z3UnOp op = liftCond $ z3UnaryOperator op
 
 z3BinOp :: MonadZ3 z3 => SourcePos -> BinaryOperator -> CondAST -> CondAST -> z3 CondAST
-z3BinOp _ Times           = appConds2 mkMul
-z3BinOp p DividedBy       = z3DivOp p mkDiv
-z3BinOp p Modulo          = z3DivOp p mkMod
-z3BinOp _ Plus            = appConds2 mkAdd
-z3BinOp _ Minus           = appConds2 mkSub
-z3BinOp _ LessThan        = combine2 mkLt
-z3BinOp _ AtMost          = combine2 mkLe
-z3BinOp _ GreaterThan     = combine2 mkGt
-z3BinOp _ AtLeast         = combine2 mkGe
-z3BinOp _ EqualTo         = combine2 mkEq
-z3BinOp _ NotEqualTo      = combine2 $ \a b -> mkNot =<< mkEq a b
-z3BinOp _ LogicalAnd      = \a b -> combine2 (app2 mkAnd) a =<< conditionOn (ast a) b
-z3BinOp _ LogicalXor      = combine2 $ mkXor
-z3BinOp _ LogicalOr       = \a b -> combine2 (app2 mkOr) a =<< conditionOnNot (ast a) b
-z3BinOp _ Implies         = \a b -> combine2 mkImplies a =<< conditionOn (ast a) b
-z3BinOp _ ImpliedBy       = \a b -> combine2 (flip mkImplies) b =<< conditionOn (ast b) a
-z3BinOp _ EquivalentTo    = combine2 $ mkEq
-z3BinOp _ NotEquivalentTo = combine2 $ \a b -> mkNot =<< mkEq a b
-z3BinOp _ op              = error $ "Unsupported binary operator for verifier: " ++ show op
+z3BinOp p op a b         = do
+  b' <- case shortCircuitKind op of
+    Just (ShortCircuitKind PredeterminedForFalse _ _) -> conditionOn (ast a) b
+    Just (ShortCircuitKind PredeterminedForTrue _ _)  -> conditionOnNot (ast a) b
+    Nothing                                           -> return b
+  result <- combine2 (z3BinaryOperator op) a b'
+  case proofObligation op (ast a) (ast b') of
+    Just (failureType, proofObl) -> do
+      proofObl' <- proofObl
+      addProofObligation proofObl' failureType p result
+    Nothing                      -> return result

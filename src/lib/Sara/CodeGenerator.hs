@@ -1,6 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RecordWildCards #-}
 
-module Sara.CodeGenerator ( codegen, PredeterminedForValue(..), ValueWhenPredetermined(..), ValueWhenNotPredetermined(..)
+module Sara.CodeGenerator ( codegen
+                          , PredeterminedForValue(..)
+                          , ValueWhenPredetermined(..)
+                          , ValueWhenNotPredetermined(..)
                           , withModule) where
 
 import qualified Sara.Syntax as S
@@ -360,18 +365,8 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
-data PredeterminedForValue = PredeterminedForFalse | PredeterminedForTrue
-data ValueWhenPredetermined = LeftSideWhenPredetermined | NotLeftSideWhenPredetermined
-data ValueWhenNotPredetermined = RightSideWhenNotPredetermined | NotRightSideWhenNotPredetermined
-
-shortCircuit :: String
-                -> PredeterminedForValue
-                -> ValueWhenPredetermined
-                -> ValueWhenNotPredetermined
-                -> SymbolizerExpression
-                -> SymbolizerExpression
-                -> Codegen Operand
-shortCircuit name predeterminedForValue valueWhenPredetermined valueWhenNotPredetermined left right = do
+shortCircuit :: String -> ShortCircuitKind -> SymbolizerExpression -> SymbolizerExpression -> Codegen Operand
+shortCircuit name ShortCircuitKind{..} left right = do
   rightBlock <- addBlock $ name ++ ".right"
   exitBlock <- addBlock $ name ++ ".exit"
 
@@ -414,14 +409,7 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     var' <- getVar name
     val' <- codegenExpression val
     store var' val' t'
-  (S.BinaryOperation LogicalAnd left right _) ->
-    shortCircuit "and" PredeterminedForFalse LeftSideWhenPredetermined RightSideWhenNotPredetermined left right
-  (S.BinaryOperation LogicalOr left right _) ->
-    shortCircuit "or" PredeterminedForTrue LeftSideWhenPredetermined RightSideWhenNotPredetermined left right
-  (S.BinaryOperation Implies left right _) ->
-    shortCircuit "implies" PredeterminedForFalse NotLeftSideWhenPredetermined RightSideWhenNotPredetermined left right
-  (S.BinaryOperation ImpliedBy left right _) ->
-    shortCircuit "impliedby" PredeterminedForTrue LeftSideWhenPredetermined NotRightSideWhenNotPredetermined left right
+  (S.BinaryOperation op@(shortCircuitKind -> Just kind) left right _) -> shortCircuit (show op) kind left right
   (S.BinaryOperation op left right _)  -> do
     let op' = binaryInstruction (T.TypedBinOp op (expressionTyp left) (expressionTyp right))
     left' <- codegenExpression left

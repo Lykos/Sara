@@ -53,6 +53,7 @@ library
                      , Sara.Z3.Verifier
                      , Sara.Z3.AstWrapper
                      , Sara.Z3.CondAst
+                     , Sara.Z3.Operators
                      , Sara.Z3.Utils
                      , Sara.Z3.PureExpression
   other-extensions:    GeneralizedNewtypeDeriving

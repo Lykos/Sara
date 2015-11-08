@@ -72,6 +72,32 @@ binarySymbol Assign          = "="
 binaryOperators :: [BinaryOperator]
 binaryOperators = enumFrom minBound
 
+-- | Description for which value a short circuit operator is predetermined by the left side.
+data PredeterminedForValue = PredeterminedForFalse | PredeterminedForTrue
+                           deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- | Description which value is used if a short circuit operator is predetermined by the left side.
+data ValueWhenPredetermined = LeftSideWhenPredetermined | NotLeftSideWhenPredetermined
+                            deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- | Description which value is used if a short circuit operator is not predetermined by the left side.
+data ValueWhenNotPredetermined = RightSideWhenNotPredetermined | NotRightSideWhenNotPredetermined
+                               deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- | Description of the behavior of a short circuit operator.
+data ShortCircuitKind
+  = ShortCircuitKind { predeterminedForValue :: PredeterminedForValue
+                     , valueWhenPredetermined :: ValueWhenPredetermined
+                     , valueWhenNotPredetermined :: ValueWhenNotPredetermined }
+  deriving (Eq, Ord, Show)
+
+shortCircuitKind :: BinaryOperator -> Maybe ShortCircuitKind
+shortCircuitKind LogicalAnd = Just $ ShortCircuitKind PredeterminedForFalse LeftSideWhenPredetermined RightSideWhenNotPredetermined
+shortCircuitKind LogicalOr  = Just $ ShortCircuitKind PredeterminedForTrue LeftSideWhenPredetermined RightSideWhenNotPredetermined
+shortCircuitKind Implies    = Just $ ShortCircuitKind PredeterminedForFalse NotLeftSideWhenPredetermined RightSideWhenNotPredetermined
+shortCircuitKind ImpliedBy  = Just $ ShortCircuitKind PredeterminedForTrue LeftSideWhenPredetermined NotRightSideWhenNotPredetermined
+shortCircuitKind _          = Nothing
+
 class Operator o where
   symbol :: o -> String
 

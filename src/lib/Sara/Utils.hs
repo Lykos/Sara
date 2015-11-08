@@ -1,9 +1,14 @@
 -- | Module for all the common Haskell functions that have nothing to do with a compiler.
-module Sara.Utils ( foldlM
+module Sara.Utils ( app2
+                  , foldlM
                   , keyBy
                   , (<<) ) where
 
 import qualified Data.Map as M
+
+-- | Apply a function that takes a list to two arguments.
+app2 :: ([a] -> b) -> a -> a -> b
+app2 f a b = f [a, b]
 
 -- | Applies a transformation of the environment that depends on a value for each value of a list.
 foldlM :: Monad m => (a -> m (m b -> m b)) -> [a] -> m b -> m b
