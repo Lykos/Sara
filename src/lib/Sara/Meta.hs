@@ -74,6 +74,9 @@ type PureCheckerTypedVariable = S.TypedVariable VariableMeta NodeMeta
 expressionTyp :: S.Expression a b ExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta
 
+expressionPure :: S.Expression a b ExpressionMeta d -> Type
+expressionPure = expIsPure . S.expressionMeta
+
 expressionPos :: S.Expression a b c NodeMeta -> SourcePos
 expressionPos = nodePos . S.nodeMeta
 

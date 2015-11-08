@@ -24,15 +24,18 @@ shortCircuitExecution :: (MonadState SymbolicStateSpace m, MonadZ3 m, MaybeNegat
 shortCircuitExecution nameComponents a e | isPositive a = return e
                                          | otherwise    = computeTmp1 ("negate" : nameComponents) Boolean mkNot e
 
-symbolicExecute :: (MonadState SymbolicStateSpace m, MonadZ3 m) => SymbolizerExpression -> m ResultTmpVar
-symbolicExecute (S.Boolean b _)                                              = setNewTmpVar ["boolean"] Boolean =<< mkBool b
-symbolicExecute (S.Integer n _)                                              = setNewTmpVar ["integer"] Integer =<< mkInteger n
-symbolicExecute (S.UnaryOperation op e (Typed t))                            = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
-symbolicExecute (S.BinaryOperation Assign (S.Variable _ m _) e (Typed t))    = do
+symbolicExecute :: (MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
+symbolicExecute exp = if expressionPure exp then symbolicExecutePure exp else symbolicExecuteImpure exp
+
+symbolicExecuteImpure :: (MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
+symbolicExecuteImpure (S.Boolean b _)                                              = setNewTmpVar ["boolean"] Boolean =<< mkBool b
+symbolicExecuteImpure (S.Integer n _)                                              = setNewTmpVar ["integer"] Integer =<< mkInteger n
+symbolicExecuteImpure (S.UnaryOperation op e (Typed t))                            = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
+symbolicExecuteImpure (S.BinaryOperation Assign (S.Variable _ m _) e (Typed t))    = do
   e' <- symbolicExecute e
   assignVar (m, t) e'
   return e'
-symbolicExecute (S.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r (Typed t)) = do
+symbolicExecuteImpure (S.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r (Typed t)) = do
   l' <- symbolicExecute l
   let name = show op
   let executionWhenShortCircuit    = shortCircuitExecution ["whenShortCircuit", name] valueWhenPredetermined l'
@@ -41,7 +44,7 @@ symbolicExecute (S.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind
   case predeterminedForValue of
     PredeterminedForFalse -> splitStates executionWhenShortCircuit executionWhenNotShortCircuit
     PredeterminedForTrue  -> splitStates executionWhenNotShortCircuit executionWhenShortCircuit
-symbolicExecute (S.BinaryOperation op l r (ExpressionMeta t, NodeMeta p))    = do
+symbolicExecuteImpure (S.BinaryOperation op l r (ExpressionMeta t, NodeMeta p))    = do
   l' <- symbolicExecute l
   r' <- symbolicExecute r
   result <- computeTmp2 [show op] t (z3BinaryOperator op) l' r'
@@ -51,7 +54,7 @@ symbolicExecute (S.BinaryOperation op l r (ExpressionMeta t, NodeMeta p))    = d
       addProofObligation proofObl' failureType p
     Nothing                      -> return ()
   return result
-symbolicExecute (S.Call name args m (ExpressionMeta t, NodeMeta p))          = do
+symbolicExecuteImpure (S.Call name args m (ExpressionMeta t, NodeMeta p))          = do
   args' <- mapM symbolicExecute args
   let aTyps = map expressionTyp args
   (funcPre, funcPost, func) <- z3FuncDecls m aTyps t
@@ -64,11 +67,11 @@ symbolicExecute (S.Call name args m (ExpressionMeta t, NodeMeta p))          = d
   case pure of
     True  -> computeTmpN ["funcApp", name] t (mkApp func) args'
     False -> newTmpVar ["methodResult", name] t
-symbolicExecute (S.Variable _ m (Typed t))                                   = return (m, t)
-symbolicExecute (S.Conditional cond thenExp elseExp (Typed t))               = do
+symbolicExecuteImpure (S.Variable _ m (Typed t))                                   = return (m, t)
+symbolicExecuteImpure (S.Conditional cond thenExp elseExp (Typed t))               = do
   cond' <- symbolicExecute cond
   splitStatesOn ["split", "if"] t cond' (symbolicExecute thenExp) (symbolicExecute elseExp)
-symbolicExecute (S.While invs cond body (_, NodeMeta p))                     = do
+symbolicExecuteImpure (S.While invs cond body (_, NodeMeta p))                     = do
   invs' <- ["loop", "entry", "invariant"] Boolean
   mapM (addProofObligation E.LoopEntryInvariantViolation p) invs
   collapse LoopEntry p
@@ -80,7 +83,7 @@ symbolicExecute (S.While invs cond body (_, NodeMeta p))                     = d
   collapse LoopExit p
   return $ error "A while loop doesn't have a return value."
 
-symbolicExecutePure :: (MonadState SymbolicStateSpace m, MonadZ3 m) => SymbolizerExpression -> m ResultTmpVar
+symbolicExecutePure :: (MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
 symbolicExecutePure exp = computeToTmpVar $ do
   vars <- gets S.variableStates
   (obl, ass, ast) <- runCondAst <$> runReaderT (z3Expression exp) vars
