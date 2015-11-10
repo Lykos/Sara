@@ -14,7 +14,7 @@ prop_addsTypes :: TypeCheckerProgram -> Property
 prop_addsTypes p = check input expected actual
   where input = clearTypes p
         expected = return p
-        actual = liftM clearSymbols $ checkWithoutMain input
+        actual = liftM clearSymbols $ liftM clearPureness $ checkWithoutMain input
 
 typeCheckerGroup :: Test
 typeCheckerGroup = testGroup "TypeCheckerTests" [ testProperty "adds types" prop_addsTypes ]

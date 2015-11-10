@@ -1,0 +1,7 @@
+// errors PositionedError ImpureExpressionError PureInvariant 4:19
+method main(): Integer {
+  while (true)
+    invariant 8 > main()
+  {};
+  3
+}

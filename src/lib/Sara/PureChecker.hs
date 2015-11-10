@@ -7,15 +7,12 @@ import Sara.AstUtils
 import Sara.Meta
 import Sara.Operators
 import Sara.Errors
-import Control.Monad
-import Control.Monad.Reader.Class
-import Control.Monad.Except
-import Control.Monad.Identity
-import qualified Data.Map.Strict as M
+import Text.Parsec.Pos
+import Data.Maybe
 
 checkPureness :: SymbolizerProgram -> ErrorOr PureCheckerProgram
 checkPureness prog = do
-  prog' <- addPureAnnotations prog
+  let prog' = addPureAnnotations prog
   checkSignatures prog'
   checkPureBodies prog'
   checkPureAssertions prog'
@@ -23,22 +20,26 @@ checkPureness prog = do
 
 addPureAnnotations :: SymbolizerProgram -> PureCheckerProgram
 addPureAnnotations = mapExpressions addAnnotation . mapExpressionMetas changeMeta
-  where changeMeta = mapExpressionMeta (\TypMeta t -> ExpressionMeta t (error "Pure annotation is not defined yet."))
-        addAnnotation exp = exp{ expMeta = expMeta' }
-          where expMeta' = ExpressionMeta (expressionTyp exp) (isPure exp)
+  where changeMeta :: TypMeta -> ExpressionMeta
+        changeMeta = (\(TypMeta t) -> ExpressionMeta t (error "Pure annotation is not defined yet."))
+        addAnnotation :: PureCheckerExpression -> PureCheckerExpression
+        addAnnotation exp = exp{ expMeta = (expMeta', m) }
+          where expMeta' = ExpressionMeta (expressionTyp exp) (isPureLol exp)
+                m :: NodeMeta
+                m = nodeMeta exp
 
 checkSignatures :: PureCheckerProgram -> ErrorOr ()
 checkSignatures = mapMSignatures_ checkOneSignature
-  where checkOneSignature Signature{ isPure = isPure, sigName = name, preconditions = precs, postconditions = posts } =
+  where checkOneSignature Signature{ S.isPure = isPure, sigName = name, preconditions = precs, postconditions = posts } =
           checkConditions (PurePrecondition func) precs >> checkConditions (PurePostcondition func) posts
           where func = functionOrMethod isPure name
         checkConditions context conds = mapM_ (checkPureExpression context) conds
 
 checkPureBodies :: PureCheckerProgram -> ErrorOr ()
 checkPureBodies = mapMDeclarations_ checkPureBody
-  where checkPureBody S.Function{ body = body, signature = Signature{ isPure = True, sigName = name } } =| 
+  where checkPureBody S.Function{ body = body, signature = Signature{ S.isPure = True, sigName = name } } = 
           checkPureExpression (PureFunction name) body
-        checkPureBody _                                                                                 =
+        checkPureBody _                                                                                   =
           return ()
 
 checkPureAssertions :: PureCheckerProgram -> ErrorOr ()
@@ -48,21 +49,29 @@ checkPureAssertions = mapMExpressions_ checkOneExpression
         checkOneExpression _                                                = return ()
 
 checkPureExpression :: PureContext -> PureCheckerExpression -> ErrorOr ()
-checkPureExpression context exp | not isPureExp $ expMeta exp = impureExpression context $ expressionPos exp
-checkPureExpression _                                         = return ()
+checkPureExpression context exp = case findImpurePos exp of
+  Just pos -> impureExpression context pos
+  Nothing  -> return ()
 
--- | Checks if the given expression is pure.
-isPure :: PureCheckerExpression -> Bool
-isPure exp = all (isPureExp . expMeta) (children exp) && isPure' exp
-  where isPure' S.Unit{}                          = True
-        isPure' S.Boolean{}                       = True
-        isPure' S.Integer{}                       = True
-        isPure' S.Double{}                        = True
-        isPure' UnaryOperation{}                  = True
-        isPure' BinaryOperation{ binOp = Assign } = False
-        isPure' BinaryOperation{}                 = True
-        isPure' Variable{}                        = True
-        isPure' Call{ expCallMeta = sym }         = isPureSym sym
-        isPure' Conditional{}                     = True
-        isPure' Block{}                           = True
-        isPure' _                                 = False
+findImpurePos :: PureCheckerExpression -> Maybe SourcePos
+findImpurePos exp | expressionPure exp          = Nothing
+                  | not $ preservesPureness exp = Just (expressionPos exp)
+                  | otherwise                   = listToMaybe $ catMaybes $ map findImpurePos $ children exp
+
+--  | Checks if the given expression preserves pureness and has only pure children.
+isPureLol :: PureCheckerExpression -> Bool
+isPureLol exp = all expressionPure (children exp) && preservesPureness exp
+
+preservesPureness :: PureCheckerExpression -> Bool
+preservesPureness S.Unit{}                          = True
+preservesPureness S.Boolean{}                       = True
+preservesPureness S.Integer{}                       = True
+preservesPureness S.Double{}                        = True
+preservesPureness UnaryOperation{}                  = True
+preservesPureness BinaryOperation{ binOp = Assign } = False
+preservesPureness BinaryOperation{}                 = True
+preservesPureness Variable{}                        = True
+preservesPureness Call{ expCallMeta = sym }         = funcSymPure sym
+preservesPureness Conditional{}                     = True
+preservesPureness Block{}                           = True
+preservesPureness _                                 = False

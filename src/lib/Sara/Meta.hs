@@ -71,11 +71,14 @@ type PureCheckerDeclaration = S.Declaration FunctionMeta VariableMeta Expression
 
 type PureCheckerTypedVariable = S.TypedVariable VariableMeta NodeMeta
 
+expressionTyp' :: S.Expression a b TypMeta d -> Type
+expressionTyp' = typTyp . S.expressionMeta
+
 expressionTyp :: S.Expression a b ExpressionMeta d -> Type
 expressionTyp = expTyp . S.expressionMeta
 
-expressionPure :: S.Expression a b ExpressionMeta d -> Type
-expressionPure = expIsPure . S.expressionMeta
+expressionPure :: S.Expression a b ExpressionMeta d -> Bool
+expressionPure = expPure . S.expressionMeta
 
 expressionPos :: S.Expression a b c NodeMeta -> SourcePos
 expressionPos = nodePos . S.nodeMeta

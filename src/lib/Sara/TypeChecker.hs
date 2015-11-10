@@ -28,27 +28,26 @@ data TypeCheckerContext = TypeCheckerContext { funcs :: FunctionMap
 checkReturnTypes :: TypeCheckerProgram -> ErrorOr ()
 checkReturnTypes = mapMDeclarations_ checkRetType
   where checkRetType (S.Function sig body _) = do
-          let bodyType = expressionTyp body
+          let bodyType = expressionTyp' body
           let sigType = retType sig
           when (bodyType /= sigType) (invalidRetType sigType bodyType (expressionPos body))
           typeCheckCondTypes $ S.preconditions sig
           typeCheckCondTypes $ S.postconditions sig
         checkRetType Extern{}              = return ()
 
-checkWithoutMain :: ParserProgram -> ErrorOr SymbolizerProgram
+checkWithoutMain :: ParserProgram -> ErrorOr PureCheckerProgram
 checkWithoutMain prog = C.checkWithoutMain prog >> typeCheckProgram prog
 
-checkWithMain :: ParserProgram -> ErrorOr SymbolizerProgram
+checkWithMain :: ParserProgram -> ErrorOr PureCheckerProgram
 checkWithMain prog = C.checkWithMain prog >> typeCheckProgram prog
 
-typeCheckProgram :: ParserProgram -> ErrorOr SymbolizerProgram
+typeCheckProgram :: ParserProgram -> ErrorOr PureCheckerProgram
 typeCheckProgram p = do
   funcs <- functions p
   p' <- typeCheckExpressions funcs p
   checkReturnTypes p'
   let p'' = symbolize p'
   checkPureness p''
-  return p''
 
 functions :: ParserProgram -> ErrorOr FunctionMap
 functions prog = execStateT (mapMSignatures_ addSignature prog) M.empty
@@ -66,17 +65,19 @@ insertFunction sig = M.insert (functionKey sig) sig
 -- | Checks that the type of a condition is a boolean.
 typeCheckCondType :: TypeCheckerExpression -> ErrorOr ()
 typeCheckCondType cond = let condPos = expressionPos cond in
-  case expressionTyp cond of
+  case expressionTyp' cond of
     T.Boolean -> return ()
-    condTyp   -> lift $ invalidCondType condTyp condPos
+    condTyp   -> invalidCondType condTyp condPos
 
 typeCheckCondTypes :: [TypeCheckerExpression] -> ErrorOr ()
-typeCheckCondTypes = mapM typeCheckCondType
+typeCheckCondTypes = mapM_ typeCheckCondType
 
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
-  runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression program) (TypeCheckerContext funcMap M.empty)
-  where tVarContextTrans tVar = local (addVar tVar)
+  runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression program') (TypeCheckerContext funcMap M.empty)
+  where program' :: TypeCheckerProgram
+        program' = mapExpressionMetas (const $ error "Accessed undefined expression metadata.") program
+        tVarContextTrans tVar = local (addVar tVar)
         addVar tVar context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) tVar $ vars context
         typeCheckSingleExpression exp = case exp of
@@ -84,25 +85,25 @@ typeCheckExpressions funcMap program =
           S.Integer{}                        -> typed T.Integer
           S.Double{}                         -> typed T.Double
           S.Unit{}                           -> typed T.Unit
-          UnaryOperation op subExp _         -> typed =<< unOpType op (expressionTyp subExp)
-          BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp left) (expressionTyp right)
+          UnaryOperation op subExp _         -> typed =<< unOpType op (expressionTyp' subExp)
+          BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp' left) (expressionTyp' right)
           Variable name _ _                  -> typed =<< varType name
-          Call name args _ _                 -> typed =<< funcType name (map expressionTyp args)
+          Call name args _ _                 -> typed =<< funcType name (map expressionTyp' args)
           Conditional cond thenExp elseExp _ -> typed
-                                                =<< conditionalType (expressionTyp thenExp) (expressionTyp elseExp)
-                                                << typeCheckCondType cond
-          Block _ exp _                      -> typed (expressionTyp exp)
+                                                =<< conditionalType (expressionTyp' thenExp) (expressionTyp' elseExp)
+                                                << lift (typeCheckCondType cond)
+          Block _ exp _                      -> typed (expressionTyp' exp)
           While invs cond _ _                -> typed T.Unit
-                                                << typeCheckCondType cond
-                                                << typeCheckCondTypes invs
-          Assertion _ cond _                 -> typed T.Unit << typeCheckCondType cond
+                                                << lift (typeCheckCondType cond)
+                                                << lift (typeCheckCondTypes invs)
+          Assertion _ cond _                 -> typed T.Unit << lift (typeCheckCondType cond)
           where pos = expressionPos exp
-                conditionalType thenType elseType _ | thenType == elseType = return thenType
-                                                    | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
+                conditionalType thenType elseType | thenType == elseType = return thenType
+                                                  | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
                 typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
                 typed t = return exp{ expMeta = meta' }
-                  where meta' :: (ExpressionMeta, NodeMeta)
-                        meta' = first (const $ ExpressionMeta t) (expMeta exp)
+                  where meta' :: (TypMeta, NodeMeta)
+                        meta' = first (const $ TypMeta t) (expMeta exp)
                 varType :: Name -> ReaderT TypeCheckerContext (ExceptT Error Identity) Type
                 varType name = do
                   vars' <- asks vars

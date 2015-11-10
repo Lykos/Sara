@@ -19,6 +19,7 @@ module Sara.Z3.SymbolicStateSpace ( SymbolicStateSpace
 
 import Control.Monad.State.Strict
 import Control.Monad.Writer
+import Control.Monad.Reader
 import qualified Sara.Z3.AstWrapper as W
 import Sara.Z3.ProofPart
 import Sara.Z3.Utils
@@ -129,11 +130,13 @@ setVar :: MonadState S.SymbolicState m => ResultTmpVar -> AST -> m ()
 setVar = S.setVar . fst
 
 getOrCreateVar :: (MonadState S.SymbolicState m, MonadZ3 m) => ResultTmpVar -> m AST
-getOrCreateVar = uncurry S.getOrCreateVar
+getOrCreateVar (v, t) = do
+  state <- get
+  runReaderT (S.getOrCreateVar v t) state
 
 -- | Adds the given proof obligation to all states.
-addProofObligation :: (MonadState SymbolicStateSpace m, MonadZ3 m) => ResultTmpVar -> VerifierFailureType -> SourcePos -> m ()
-addProofObligation newObl failureType pos = liftStates $ do
+addProofObligation :: (MonadState SymbolicStateSpace m, MonadZ3 m) => VerifierFailureType -> SourcePos -> ResultTmpVar -> m ()
+addProofObligation failureType pos newObl = liftStates $ do
   newObl' <- getOrCreateVar newObl
   S.addProofObligation $ W.singleton newObl' (failureType, pos)
 
@@ -144,7 +147,7 @@ addAssumption newAss = liftStates $ do
   S.addAssumption $ W.singleton newAss' ()
 
 entry :: SourcePos -> SymbolicStateSpace
-entry pos = SymbolicStateSpace 0 [S.empty pos S.MethodEntry]
+entry pos = SymbolicStateSpace 0 [S.empty pos S.AfterMethodEntry]
 
 collapse :: (MonadWriter [ProofPart] m, MonadState SymbolicStateSpace m) => S.SymbolicExecutionStart -> SourcePos -> m ()
 collapse entryType pos = do

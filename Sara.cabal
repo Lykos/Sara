@@ -52,6 +52,7 @@ library
                      , Sara.Z3.SymbolicState
                      , Sara.Z3.SymbolicExecutor
                      , Sara.Z3.SymbolicStateSpace
+                     , Sara.Z3.GlobalAssumer
                      , Sara.Z3.Verifier
                      , Sara.Z3.AstWrapper
                      , Sara.Z3.CondAst

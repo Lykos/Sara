@@ -5,22 +5,21 @@ module Sara.Parser (
 
 import Text.Parsec
 import Text.Parsec.String (Parser)
-import Data.Void
 import Data.Functor.Identity
 
 import qualified Text.Parsec.Expr as Expr
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
 import Sara.Meta
-import Sara.Lexer
+import Sara.Lexer as L
 import Sara.Syntax
 import Sara.Types
 import Sara.Operators
 import Sara.Errors
 
 declaration :: Parser ParserDeclaration
-declaration = try function
-              <|> try extern
+declaration = function
+              <|> extern
               <?> "declaration"
 
 function :: Parser ParserDeclaration
@@ -44,12 +43,18 @@ signature = do
   posts <- conditions "ensures"
   return $ Signature pure name args retType precs posts $ mkExpMeta pos
 
-conditions :: String -> Parser [ParserExpression]
-conditions keyword = semiSep $ reservedToken keyword >> expression
-
 pureKeyword :: Parser Bool
 pureKeyword = (reservedToken "function" >> return True)
               <|> (reservedToken "method" >> return False)
+
+conditions :: String -> Parser [ParserExpression]
+conditions keyword = conditions' keyword <|> return []
+  where conditions' keyword = do
+          -- Note that we cannot use semiSep since that one doesn't handle a semicolon that does NOT belong to the conditions correctly.
+          reservedToken keyword
+          cond <- expression
+          conds <- try (semi >> conditions' keyword) <|> return []
+          return (cond:conds)
 
 typedVariable :: Parser ParserTypedVariable
 typedVariable = do
@@ -60,10 +65,10 @@ typedVariable = do
   return $ TypedVariable name varType $ mkExpMeta pos
 
 typeExpression :: Parser Type
-typeExpression = try unitType
-                 <|> try booleanType
-                 <|> try integerType
-                 <|> try doubleType
+typeExpression = unitType
+                 <|> booleanType
+                 <|> integerType
+                 <|> doubleType
                  <?> "type"
 
 unitType :: Parser Type
@@ -131,7 +136,6 @@ binaryOperation op meta left right = BinaryOperation op left right meta
 term :: Parser ParserExpression
 term = simpleExpression
        <|> parensToken expression
-       <?> "expression"
 
 addNodeMeta :: Parser (NodeMeta -> a) -> Parser a
 addNodeMeta parser = do
@@ -148,20 +152,17 @@ addExpressionMeta parser = do
 simpleExpression :: Parser ParserExpression
 simpleExpression = addExpressionMeta $
                    try unit
-                   <|> try boolean
+                   <|> boolean
                    <|> try double
                    <|> try integer
+                   <|> while
+                   <|> conditional
+                   <|> block
+                   <|> assert
+                   <|> assume
+                   <|> assertAndCollapse
                    <|> try call
-                   <|> try conditional
-                   <|> try block
-                   <|> try while
-                   <|> try assert
-                   <|> try assume
-                   <|> try assertAndCollapse
                    <|> variable
-
-empty :: Parser Void
-empty = return undefined
 
 type ExpMeta = ((), NodeMeta)
 type UntypedExpression = ExpMeta -> ParserExpression
@@ -170,7 +171,7 @@ mkExpMeta :: SourcePos -> ExpMeta
 mkExpMeta pos = ((), NodeMeta pos)
 
 unit :: Parser UntypedExpression
-unit = parensToken empty >> return S.Unit
+unit = L.symbol "()" >> return S.Unit
 
 boolean :: Parser UntypedExpression
 boolean = (reservedToken "true" >> return (S.Boolean True))
@@ -219,8 +220,8 @@ block = do
 while :: Parser UntypedExpression
 while = do
   reservedToken "while"
+  cond <- parensToken $ expression
   invs <- conditions "invariant"
-  cond <- expression
   body <- bracedExpression
   return $ While invs cond body
 

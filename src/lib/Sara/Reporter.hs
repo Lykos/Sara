@@ -9,7 +9,7 @@ import LLVM.General.Module
 
 data Reporter
   = Reporter { reportParsed :: ParserProgram -> IO ()
-             , reportTyped :: SymbolizerProgram -> IO ()
+             , reportTyped :: PureCheckerProgram -> IO ()
              , reportModule :: Module -> IO () }
 
 reportProgram :: String -> Program a b c d -> IO ()

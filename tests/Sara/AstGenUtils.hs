@@ -309,7 +309,7 @@ arbitraryWhile :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe U
 arbitraryWhile t = do
   isPure <- asks isPureEnv
   case t of
-    T.Unit | not isPure -> Just <$> (While <$> subtree T.Boolean <*> (arbitraryType >>= subtree))
+    T.Unit | not isPure -> Just <$> (While <$> (scale intRoot $ listOf $ subtree T.Boolean) <*> subtree T.Boolean <*> (arbitraryType >>= subtree))
     _                   -> return Nothing
   where subtree t = scale (`div` 2) $ arbitraryExpression t
 
@@ -358,7 +358,7 @@ arbitraryExpression t = addExpMeta t $ sized expression'
 
 -- | The most simple expression with a given type. Used for variable shrinking.
 trivial :: ExpMeta -> TypeCheckerExpression
-trivial m = trivial' (expTyp $ fst m) m
+trivial m = trivial' (typTyp $ fst m) m
   where trivial' T.Boolean = S.Boolean False
         trivial' T.Integer = S.Integer 0
         trivial' T.Double  = S.Double 0.0
@@ -367,7 +367,7 @@ trivial m = trivial' (expTyp $ fst m) m
 -- | Returns the free variables in an expression. Used to determine which declarations are shrinkable.
 freeVariables :: TypeCheckerExpression -> S.Set TypeCheckerTypedVariable
 freeVariables = foldMapExpression freeVariable
-  where freeVariable v@(Variable a _ _) = S.singleton $ TypedVariable a (expressionTyp v) ((), mkNodeMeta)
+  where freeVariable v@(Variable a _ _) = S.singleton $ TypedVariable a (expressionTyp' v) ((), mkNodeMeta)
         freeVariable _                  = S.empty
 
 -- | Returns the called functions in a program. Used to determine which signatures are shrinkable.
@@ -396,15 +396,15 @@ shrinkExpression (Call name args cm m)                 = childrenWithType m args
 shrinkExpression (Conditional cond ifExp elseExp m) = childrenWithType m [cond, ifExp, elseExp]
                                                       ++ [Conditional c i e m | (c, i, e) <- Q.shrink (cond, ifExp, elseExp)]
 shrinkExpression (Block stmts exp m)                = [exp]
-                                                      ++ [Block (init stmts) (last stmts) m | not (null stmts), expressionTyp (last stmts) == expTyp (fst m)]
+                                                      ++ [Block (init stmts) (last stmts) m | not (null stmts), expressionTyp' (last stmts) == typTyp (fst m)]
                                                       ++ [Block s e m | (s, e) <- Q.shrink (stmts, exp)]
-shrinkExpression (While cond body m)                = S.Unit m
+shrinkExpression (While invs cond body m)           = S.Unit m
                                                       : childrenWithType m [body]
-                                                      ++ [While c b m | (c, b) <- Q.shrink (cond, body)]
+                                                      ++ [While i c b m | (i, c, b) <- Q.shrink (invs, cond, body)]
 shrinkExpression (Assertion k exp m)                = S.Unit m : [Assertion k e m | e <- Q.shrink exp]
 
 childrenWithType :: ExpMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
-childrenWithType m = filter (\c -> expressionTyp c == (expTyp $ fst m))
+childrenWithType m = filter (\c -> expressionTyp' c == (typTyp $ fst m))
 
 shrinkSignature :: MonadReader (S.Set FunctionKey) m => S.Set ParserTypedVariable -> TypeCheckerSignature -> m [TypeCheckerSignature]
 shrinkSignature free sig@(Signature pure name args typ precs posts p) = do

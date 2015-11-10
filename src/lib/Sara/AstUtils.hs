@@ -84,7 +84,7 @@ mapMExpressions expTrans = transformProgramInternal transformer
 
 -- | Map over all expressions
 mapExpressions :: (Expression a b c d -> Expression a b c d) -> Program a b c d -> Program a b c d
-mapExpressions f = runIdentity . mapMExpressions f
+mapExpressions f = runIdentity . mapMExpressions (Identity . f)
 
 -- | Monadic map over all expressions and discard the result.
 mapMExpressions_ :: Monad m => (Expression a b c d -> m ()) -> Program a b c d -> m ()
@@ -194,15 +194,15 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
 
 -- | Returns the direct children of an expression.
 children :: Expression a b c d -> [Expression a b c d]
-children (BinaryOperation _ left right _)  = [left, right]
-children (UnaryOperation _ exp _)          = [exp]
-children (Conditional cond ifExp elseExp _ = [cond, ifExp, elseExp]
-children (Call _ args _ _)                 = args
-children (Block stmts exp _)               = stmts ++ exp
-children (While invs cond body _)          = invs ++ [cond, body]
-children Variable{}                        = []
-children Boolean{}                         = []
-children Integer{}                         = []
-children Double{}                          = []
-children Unit{}                            = []
-children (Assertion _ exp _)               = [exp]
+children (BinaryOperation _ left right _)   = [left, right]
+children (UnaryOperation _ exp _)           = [exp]
+children (Conditional cond ifExp elseExp _) = [cond, ifExp, elseExp]
+children (Call _ args _ _)                  = args
+children (Block stmts exp _)                = stmts ++ [exp]
+children (While invs cond body _)           = invs ++ [cond, body]
+children Variable{}                         = []
+children Boolean{}                          = []
+children Integer{}                          = []
+children Double{}                           = []
+children Unit{}                             = []
+children (Assertion _ exp _)                = [exp]

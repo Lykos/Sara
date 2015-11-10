@@ -6,7 +6,7 @@ import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
 
-import qualified Text.Parsec.Token as Token
+import qualified Text.Parsec.Token as T
 
 reservedOpNames :: [String]
 reservedOpNames = map unarySymbol unaryOperators
@@ -19,46 +19,52 @@ reservedNames = [ "function", "extern", "method", "if", "then"
                 , "ensures", "assert", "assume", "assertAndCollapse"
                 , "invariant"] ++ map show types
 
-lexer :: Token.TokenParser ()
-lexer = Token.makeTokenParser style
+lexer :: T.TokenParser ()
+lexer = T.makeTokenParser style
   where
     style = emptyDef {
-               Token.commentStart = "/*"
-               , Token.commentEnd = "*/"
-               , Token.commentLine = "//"
-               , Token.nestedComments = True
-               , Token.identStart = letter <|> char '_'
-               , Token.identLetter = alphaNum <|> char '_'
-               , Token.reservedOpNames = reservedOpNames
-               , Token.reservedNames = reservedNames
-               , Token.caseSensitive = True }
+               T.commentStart = "/*"
+               , T.commentEnd = "*/"
+               , T.commentLine = "//"
+               , T.nestedComments = True
+               , T.identStart = letter <|> char '_'
+               , T.identLetter = alphaNum <|> char '_'
+               , T.reservedOpNames = reservedOpNames
+               , T.reservedNames = reservedNames
+               , T.caseSensitive = True }
 
 integerToken :: Parser Integer
-integerToken = Token.integer lexer
+integerToken = T.integer lexer
 
 doubleToken :: Parser Double
-doubleToken = Token.float lexer
+doubleToken = T.float lexer
 
 identifierToken :: Parser String
-identifierToken = Token.identifier lexer
+identifierToken = T.identifier lexer
 
 parensToken :: Parser a -> Parser a
-parensToken = Token.parens lexer
+parensToken = T.parens lexer
 
 bracesToken :: Parser a -> Parser a
-bracesToken = Token.braces lexer
+bracesToken = T.braces lexer
 
 semiSep :: Parser a -> Parser [a]
-semiSep = Token.semiSep lexer
+semiSep = T.semiSep lexer
+
+semi :: Parser String
+semi = T.semi lexer
 
 commaSep :: Parser a -> Parser [a]
-commaSep = Token.commaSep lexer
+commaSep = T.commaSep lexer
 
 reservedToken :: String -> Parser ()
-reservedToken = Token.reserved lexer
+reservedToken = T.reserved lexer
 
 reservedOpToken :: String -> Parser ()
-reservedOpToken = Token.reservedOp lexer
+reservedOpToken = T.reservedOp lexer
 
 whiteSpaceToken :: Parser ()
-whiteSpaceToken = Token.whiteSpace lexer
+whiteSpaceToken = T.whiteSpace lexer
+
+symbol :: String -> Parser String
+symbol = T.symbol lexer

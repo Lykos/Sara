@@ -16,16 +16,19 @@ clearPositions = mapNodeMetas $ const $ mkNodeMeta
 clearTypes :: TypeCheckerProgram -> ParserProgram
 clearTypes = mapExpressionMetas $ const ()
 
+clearPureness :: PureCheckerProgram -> SymbolizerProgram
+clearPureness = mapExpressionMetas $ \(ExpressionMeta t _) -> TypMeta t
+
 clearSymbols :: SymbolizerProgram -> TypeCheckerProgram
 clearSymbols = mapVariableMetas (const ()) . mapFunctionMetas (const ())
 
 mkNodeMeta :: NodeMeta
 mkNodeMeta = NodeMeta position
 
-type ExpMeta = (ExpressionMeta, NodeMeta)
+type ExpMeta = (TypMeta, NodeMeta)
 
 mkExpMeta :: Type -> ExpMeta
-mkExpMeta t = (ExpressionMeta t, NodeMeta position)
+mkExpMeta t = (TypMeta t, NodeMeta position)
 
 -- | Creates metadata for nodes that need two types of metadata. One unit metadata and one NodeMetadata.
 mkNodePlusMeta :: ((), NodeMeta)

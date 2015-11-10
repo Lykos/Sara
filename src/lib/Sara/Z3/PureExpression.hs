@@ -17,7 +17,7 @@ import Z3.Monad
 import Text.Parsec.Pos (SourcePos)
 
 -- | Create an expression and its precondition and postcondition.
-z3Expression :: (MonadState S.SymbolicState z3, MonadZ3 z3) => SymbolizerExpression -> z3 CondAST
+z3Expression :: (MonadState S.SymbolicState z3, MonadZ3 z3) => PureCheckerExpression -> z3 CondAST
 z3Expression (S.Boolean b _)                = trivial =<< mkBool b
 z3Expression (S.Integer n _)                = trivial =<< mkInteger n
 z3Expression (S.UnaryOperation op e _)      = do
@@ -45,7 +45,7 @@ z3Expression c@(S.Call name a m _)          = do
   let pos = expressionPos c
   let failureType = PreconditionViolation (E.Function name)
   addProofObligation pre failureType pos =<< addAssumption post =<< combine (mkApp func) a'
-z3Expression exp                            = error $ "Unsupported expression for verifier: " ++ prettyRender exp
+z3Expression exp                            = error $ "Unsupported expression for pure verifier: " ++ prettyRender exp
 
 z3UnOp :: MonadZ3 z3 => UnaryOperator -> CondAST -> z3 CondAST
 z3UnOp op = liftCond $ z3UnaryOperator op

@@ -2,6 +2,6 @@
 method main(): Integer { 8 };
 
 function f(a: Integer): Integer {
-  while true {};
+  while (true) {};
   a
 }

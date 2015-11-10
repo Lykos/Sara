@@ -37,7 +37,7 @@ reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementE
                 , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
                 , "NoMain", "PureFunction", "PurePrecondition", "PurePostcondition"
                 , "Function", "Method", "RedeclaredArgument", "PureAssertion", "Assert"
-                , "Assume", "AssertAndCollapse" ] ++ L.reservedNames
+                , "Assume", "AssertAndCollapse", "PureInvariant" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -178,6 +178,7 @@ pureContext :: Parser E.PureContext
 pureContext = try pureFunction
               <|> try purePrecondition
               <|> try purePostcondition
+              <|> try pureInvariant
               <|> try pureAssertion
               <?> "pure context type"
 
@@ -198,6 +199,11 @@ purePostcondition = do
   reservedToken "PurePostcondition"
   f <- functionOrMethod
   return $ E.PurePostcondition f
+
+pureInvariant :: Parser E.PureContext
+pureInvariant = do
+  reservedToken "PureInvariant"
+  return $ E.PureInvariant
 
 pureAssertion :: Parser E.PureContext
 pureAssertion = do

@@ -1,115 +1,49 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Sara.Z3.Verifier ( verify ) where
 
 import Sara.Errors as E
 import Sara.AstUtils
 import Sara.Z3.AstWrapper
-import Sara.Z3.Utils
-import Sara.Z3.PureExpression
+import Sara.Z3.SymbolicExecutor
 import Control.Monad.Except
-import qualified Sara.Syntax as S
+import Control.Monad.Writer
+import qualified Sara.Z3.ProofPart as P
 import Sara.Meta
-import Sara.Z3.CondAst
+import Sara.Z3.GlobalAssumer
 import Z3.Monad
 
-verify :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
-verify prog = defineEverything prog >> verifyFunctions prog
+verify :: MonadZ3 m => PureCheckerProgram -> ExceptT Error m ()
+verify prog = addGlobalAssumptions prog >> verify' prog
 
-defineEverything :: MonadZ3 z3 => SymbolizerProgram -> z3 ()
-defineEverything prog = mapMDeclarations_ addDecl prog >> mapMSignatures_ addSig prog
-  where addDecl :: MonadZ3 z3 => SymbolizerDeclaration -> z3 ()
-        addDecl (S.Function S.Signature{ S.isPure = True, S.args = args, S.retType = retType, S.sigMeta = (m, _) } body _) = do
-          body' <- z3Expression body
-          args' <- z3Args args
-          (_, _, func) <- z3FuncDecls m (map S.varType args) retType
-          fApp <- mkApp func args'
-          assert =<< mkEq fApp body'
-        addDecl _                                                                                                          = return ()
-        addSig ::  MonadZ3 z3 => SymbolizerSignature -> z3 ()
-        addSig S.Signature{ S.args = args, S.retType = retType, S.preconditions = pres, S.postconditions = posts, S.sigMeta = (m, _) } = do
-          pre' <- conditions pres
-          post' <- conditions posts
-          args' <- z3Args args
-          (funcPre, funcPost, _) <- z3FuncDecls m (map S.varType args) retType
-          preApp <- mkApp funcPre args'
-          postApp <- mkApp funcPost args'
-          assert =<< mkEq preApp pre'
-          assert =<< mkEq postApp post'          
-        conditions []    = mkTrue
-        conditions conds = mkAnd =<< mapM z3ExpressionAst conds
-        z3ExpressionAst e = ast <$> z3Expression e
+addGlobalAssumptions :: MonadZ3 m => PureCheckerProgram -> m ()
+addGlobalAssumptions prog = do
+  assumptions <- execWriterT (globalAssumptions prog)
+  mapM_ assert assumptions
 
-setArgs :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [SymbolizerTypedVariable] -> m ()
-setArgs args = mapM setArg args
-  where setArg (S.TypedVariable _ t (m, _)) = setVar (m, t) $ z3Var m t
+generateProofParts :: MonadZ3 m => PureCheckerProgram -> m [P.ProofPart]
+generateProofParts prog = do
+  execWriterT (mapMDeclarations_ symbolicExecuteDecl prog)
 
-verifyFunctions :: MonadZ3 z3 => SymbolizerProgram -> ExceptT Error z3 ()
-verifyFunctions = mapMDeclarations_ verifyDecl
-  where verifyDecl :: MonadZ3 z3 => SymbolizerDeclaration -> ExceptT Error z3 ()
-        verifyDecl (S.Function sig@S.Signature{ S.args = args, S.isPure = pure, S.preconditions = pres, S.postconditions = posts } body _) = local $ do
-          let m = expMeta body
-          S.Block [S.Assert] S.Unit posts
-          (prePre, postPre, pre) <- preconditions pres
-          (prePost, postPost, post) <- postconditions posts
-          (preBody, postBody, _) <- runCondAst =<< z3Expression body
-          -- We can assume that the precondition holds.
-          assert pre
-          -- We can also assume that the postconditions all hold
-          assert postPre
-          assert postPost
-          assert postBody
-          let evalModel = evalArgs args
-          -- Now we assert that all the preconditions of our components and our postcondition holds.
-          local $ assertHolds PrePrecondition sig evalModel prePre
-          local $ assertHolds PostPrecondition sig evalModel prePost
-          local $ assertHolds BodyPrecondition sig evalModel preBody
-          local $ assertHolds Postcondition sig evalModel post
-        verifyDecl _                                                                                                    = return ()
-        evalArgs :: MonadZ3 z3 => [SymbolizerTypedVariable] -> Model -> z3 VerifierFailureModel
-        evalArgs args model = VerifierFailureModel <$> mapM (evalArg model) args
-        evalArg :: MonadZ3 z3 => Model -> SymbolizerTypedVariable -> z3 (S.Name, String)
-        evalArg model S.TypedVariable{ S.varType = typ, S.varName = name, S.varMeta = (m, _) } = do
-          var <- z3Var m typ
-          val <- eval model var
-          val' <- case val of
-            Nothing -> do
-              s <- modelToString model
-              error $ "Unable to evaluate variable " ++ name ++ " in the following model:\n" ++ s
-            Just v  -> astToString v
-          return (name, val')
-        preconditions :: MonadZ3 z3 => [SymbolizerExpression] -> z3 (FailureTrackableAST, AST, AST)
-        preconditions []    = runCondAst =<< trivial =<< mkTrue
-        preconditions [exp] = runCondAst =<< z3Expression exp
-        preconditions conds = runCondAst =<< (combine mkAnd =<< (mapM z3Expression conds))
-        postconditions :: MonadZ3 z3 => [SymbolizerExpression] -> z3 (FailureTrackableAST, AST, FailureTrackableAST)
-        postconditions conds = do
-          conds' <- mapM z3Expression conds
-          (prePosts, postPosts, posts) <- unzip3 <$> mapM runCondAst conds'
-          let failures = map postconditionFailure conds
-          let prePost = conjunct prePosts
-          postPost <- conjunctAsts postPosts
-          let post = conjunct $ zipWith singleton posts failures
-          return (prePost, postPost, post)
-        postconditionFailure exp = (PostconditionViolation, expressionPos exp)
-        assertHolds :: MonadZ3 z3 => ContextType -> SymbolizerSignature -> (Model -> z3 VerifierFailureModel) -> FailureTrackableAST -> ExceptT Error z3 ()
-        assertHolds contextType sig evalModel assertion = do
-          -- Assume that the assertion is NOT true.
-          assert =<< mkNot =<< runAst assertion
+verify' :: MonadZ3 m => PureCheckerProgram -> ExceptT Error m ()
+verify' prog = do
+  proofParts <- generateProofParts prog
+  mapM_ verifyProofPart proofParts
+  where verifyProofPart :: MonadZ3 m => P.ProofPart -> ExceptT Error m ()
+        verifyProofPart p@P.ProofPart{..} = local $ do
+          assert =<< runAst assumption
+          assert =<< mkNot =<< runAst proofObligation
           res <- lift $ withModel $ \model -> do
-            model' <- evalModel model
-            failure <- findFailure model assertion
-            s <- astToString =<< runAst assertion
-            liftIO $ putStrLn $ "ast:\n" ++ s
+            failure <- P.findFailure model p
             m <- modelToString model
             liftIO $ putStrLn $ "model:\n" ++ m
             so <- solverToString
             liftIO $ putStrLn $ "solver:\n" ++ so
-            return (model', failure)
-          let func = functionOrMethod (S.isPure sig) (S.sigName sig)
+            return failure
           case res of
-            (Sat, Just (model, Just (typ, pos))) -> verifierError contextType func model typ pos
-            (Sat, Just (_, Nothing))             -> error "There was a failure, but we were not able to find it in the model."
-            (Sat, Nothing)                       -> error "Satisfiable, but no model attached."
-            (Unsat, _)                           -> return ()
-            (Undef, _)                           -> unsolvableError contextType func $ signaturePos sig
+            (Sat, Just (Just e)) -> throwError e
+            (Sat, Just Nothing)  -> error "There was a failure, but we were not able to find it in the model."
+            (Sat, Nothing)       -> error "Satisfiable, but no model attached."
+            (Unsat, _)           -> return ()
+            (Undef, _)           -> unsolvableError startType startPos

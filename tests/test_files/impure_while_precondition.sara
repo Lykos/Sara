@@ -1,6 +1,6 @@
-// errors PositionedError ImpureExpressionError PurePrecondition Function f 5:12
+// errors PositionedError ImpureExpressionError PurePrecondition Function f 5:14
 method main(): Integer { 8 };
 
 function f(a: Integer): Integer
-  requires while true {}
+  requires { while (true) {}; true }
 { a }

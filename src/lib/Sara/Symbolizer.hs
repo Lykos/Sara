@@ -22,7 +22,7 @@ data FunctionKey =
   deriving (Eq, Ord, Show)
 
 type FunctionMap = M.Map FunctionKey (TypeCheckerSignature, FunctionMeta)
-type VariableMap = M.Map Name (ParserTypedVariable, VariableMeta)
+type VariableMap = M.Map Name (SymbolizerTypedVariable, VariableMeta)
 type IdMap = M.Map Name Id
 
 data SymbolizerContext
@@ -33,8 +33,11 @@ data SymbolizerContext
 functionKey :: Signature a b c d -> FunctionKey
 functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
 
-callFunctionKey :: Expression a b ExpressionMeta d -> FunctionKey
-callFunctionKey Call{ expName = name, expArgs = args } = FunctionKey name (map expressionTyp args)
+lolTyp :: Expression a b TypMeta d -> Type
+lolTyp = typTyp . expressionMeta
+
+callFunctionKey :: Expression a b TypMeta d -> FunctionKey
+callFunctionKey Call{ expName = name, expArgs = args } = FunctionKey name (map lolTyp args)
 callFunctionKey _                                      = error "Can only get the call function key for Call expressions."
 
 functions :: TypeCheckerProgram -> FunctionMap
@@ -61,12 +64,15 @@ getNewSymbol f name = do
 
 symbolize :: TypeCheckerProgram -> SymbolizerProgram
 symbolize prog = runReader
-                 (evalStateT (weirdTransformSymbols tVarContextTrans symbolizeExp symbolizeSig symbolizeTypedVar prog) M.empty)
+                 (evalStateT (weirdTransformSymbols tVarContextTrans symbolizeExp symbolizeSig symbolizeTypedVar prog') M.empty)
                  (SymbolizerContext (functions prog) M.empty)
-  where tVarContextTrans tVar = do
+  where prog' :: SymbolizerProgram
+        prog' = mapVariableMetas (const $ error "Accessed undefined variable metadata.")
+                $ mapFunctionMetas (const $ error "Accessed undefined function metadata.") prog
+        tVarContextTrans tVar = do
           sym <- getNewVariableSymbol tVar
           return $ local (addVar tVar sym)
-        addVar :: TypeCheckerTypedVariable -> VariableMeta -> SymbolizerContext -> SymbolizerContext
+        addVar :: SymbolizerTypedVariable -> VariableMeta -> SymbolizerContext -> SymbolizerContext
         addVar tVar sym context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) (tVar, sym) $ vars context
         symbolizeExp :: SymbolizerExpression -> StateT IdMap (ReaderT SymbolizerContext Identity) SymbolizerExpression
