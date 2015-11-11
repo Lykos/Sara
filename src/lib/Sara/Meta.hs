@@ -22,13 +22,16 @@ type Id = Int
 
 data FunctionMeta =
   FunctionMeta { funcSymPure :: Bool
+               , funcSymArgTypes :: [Type]
+               , funcSymRetType :: Type 
                , funcSymName :: S.Name
-               , funcSymid :: Id }
+               , funcSymid :: Id}
   deriving (Eq, Ord, Show)
 
 data VariableMeta =
-  VariableMeta { varSymName :: S.Name
-               , varSymid :: Id }
+  VariableMeta { varSymType :: Type
+               , varSymName :: S.Name
+               , varSymId :: Id}
   deriving (Eq, Ord, Show)
 
 type ParserProgram = S.Program () () () NodeMeta

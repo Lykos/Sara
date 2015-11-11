@@ -21,7 +21,6 @@ import qualified Data.Map as M
 import Z3.Monad
 import Sara.Z3.Utils
 import qualified Sara.Z3.ProofPart as P
-import Sara.Types
 import qualified Sara.Errors as E
 import qualified Sara.Z3.AstWrapper as W
 import Sara.Meta
@@ -54,17 +53,17 @@ setVar v a = do
     Nothing -> modify $ \s@SymbolicState{..} -> s{ variableInitialStates = insertVar variableInitialStates }
 
 -- | If the variable exists, returns its value, otherwise, creates a temporary Z3 variable and returns it.
-getOrCreateVar :: (MonadState SymbolicState m, MonadZ3 m) => VariableMeta -> Type -> m AST
-getOrCreateVar v t = do
+getOrCreateVar :: (MonadState SymbolicState m, MonadZ3 m) => VariableMeta -> m AST
+getOrCreateVar v = do
   v' <- getVar v
   case v' of
     Just ast -> return ast
     Nothing  -> do
       name <- gets $ havocVarName v
-      ast <- mkFreshVar name =<< z3Sort t
+      ast <- mkFreshVar name =<< z3Sort (varSymType v)
       setVar v ast
       return ast
-  where havocVarName (VariableMeta name index) SymbolicState{..} =
+  where havocVarName (VariableMeta _ name index) SymbolicState{..} =
           z3VarName [ "havocedVar", show startType
                     , sourceName startPos, show $ sourceLine startPos, show $ sourceColumn startPos
                     , name, show index]

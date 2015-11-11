@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Sara.Symbolizer ( FunctionKey(..)
                        , functionKey
@@ -48,10 +49,10 @@ functions prog = execWriter (evalStateT (mapMSignatures_ addSignature prog) M.em
           tell $ M.singleton (functionKey sig) (sig, sym)
 
 getNewFunctionSymbol :: MonadState IdMap s => Signature a b c d -> s FunctionMeta
-getNewFunctionSymbol Signature{ sigName = name, isPure = pure } = getNewSymbol (FunctionMeta pure) name
+getNewFunctionSymbol Signature{..} = getNewSymbol (FunctionMeta isPure (map varType args) retType) sigName
 
 getNewVariableSymbol :: MonadState IdMap s => TypedVariable b d -> s VariableMeta
-getNewVariableSymbol TypedVariable{ varName = name } = getNewSymbol VariableMeta name
+getNewVariableSymbol TypedVariable{..} = getNewSymbol (VariableMeta varType) varName
 
 getNewSymbol :: MonadState IdMap s => (Name -> Id -> e) -> Name -> s e
 getNewSymbol f name = do

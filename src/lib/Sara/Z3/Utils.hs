@@ -36,8 +36,8 @@ z3VarName = intercalate "$"
 z3Symbol :: MonadZ3 z3 => String -> String -> Int -> z3 Symbol
 z3Symbol prefix name index = mkStringSymbol $ z3VarName [prefix, name, show index]
 
-z3Var :: MonadZ3 z3 => VariableMeta -> Type -> z3 AST
-z3Var (VariableMeta name index) typ = do
+z3Var :: MonadZ3 z3 => VariableMeta -> z3 AST
+z3Var (VariableMeta typ name index) = do
   sym <- z3Symbol "var" name index
   sort <- z3Sort typ
   mkVar sym sort
@@ -46,8 +46,8 @@ z3Var (VariableMeta name index) typ = do
 -- * One function declarations for the function itself.
 -- * One function that evaluates its preconditions as a boolean.
 -- * One function that evaluates its postconditions as a boolean.
-z3FuncDecls :: MonadZ3 z3 => FunctionMeta -> [Type] -> Type -> z3 (FuncDecl, FuncDecl, FuncDecl)
-z3FuncDecls (FunctionMeta isPure name index) argTypes retType = do
+z3FuncDecls :: MonadZ3 z3 => FunctionMeta -> z3 (FuncDecl, FuncDecl, FuncDecl)
+z3FuncDecls (FunctionMeta isPure argTypes retType name index) = do
   preSym <- z3Symbol "pre" name index
   postSym <- z3Symbol "post" name index
   funcSym <- z3Symbol "func" name index

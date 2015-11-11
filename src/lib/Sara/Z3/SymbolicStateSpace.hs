@@ -31,7 +31,7 @@ import Sara.Meta
 import Text.Parsec.Pos
 import Z3.Monad
 
-type ResultTmpVar = (VariableMeta, Type)
+type ResultTmpVar = VariableMeta
 
 -- | We intentionally use a name with multiple components to ensure that there are no clashes with user variables.
 tmpName :: [String] -> Name
@@ -67,7 +67,7 @@ newTmpVar :: MonadState SymbolicStateSpace m => [String] -> Type -> m ResultTmpV
 newTmpVar nameComponents typ = do
   modify $ \s@SymbolicStateSpace{ tmpIndex = idx } -> s{ tmpIndex = idx + 1 }
   idx <- gets tmpIndex
-  return (VariableMeta (tmpName nameComponents) idx, typ)
+  return (VariableMeta typ (tmpName nameComponents) idx)
 
 -- | Create a new temporary variable, set it to a given value in all states and return the variable.
 setNewTmpVar :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [String] -> Type -> AST -> m ResultTmpVar
@@ -89,7 +89,7 @@ computeToTmpVar :: (MonadState SymbolicStateSpace m, MonadZ3 m)
               -> m ResultTmpVar
 computeToTmpVar nameComponents typ transform = do
   resultVar <- newTmpVar nameComponents typ
-  liftStates $ setVar resultVar =<< transform
+  liftStates $ S.setVar resultVar =<< transform
   return resultVar
 
 -- | In all states, load the given temporary variable, apply the given transformation, store it into another temporary variable and return that variable.
@@ -124,15 +124,12 @@ computeTmpN nameComponents typ transformN inputs = computeToTmpVar nameComponent
 assignVar :: (MonadState SymbolicStateSpace m, MonadZ3 m) => ResultTmpVar -> ResultTmpVar -> m ()
 assignVar lhs rhs = liftStates $ do
   ast <- getOrCreateVar rhs
-  setVar lhs ast
-
-setVar :: MonadState S.SymbolicState m => ResultTmpVar -> AST -> m ()
-setVar = S.setVar . fst
+  S.setVar lhs ast
 
 getOrCreateVar :: (MonadState S.SymbolicState m, MonadZ3 m) => ResultTmpVar -> m AST
-getOrCreateVar (v, t) = do
+getOrCreateVar v = do
   state <- get
-  runReaderT (S.getOrCreateVar v t) state
+  runReaderT (S.getOrCreateVar v) state
 
 -- | Adds the given proof obligation to all states.
 addProofObligation :: (MonadState SymbolicStateSpace m, MonadZ3 m) => VerifierFailureType -> SourcePos -> ResultTmpVar -> m ()

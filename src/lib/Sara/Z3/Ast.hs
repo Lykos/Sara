@@ -11,7 +11,7 @@ import qualified Data.Map.Strict as M
 
 data Ast a b
   = BoolConst Bool
-  | IntConst Int
+  | IntConst Integer
   | Var a
   | App b [Ast a b]
   | UnOp UnaryOperator (Ast a b)

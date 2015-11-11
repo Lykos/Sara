@@ -51,18 +51,18 @@ collapseAndStop = collapse (error "After collapse and stop, there is no start ty
 
 setArgs :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [PureCheckerTypedVariable] -> m ()
 setArgs args = mapM_ setArg args
-  where setArg (Sy.TypedVariable name t (m, _)) = assignVar (m, t) =<< setNewTmpVar ["arg", name] t =<< z3Var m t
+  where setArg (Sy.TypedVariable name t (m, _)) = assignVar m =<< setNewTmpVar ["arg", name] t =<< z3Var m
 
 symbolicExecute :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
 symbolicExecute exp = if expressionPure exp then symbolicExecutePure exp else symbolicExecuteImpure exp
 
 symbolicExecuteImpure :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
-symbolicExecuteImpure (Sy.Boolean b _)                                              = setNewTmpVar ["boolean"] Boolean =<< mkBool b
-symbolicExecuteImpure (Sy.Integer n _)                                              = setNewTmpVar ["integer"] Integer =<< mkInteger n
-symbolicExecuteImpure (Sy.UnaryOperation op e (Typed t))                            = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
-symbolicExecuteImpure (Sy.BinaryOperation Assign (Sy.Variable _ m _) e (Typed t))   = do
+symbolicExecuteImpure (Sy.Boolean b _)                                             = setNewTmpVar ["boolean"] Boolean =<< mkBool b
+symbolicExecuteImpure (Sy.Integer n _)                                             = setNewTmpVar ["integer"] Integer =<< mkInteger n
+symbolicExecuteImpure (Sy.UnaryOperation op e (Typed t))                           = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
+symbolicExecuteImpure (Sy.BinaryOperation Assign (Sy.Variable _ m _) e _)          = do
   e' <- symbolicExecute e
-  assignVar (m, t) e'
+  assignVar m e'
   return e'
 symbolicExecuteImpure (Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r (Typed t)) = do
   l' <- symbolicExecute l
@@ -73,7 +73,7 @@ symbolicExecuteImpure (Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCirc
   case predeterminedForValue of
     PredeterminedForFalse -> splitStates executionWhenShortCircuit executionWhenNotShortCircuit
     PredeterminedForTrue  -> splitStates executionWhenNotShortCircuit executionWhenShortCircuit
-symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p))    = do
+symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p)) = do
   l' <- symbolicExecute l
   r' <- symbolicExecute r
   result <- computeTmp2 [show op] t (z3BinaryOperator op) l' r'
@@ -83,24 +83,24 @@ symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p
       addProofObligation failureType p proofObl'
     Nothing                      -> return ()
   return result
-symbolicExecuteImpure (Sy.Call name args m (ExpressionMeta t _, NodeMeta p))          = do
+symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                         = do
   args' <- mapM symbolicExecute args
-  let aTyps = map expressionTyp args
-  (funcPre, funcPost, func) <- z3FuncDecls m aTyps t
+  (funcPre, funcPost, func) <- z3FuncDecls m
   pre <- computeTmpN ["preconditionApp", name] Boolean (mkApp funcPre) args'
   post <- computeTmpN ["postconditionApp", name] Boolean (mkApp funcPost) args'
   let pure = funcSymPure m
+  let t = funcSymRetType m
   let failureType = E.PreconditionViolation $ E.functionOrMethod pure name
   addProofObligation failureType p pre
   addAssumption post
   case pure of
     True  -> computeTmpN ["funcApp", name] t (mkApp func) args'
     False -> newTmpVar ["methodResult", name] t
-symbolicExecuteImpure (Sy.Variable _ m (Typed t))                                   = return (m, t)
-symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (Typed t))               = do
+symbolicExecuteImpure (Sy.Variable _ m _)                                          = return m
+symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (Typed t))              = do
   cond' <- symbolicExecute cond
   splitStatesOn ["split", "if"] t cond' (symbolicExecute thenExp) (symbolicExecute elseExp)
-symbolicExecuteImpure (Sy.While invs cond body (_, NodeMeta p))                     = do
+symbolicExecuteImpure (Sy.While invs cond body (_, NodeMeta p))                    = do
   -- Prove the invariant upon entry.
   mapM (addProofObligation E.LoopEntryInvariantViolation p <=< symbolicExecutePure) invs
   collapse AfterLoopEntry p

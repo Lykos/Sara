@@ -28,7 +28,7 @@ z3Expression b@(S.BinaryOperation op l r _) = do
   r' <- z3Expression r
   let pos = expressionPos b
   z3BinOp pos op l' r'
-z3Expression (S.Variable _ m (Typed t))     = trivial =<< S.getOrCreateVar m t
+z3Expression (S.Variable _ m _)             = trivial =<< S.getOrCreateVar m
 z3Expression (S.Conditional c t e _)        = do
   c' <- z3Expression c
   t' <- conditionOn (ast c') =<< z3Expression t
@@ -37,9 +37,7 @@ z3Expression (S.Conditional c t e _)        = do
 z3Expression c@(S.Call name a m _)          = do
   a' <- mapM z3Expression a
   let args = map ast a'
-  let aTyps = map expressionTyp a
-  let rTyp = expressionTyp c
-  (funcPre, funcPost, func) <- z3FuncDecls m aTyps rTyp
+  (funcPre, funcPost, func) <- z3FuncDecls m
   pre <- mkApp funcPre args
   post <- mkApp funcPost args
   let pos = expressionPos c
