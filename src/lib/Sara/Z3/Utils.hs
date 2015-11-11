@@ -43,20 +43,21 @@ z3Var (VariableMeta name index) typ = do
   mkVar sym sort
 
 -- | Creates three function declarations for a function or method in the source file:
--- * One function declarations for the function or method itself.
+-- * One function declarations for the function itself.
 -- * One function that evaluates its preconditions as a boolean.
 -- * One function that evaluates its postconditions as a boolean.
 z3FuncDecls :: MonadZ3 z3 => FunctionMeta -> [Type] -> Type -> z3 (FuncDecl, FuncDecl, FuncDecl)
-z3FuncDecls (FunctionMeta pure name index) argTypes retType = do
+z3FuncDecls (FunctionMeta isPure name index) argTypes retType = do
   preSym <- z3Symbol "pre" name index
   postSym <- z3Symbol "post" name index
-  funcSym <- case pure of
-    True  -> z3Symbol "func" name index
-    False -> return $ error "Non-pure functions cannot be called in Z3."
+  funcSym <- z3Symbol "func" name index
   argSorts <- mapM z3Sort argTypes
   retSort <- z3Sort retType
   boolSort <- mkBoolSort
-  (,,) <$> mkFuncDecl preSym argSorts boolSort <*> mkFuncDecl postSym argSorts boolSort <*> mkFuncDecl funcSym argSorts retSort
+  funcDecl <- case isPure of
+    True -> mkFuncDecl funcSym argSorts retSort
+    False -> return $ error "Non-pure functions cannot be called in Z3."
+  (,,) <$> mkFuncDecl preSym argSorts boolSort <*> mkFuncDecl postSym argSorts boolSort <*> pure funcDecl
 
 mkZero :: MonadZ3 z3 => z3 AST
 mkZero = mkInteger 0
