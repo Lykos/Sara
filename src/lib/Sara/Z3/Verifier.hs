@@ -36,6 +36,8 @@ verifyProofPart p@P.ProofPart{..} = local $ do
   assert =<< codegen (runAst assumption)
   liftIO $ putStrLn $ "proof obligation:\n" ++ prettyRender (runAst proofObligation)
   assert =<< mkNot =<< codegen (runAst proofObligation)
+  so <- solverToString
+  liftIO $ putStrLn $ "solver:\n" ++ so
   res <- lift $ withModel $ \model -> do
     failure <- P.findFailure model p
     m <- modelToString model

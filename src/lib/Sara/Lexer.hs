@@ -1,7 +1,7 @@
 module Sara.Lexer where
 
 import Sara.Operators
-import Sara.Types
+import qualified Sara.Keywords as K
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
@@ -11,13 +11,9 @@ import qualified Text.Parsec.Token as T
 reservedOpNames :: [String]
 reservedOpNames = map unarySymbol unaryOperators
                   ++ map binarySymbol binaryOperators
-                  ++ [";", ":"]
 
 reservedNames :: [String]
-reservedNames = [ "function", "extern", "method", "if", "then"
-                , "else", "while", "true", "false", "requires"
-                , "ensures", "assert", "assume", "assertAndCollapse"
-                , "invariant"] ++ map show types
+reservedNames = K.keywords
 
 lexer :: T.TokenParser ()
 lexer = T.makeTokenParser style
@@ -54,8 +50,14 @@ semiSep = T.semiSep lexer
 semi :: Parser String
 semi = T.semi lexer
 
+colon :: Parser String
+colon = T.colon lexer
+
 commaSep :: Parser a -> Parser [a]
 commaSep = T.commaSep lexer
+
+keyword :: K.Keyword -> Parser ()
+keyword = T.reserved lexer . K.keyword
 
 reservedToken :: String -> Parser ()
 reservedToken = T.reserved lexer
