@@ -62,6 +62,7 @@ library
                      , Sara.Z3.PureExpression
                      , Sara.Z3.CodeGenerator
                      , Sara.Z3.Declarations
+                     , Sara.Z3.Pretty
   other-extensions:    GeneralizedNewtypeDeriving
   build-depends:       base >=4.8 && <4.9
                      , mtl >=2.2 && <2.3

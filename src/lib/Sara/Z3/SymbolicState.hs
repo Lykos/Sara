@@ -18,7 +18,6 @@ module Sara.Z3.SymbolicState ( SymbolicState
 
 import Control.Monad.State
 import qualified Data.Map as M
-import Sara.Z3.Utils
 import qualified Sara.Z3.ProofPart as P
 import qualified Sara.Errors as E
 import qualified Sara.Z3.AstWrapper as W
@@ -60,14 +59,9 @@ getOrCreateVar v = do
   case v' of
     Just ast -> return ast
     Nothing  -> do
-      name <- gets $ havocVarName v
-      let ast = A.FreeVar name $ varSymType v
+      let ast = A.Var v
       setVar v ast
       return ast
-  where havocVarName (VariableMeta _ name index) SymbolicState{..} =
-          z3VarName [ "havocedVar", show startType
-                    , sourceName startPos, show $ sourceLine startPos
-                    , show $ sourceColumn startPos, name, show index]
 
 getVar :: MonadState SymbolicState m => VariableMeta -> m (Maybe A.Ast)
 getVar v = gets $ M.lookup v . variableStates

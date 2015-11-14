@@ -7,13 +7,13 @@ module Sara.Z3.Ast ( Pattern(..)
                    , UnaryOperator (..)
                    , BinaryOperator (..)
                    , NaryOperator (..)
+                   , neutral
                    , children
                    , simplify
                    , substituteFuncs ) where
 
 import Data.List
 import qualified Data.Map.Strict as M
-import Sara.Types ( Type )
 import Sara.Meta ( VariableMeta, FunctionMeta )
 
 data AppKind
@@ -33,7 +33,6 @@ data Ast
   = BoolConst Bool
   | IntConst Integer
   | Var VariableMeta
-  | FreeVar String Type
   | App AppMeta [Ast]
   | UnOp UnaryOperator Ast
   | BinOp BinaryOperator Ast Ast
@@ -77,7 +76,6 @@ children :: Ast -> [Ast]
 children BoolConst{}      = []
 children IntConst{}       = []
 children Var{}            = []
-children FreeVar{}        = []
 children (App _ bs)       = bs
 children (UnOp _ a)       = [a]
 children (BinOp _ a b)    = [a, b]
@@ -89,7 +87,6 @@ simplify :: Ast -> Ast
 simplify b@BoolConst{}    = b
 simplify n@IntConst{}     = n
 simplify v@Var{}          = v
-simplify v@FreeVar{}      = v
 simplify (App a bs)       = App a $ map simplify bs
 simplify (UnOp op a)      = case UnOp op (simplify a) of
   UnOp UnMinus (IntConst n)             -> IntConst $ -n
@@ -131,7 +128,6 @@ substituteVars _ (IntConst n)   = IntConst n
 substituteVars m (Var a)        = case M.lookup a m of
   Just v  -> v
   Nothing -> Var a
-substituteVars _ (FreeVar a b)    = FreeVar a b
 substituteVars m (App a bs)       = App a $ map (substituteVars m) bs
 substituteVars m (UnOp op a)      = UnOp op $ substituteVars m a
 substituteVars m (BinOp op a b)   = BinOp op (substituteVars m a) (substituteVars m b)
@@ -140,18 +136,24 @@ substituteVars m (Ite a b c)      = Ite (substituteVars m a) (substituteVars m b
 substituteVars m (Forall as b cs) = Forall as (substituteVars m' b) cs
   where m' = foldl (flip M.delete) m as
 
-variables :: Ast -> [VariableMeta]
-variables (Var a)         = [a]
-variables (Forall as b _) = variables b \\ as
-variables a               = concatMap variables $ children a
+freeVars :: Ast -> [VariableMeta]
+freeVars (Var a)         = [a]
+freeVars (Forall as b _) = freeVars b \\ as
+freeVars a               = concatMap freeVars $ children a
 
 substituteArgs :: [VariableMeta] -> [Ast] -> Ast -> Ast
 substituteArgs formalArgs args body | length formalArgs == length args = let argSubstitutions = M.fromList (zip formalArgs args)
+                                                                             unsubstitutedArgs = freeVars body \\ formalArgs
                                                                              substituted = substituteVars argSubstitutions body
-                                                                         in if null $ variables substituted then
+                                                                         in if null unsubstitutedArgs then
                                                                               substituted
                                                                             else
-                                                                              error $ "Couldn't substitute variables: " ++ show (variables substituted)
+                                                                              error $ "Couldn't substitute the following variables:\n"
+                                                                              ++ show unsubstitutedArgs
+                                                                              ++ "\nwith the arguments:\n"
+                                                                              ++ show formalArgs
+                                                                              ++ "\nin the following expression:\n"
+                                                                              ++ show body
                                     | otherwise                        =
  error $ "Function definition has formal arguments " ++ show formalArgs ++ " and actual arguments " ++ show args ++ " with different lengths."
 
@@ -160,7 +162,6 @@ substituteFuncs :: M.Map AppMeta ([VariableMeta], Ast) -> Ast -> Ast
 substituteFuncs _ b@BoolConst{}    = b
 substituteFuncs _ n@IntConst{}     = n
 substituteFuncs _ v@Var{}          = v
-substituteFuncs _ v@FreeVar{}      = v
 substituteFuncs m (App a bs)       = let args = map (substituteFuncs m) bs in case M.lookup a m of
   Just (formalArgs, body) -> substituteArgs formalArgs args body
   Nothing                 -> App a args

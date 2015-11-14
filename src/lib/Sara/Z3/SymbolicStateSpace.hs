@@ -35,7 +35,7 @@ type ResultTmpVar = VariableMeta
 
 -- | We intentionally use a name with multiple components to ensure that there are no clashes with user variables.
 tmpName :: [String] -> Name
-tmpName nameComponents = z3VarName $ "tmp" : nameComponents
+tmpName nameComponents = z3Name $ "tmp" : nameComponents
 
 data SymbolicStateSpace = SymbolicStateSpace { tmpIndex :: Id, states :: [S.SymbolicState] }
 

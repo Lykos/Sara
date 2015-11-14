@@ -10,6 +10,7 @@ import Sara.Z3.SymbolicExecutor
 import Control.Monad.Except
 import Control.Monad.Writer
 import qualified Sara.Z3.ProofPart as P
+import Sara.Z3.Pretty ( prettyRender )
 import Sara.Z3.CodeGenerator ( codegen )
 import Sara.Meta
 import Sara.Z3.Declarations
@@ -25,12 +26,15 @@ verify prog = do
   proofParts <- generateProofParts prog
   let proofParts' = map (P.substituteFuncs contracts) proofParts
   let funcDefs = translateFuncDefs contracts prog
+  mapM_ (\funcDef -> liftIO $ putStrLn $ "funcDef:\n" ++ prettyRender funcDef) funcDefs
   mapM_ (assert <=< codegen) funcDefs
   mapM_ verifyProofPart proofParts'
 
 verifyProofPart :: MonadZ3 m => P.ProofPart -> ExceptT Error m ()
 verifyProofPart p@P.ProofPart{..} = local $ do
+  liftIO $ putStrLn $ "assumption:\n" ++ prettyRender (runAst assumption)
   assert =<< codegen (runAst assumption)
+  liftIO $ putStrLn $ "proof obligation:\n" ++ prettyRender (runAst proofObligation)
   assert =<< mkNot =<< codegen (runAst proofObligation)
   res <- lift $ withModel $ \model -> do
     failure <- P.findFailure model p

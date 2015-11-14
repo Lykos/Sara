@@ -100,7 +100,6 @@ substituteFakes :: [FunctionMeta] -> A.Ast -> A.Ast
 substituteFakes _  b@A.BoolConst{}    = b
 substituteFakes _  n@A.IntConst{}     = n
 substituteFakes _  v@A.Var{}          = v
-substituteFakes _  v@A.FreeVar{}      = v
 substituteFakes ms (A.App a bs)       = let args = map (substituteFakes ms) bs in case a of
   A.AppMeta A.FuncApp m | m `elem` ms -> A.App (A.AppMeta A.FakeApp m) args
   _                                   -> A.App a args

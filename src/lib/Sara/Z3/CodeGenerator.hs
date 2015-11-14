@@ -2,16 +2,15 @@ module Sara.Z3.CodeGenerator where
 
 import Z3.Monad
 import Sara.Z3.Ast
+import Sara.Z3.Utils
 import Sara.Meta
 import Sara.Utils
-import Data.List
 import Sara.Types
 
 codegen :: MonadZ3 m => Ast -> m AST
 codegen (BoolConst b)    = mkBool b
 codegen (IntConst n)     = mkInteger n
 codegen (Var a)          = z3Var a
-codegen (FreeVar n t)    = mkFreshVar n =<< z3Sort t
 codegen (App a bs)       = do
   func <- z3FuncDecl a
   args <- mapM codegen bs
@@ -28,11 +27,11 @@ codegen (Ite a b c)      = do
   elseExp <- codegen c
   mkIte cond thenExp elseExp
 codegen (Forall as b cs) = do
-  syms <- mapM z3VarSymbol as
-  sorts <- mapM (z3Sort . varSymType) as
+  vars <- mapM z3Var as
+  varApps <- mapM toApp vars
   patterns <- mapM codegenPattern cs
   ast <- codegen b
-  mkForall patterns syms sorts ast
+  mkForallConst patterns varApps ast
   where codegenPattern (Pattern ps) = do
           exps <- mapM codegen ps
           mkPattern exps
@@ -43,15 +42,8 @@ z3Sort Boolean = mkBoolSort
 z3Sort Integer = mkIntSort
 z3Sort t       = error $ "Unsupported type for verifier: " ++ show t
 
--- | Creates a Z3 variable name from the given components.
-z3VarName :: [String] -> String
-z3VarName = intercalate "$"
-
-z3Symbol :: MonadZ3 z3 => String -> String -> Int -> z3 Symbol
-z3Symbol prefix name index = mkStringSymbol $ z3VarName [prefix, name, show index]
-
 z3VarSymbol :: MonadZ3 z3 => VariableMeta -> z3 Symbol
-z3VarSymbol (VariableMeta _ name index) = z3Symbol "var" name index
+z3VarSymbol = mkStringSymbol . z3VarName
 
 z3Var :: MonadZ3 z3 => VariableMeta -> z3 AST
 z3Var m@(VariableMeta typ _ _) = do
@@ -59,16 +51,9 @@ z3Var m@(VariableMeta typ _ _) = do
   sort <- z3Sort typ
   mkVar sym sort
 
-appPrefix :: AppKind -> String
-appPrefix PreApp  = "pre"
-appPrefix PostApp = "post"
-appPrefix FuncApp = "func"
-appPrefix FakeApp = "fakeFunc"
-
 z3FuncDecl :: MonadZ3 m => AppMeta -> m FuncDecl
-z3FuncDecl (AppMeta kind (FunctionMeta isPure argTypes retType name index)) = do
-  let prefix = appPrefix kind
-  funcSym <- z3Symbol prefix name index
+z3FuncDecl m@(AppMeta _ (FunctionMeta isPure argTypes retType _ _)) = do
+  funcSym <- mkStringSymbol $ z3FuncName m
   argSorts <- mapM z3Sort argTypes
   retSort <- z3Sort retType
   case isPure of
