@@ -21,7 +21,9 @@ data Keyword
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 keyword :: Keyword -> String
-keyword = map toLower . show
+keyword word = case show word of
+  []   -> error "Empty keywords are not possible."
+  x:xs -> toLower x : xs
 
 keywords :: [String]
 keywords = map keyword $ enumFrom minBound

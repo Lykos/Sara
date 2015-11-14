@@ -38,30 +38,30 @@ signature = do
   pure <- pureKeyword
   name <- identifierToken
   args <- parensToken $ commaSep typedVariable
-  reservedToken ":"
+  colon
   retType <- typeExpression
-  precs <- conditions "requires"
-  posts <- conditions "ensures"
+  precs <- conditions K.Requires
+  posts <- conditions K.Ensures
   return $ Signature pure name args retType precs posts $ mkExpMeta pos
 
 pureKeyword :: Parser Bool
-pureKeyword = (reservedToken "function" >> return True)
-              <|> (reservedToken "method" >> return False)
+pureKeyword = (keyword K.Function >> return True)
+              <|> (keyword K.Method >> return False)
 
-conditions :: String -> Parser [ParserExpression]
-conditions keyword = conditions' keyword <|> return []
-  where conditions' keyword = do
+conditions :: K.Keyword -> Parser [ParserExpression]
+conditions word = conditions' word <|> return []
+  where conditions' word = do
           -- Note that we cannot use semiSep since that one doesn't handle a semicolon that does NOT belong to the conditions correctly.
-          reservedToken keyword
+          keyword word
           cond <- expression
-          conds <- try (semi >> conditions' keyword) <|> return []
+          conds <- try (semi >> conditions' word) <|> return []
           return (cond:conds)
 
 typedVariable :: Parser ParserTypedVariable
 typedVariable = do
   pos <- getPosition
   name <- identifierToken
-  reservedToken ":"
+  colon
   varType <- typeExpression
   return $ TypedVariable name varType $ mkExpMeta pos
 
@@ -73,16 +73,16 @@ typeExpression = unitType
                  <?> "type"
 
 unitType :: Parser Type
-unitType = reservedToken "Unit" >> return T.Unit
+unitType = L.symbol "Unit" >> return T.Unit
 
 booleanType :: Parser Type
-booleanType = reservedToken "Boolean" >> return T.Boolean
+booleanType = L.symbol "Boolean" >> return T.Boolean
 
 integerType :: Parser Type
-integerType = reservedToken "Integer" >> return T.Integer
+integerType = L.symbol "Integer" >> return T.Integer
 
 doubleType :: Parser Type
-doubleType = reservedToken "Double" >> return T.Double
+doubleType = L.symbol "Double" >> return T.Double
 
 expression :: Parser ParserExpression
 expression = Expr.buildExpressionParser operatorTable term
@@ -175,8 +175,8 @@ unit :: Parser UntypedExpression
 unit = L.symbol "()" >> return S.Unit
 
 boolean :: Parser UntypedExpression
-boolean = (reservedToken "true" >> return (S.Boolean True))
-          <|> (reservedToken "false" >> return (S.Boolean False))
+boolean = (keyword K.True >> return (S.Boolean True))
+          <|> (keyword K.False >> return (S.Boolean False))
 
 integer :: Parser UntypedExpression
 integer = do
@@ -201,11 +201,11 @@ call = do
 
 conditional :: Parser UntypedExpression
 conditional = do
-  reservedToken "if"
+  keyword K.If
   cond <- expression
-  reservedToken "then"
+  keyword K.Then
   ifExpr <- expression
-  reservedToken "else"
+  keyword K.Else
   thenExpr <- expression
   return $ Conditional cond ifExpr thenExpr
 
@@ -220,24 +220,24 @@ block = do
 
 while :: Parser UntypedExpression
 while = do
-  reservedToken "while"
+  keyword K.While
   cond <- parensToken $ expression
-  invs <- conditions "invariant"
+  invs <- conditions K.Invariant
   body <- bracedExpression
   return $ While invs cond body
 
 assert :: Parser UntypedExpression
-assert = assertion "assert" Assert
+assert = assertion K.Assert Assert
 
 assume :: Parser UntypedExpression
-assume = assertion "assume" Assume
+assume = assertion K.Assume Assume
 
 assertAndCollapse :: Parser UntypedExpression
-assertAndCollapse = assertion "assertAndCollapse" AssertAndCollapse
+assertAndCollapse = assertion K.AssertAndCollapse AssertAndCollapse
 
-assertion :: String -> AssertionKind -> Parser UntypedExpression
-assertion keyword kind = do
-  reservedToken keyword
+assertion :: K.Keyword -> AssertionKind -> Parser UntypedExpression
+assertion word kind = do
+  keyword word
   cond <- expression
   return $ Assertion kind cond
 
