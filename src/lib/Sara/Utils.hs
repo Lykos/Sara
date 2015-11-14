@@ -1,10 +1,15 @@
 -- | Module for all the common Haskell functions that have nothing to do with a compiler.
-module Sara.Utils ( app2
+module Sara.Utils ( tripleSnd
+                  , app2
                   , foldlM
                   , keyBy
                   , (<<) ) where
 
 import qualified Data.Map as M
+
+-- | Take the second element of a triple
+tripleSnd :: (a, b, c) -> b
+tripleSnd (_, a, _) = a
 
 -- | Apply a function that takes a list to two arguments.
 app2 :: ([a] -> b) -> a -> a -> b

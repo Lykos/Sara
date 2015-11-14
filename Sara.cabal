@@ -52,7 +52,6 @@ library
                      , Sara.Z3.SymbolicState
                      , Sara.Z3.SymbolicExecutor
                      , Sara.Z3.SymbolicStateSpace
-                     , Sara.Z3.GlobalAssumer
                      , Sara.Z3.Verifier
                      , Sara.Z3.AstWrapper
                      , Sara.Z3.CondAst
@@ -62,8 +61,9 @@ library
                      , Sara.Z3.Ast
                      , Sara.Z3.PureExpression
                      , Sara.Z3.CodeGenerator
+                     , Sara.Z3.Declarations
   other-extensions:    GeneralizedNewtypeDeriving
-  build-depends:       base ==4.8.1.0
+  build-depends:       base >=4.8 && <4.9
                      , mtl >=2.2 && <2.3
                      , parsec >=3.1 && <3.2
                      , containers >=0.5 && <0.6

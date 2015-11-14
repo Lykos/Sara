@@ -20,6 +20,7 @@ module Sara.Z3.SymbolicStateSpace ( SymbolicStateSpace
 import Control.Monad.State.Strict
 import Control.Monad.Writer
 import Control.Monad.Reader
+import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.AstWrapper as W
 import Sara.Z3.ProofPart
 import Sara.Z3.Utils
@@ -29,7 +30,6 @@ import qualified Sara.Z3.SymbolicState as S
 import Sara.Types ( Type( Boolean ) )
 import Sara.Meta
 import Text.Parsec.Pos
-import Z3.Monad
 
 type ResultTmpVar = VariableMeta
 
@@ -40,16 +40,16 @@ tmpName nameComponents = z3VarName $ "tmp" : nameComponents
 data SymbolicStateSpace = SymbolicStateSpace { tmpIndex :: Id, states :: [S.SymbolicState] }
 
 -- | Models a nondeterministic choice between two possible executions based on whether a given temporary variable is true.
-splitStatesOn :: (MonadState SymbolicStateSpace m, MonadZ3 m) =>
+splitStatesOn :: (MonadState SymbolicStateSpace m) =>
                  [String] -> Type -> ResultTmpVar -> m ResultTmpVar -> m ResultTmpVar -> m ResultTmpVar
 splitStatesOn nameComponents typ cond f g = do
-  notCond <- computeTmp1 ("notSplitCond" : nameComponents) Boolean mkNot cond
+  notCond <- computeTmp1 ("notSplitCond" : nameComponents) Boolean (A.UnOp A.Not) cond
   let f' = addAssumption cond >> f
   let g' = addAssumption notCond >> g
   splitStates nameComponents typ f' g'
 
 -- | Models a nondeterministic choice between two possible executions.
-splitStates :: (MonadState SymbolicStateSpace m, MonadZ3 m) =>
+splitStates :: (MonadState SymbolicStateSpace m) =>
                [String] -> Type -> m ResultTmpVar -> m ResultTmpVar -> m ResultTmpVar
 splitStates nameComponents typ f g = do
   resultVar <- newTmpVar ("splitStates" : nameComponents) typ
@@ -65,17 +65,17 @@ splitStates nameComponents typ f g = do
 -- | Create a new temporary variable.
 newTmpVar :: MonadState SymbolicStateSpace m => [String] -> Type -> m ResultTmpVar
 newTmpVar nameComponents typ = do
-  modify $ \s@SymbolicStateSpace{ tmpIndex = idx } -> s{ tmpIndex = idx + 1 }
   idx <- gets tmpIndex
+  modify $ \s@SymbolicStateSpace{ tmpIndex = idx } -> s{ tmpIndex = idx + 1 }
   return (VariableMeta typ (tmpName nameComponents) idx)
 
 -- | Create a new temporary variable, set it to a given value in all states and return the variable.
-setNewTmpVar :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [String] -> Type -> AST -> m ResultTmpVar
+setNewTmpVar :: (MonadState SymbolicStateSpace m) => [String] -> Type -> A.Ast -> m ResultTmpVar
 setNewTmpVar nameComponents typ ast = computeToTmpVar nameComponents typ $ return ast
 
 -- | Modify the states by applying the given transformation to every state.
-liftStates :: (MonadState SymbolicStateSpace m, MonadZ3 m)
-              => (forall n . (MonadState S.SymbolicState n, MonadZ3 n) => n ())
+liftStates :: (MonadState SymbolicStateSpace m)
+              => (forall n . MonadState S.SymbolicState n => n ())
               -> m ()
 liftStates transform = do
   SymbolicStateSpace id states <- get
@@ -83,62 +83,63 @@ liftStates transform = do
   put $ SymbolicStateSpace id states'
 
 -- | Creates a temporary variable, hands it to the transformation function for every state and returns it.
-computeToTmpVar :: (MonadState SymbolicStateSpace m, MonadZ3 m)
+computeToTmpVar :: (MonadState SymbolicStateSpace m)
               => [String] -> Type
-              -> (forall n . (MonadState S.SymbolicState n, MonadZ3 n) => n AST)
+              -> (forall n . MonadState S.SymbolicState n => n A.Ast)
               -> m ResultTmpVar
 computeToTmpVar nameComponents typ transform = do
   resultVar <- newTmpVar nameComponents typ
+  -- TODO Don't set initialState for the variables here!
   liftStates $ S.setVar resultVar =<< transform
   return resultVar
 
 -- | In all states, load the given temporary variable, apply the given transformation, store it into another temporary variable and return that variable.
-computeTmp1 :: (MonadState SymbolicStateSpace m, MonadZ3 m)
+computeTmp1 :: (MonadState SymbolicStateSpace m)
                => [String] -> Type
-               -> (forall n . (MonadState S.SymbolicState n, MonadZ3 n) => AST -> n AST)
+               -> (A.Ast -> A.Ast)
                -> ResultTmpVar -> m ResultTmpVar
 computeTmp1 nameComponents typ transform1 input = computeToTmpVar nameComponents typ $ do
   input' <- getOrCreateVar input
-  transform1 input'
+  return $ transform1 input'
 
 -- | In all states, load the given temporary variables, apply the given transformation, store it into another temporary variable and return that variable.
-computeTmp2 :: (MonadState SymbolicStateSpace m, MonadZ3 m)
+computeTmp2 :: MonadState SymbolicStateSpace m
                => [String] -> Type
-               -> (forall n . (MonadState S.SymbolicState n, MonadZ3 n) => AST -> AST -> n AST)
+               -> (A.Ast -> A.Ast -> A.Ast)
                -> ResultTmpVar -> ResultTmpVar -> m ResultTmpVar
 computeTmp2 nameComponents typ transform2 left right = computeToTmpVar nameComponents typ $ do
   left' <- getOrCreateVar left
   right' <- getOrCreateVar right
-  transform2 left' right'
+  return $ transform2 left' right'
 
 -- | In all states, load the given temporary variables, apply the given transformation, store it into another temporary variable and return that variable.
-computeTmpN :: (MonadState SymbolicStateSpace m, MonadZ3 m)
+computeTmpN :: MonadState SymbolicStateSpace m
                => [String] -> Type
-               -> (forall n . (MonadState S.SymbolicState n, MonadZ3 n) => [AST] -> n AST)
+               -> ([A.Ast] -> A.Ast)
                -> [ResultTmpVar] -> m ResultTmpVar
 computeTmpN nameComponents typ transformN inputs = computeToTmpVar nameComponents typ $ do
   inputs' <- mapM getOrCreateVar inputs
-  transformN inputs'
+  return $ transformN inputs'
 
 -- | In all states, load the given temporary variable, assign it to the given lhs.
-assignVar :: (MonadState SymbolicStateSpace m, MonadZ3 m) => ResultTmpVar -> ResultTmpVar -> m ()
+assignVar :: MonadState SymbolicStateSpace m => ResultTmpVar -> ResultTmpVar -> m ()
 assignVar lhs rhs = liftStates $ do
   ast <- getOrCreateVar rhs
   S.setVar lhs ast
 
-getOrCreateVar :: (MonadState S.SymbolicState m, MonadZ3 m) => ResultTmpVar -> m AST
+getOrCreateVar :: MonadState S.SymbolicState m => ResultTmpVar -> m A.Ast
 getOrCreateVar v = do
   state <- get
   runReaderT (S.getOrCreateVar v) state
 
 -- | Adds the given proof obligation to all states.
-addProofObligation :: (MonadState SymbolicStateSpace m, MonadZ3 m) => VerifierFailureType -> SourcePos -> ResultTmpVar -> m ()
+addProofObligation :: MonadState SymbolicStateSpace m => VerifierFailureType -> SourcePos -> ResultTmpVar -> m ()
 addProofObligation failureType pos newObl = liftStates $ do
   newObl' <- getOrCreateVar newObl
   S.addProofObligation $ W.singleton newObl' (failureType, pos)
 
 -- | Adds the given proof assumption to all states.
-addAssumption :: (MonadState SymbolicStateSpace m, MonadZ3 m) => ResultTmpVar -> m ()
+addAssumption :: MonadState SymbolicStateSpace m => ResultTmpVar -> m ()
 addAssumption newAss = liftStates $ do
   newAss' <- getOrCreateVar newAss
   S.addAssumption $ W.singleton newAss' ()

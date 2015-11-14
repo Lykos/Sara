@@ -14,6 +14,7 @@ module Sara.AstUtils ( mapFunctionMetas
                      , weirdTransformSymbols
                      , weirdTransformExpressions
                      , foldMapSignatures
+                     , foldMapDeclarations
                      , foldMapExpression
                      , foldMapExpressions
                      , children ) where
@@ -117,6 +118,11 @@ foldMapExpression f = execWriter . transformExpressionInternal transformer
 foldMapExpressions :: Monoid m => (Expression a b c d -> m) -> Program a b c d -> m
 foldMapExpressions f = execWriter . transformProgramInternal transformer
   where transformer = AstTransformer id id id id nullTVarContextTrans return (accumulate f) return return
+
+-- | Accumulates a monoid over all declarations.
+foldMapDeclarations :: Monoid m => (Declaration a b c d -> m) -> Program a b c d -> m
+foldMapDeclarations f = execWriter . transformProgramInternal transformer
+  where transformer = AstTransformer id id id id nullTVarContextTrans (accumulate f) return return return
 
 accumulate :: Monoid m => (a -> m) -> a -> Writer m a
 accumulate f a = tell (f a) >> return a

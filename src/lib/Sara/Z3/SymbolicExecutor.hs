@@ -8,13 +8,12 @@ module Sara.Z3.SymbolicExecutor ( symbolicExecuteDecl
                                 , symbolicExecutePure ) where
 
 import Control.Monad.State.Strict
-import Control.Monad.Reader
 import Control.Monad.Writer
 import Sara.PrettyPrinter
 import Sara.Meta
 import Sara.Types ( Type (..) )
-import Sara.Z3.Utils
 import qualified Sara.Z3.ProofPart as P
+import qualified Sara.Z3.Ast as A
 import Sara.Z3.SymbolicStateSpace
 import Sara.Z3.PureExpression
 import Sara.Z3.CondAst ( runCondAst )
@@ -23,13 +22,12 @@ import qualified Sara.Errors as E
 import qualified Sara.Syntax as Sy
 import Sara.Z3.Operators
 import Sara.Operators
-import Z3.Monad
 
 -- | Generate all the proof parts for a declaration.
-symbolicExecuteDecl :: (MonadWriter [P.ProofPart] m, MonadZ3 m) => PureCheckerDeclaration -> m ()
+symbolicExecuteDecl :: MonadWriter [P.ProofPart] m => PureCheckerDeclaration -> m ()
 symbolicExecuteDecl decl = runStateT (symbolicExecuteDecl' decl) (entry $ declarationPos decl) >> return ()
 
-symbolicExecuteDecl' :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerDeclaration -> m ()
+symbolicExecuteDecl' :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m) => PureCheckerDeclaration -> m ()
 symbolicExecuteDecl' (Sy.Function Sy.Signature{..} body _) = do
   setArgs args
   mapM_ (addAssumption <=< symbolicExecutePure) preconditions
@@ -49,17 +47,17 @@ collapseAndStop :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m
 collapseAndStop = collapse (error "After collapse and stop, there is no start type.")
                   (error "After collapse and stop, there is no start position.")
 
-setArgs :: (MonadState SymbolicStateSpace m, MonadZ3 m) => [PureCheckerTypedVariable] -> m ()
+setArgs :: MonadState SymbolicStateSpace m => [PureCheckerTypedVariable] -> m ()
 setArgs args = mapM_ setArg args
-  where setArg (Sy.TypedVariable name t (m, _)) = assignVar m =<< setNewTmpVar ["arg", name] t =<< z3Var m
+  where setArg (Sy.TypedVariable name t (m, _)) = assignVar m =<< setNewTmpVar ["arg", name] t (A.Var m)
 
-symbolicExecute :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
+symbolicExecute :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m) => PureCheckerExpression -> m ResultTmpVar
 symbolicExecute exp = if expressionPure exp then symbolicExecutePure exp else symbolicExecuteImpure exp
 
-symbolicExecuteImpure :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
-symbolicExecuteImpure (Sy.Boolean b _)                                             = setNewTmpVar ["boolean"] Boolean =<< mkBool b
-symbolicExecuteImpure (Sy.Integer n _)                                             = setNewTmpVar ["integer"] Integer =<< mkInteger n
-symbolicExecuteImpure (Sy.UnaryOperation op e (Typed t))                           = computeTmp1 [show op] t (z3UnaryOperator op) =<< symbolicExecute e
+symbolicExecuteImpure :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m) => PureCheckerExpression -> m ResultTmpVar
+symbolicExecuteImpure (Sy.Boolean b _)                                             = setNewTmpVar ["boolean"] Boolean $ A.BoolConst b
+symbolicExecuteImpure (Sy.Integer n _)                                             = setNewTmpVar ["integer"] Integer $ A.IntConst n
+symbolicExecuteImpure (Sy.UnaryOperation op e (Typed t))                           = computeTmp1 [show op] t (translateUnOp op) =<< symbolicExecute e
 symbolicExecuteImpure (Sy.BinaryOperation Assign (Sy.Variable _ m _) e _)          = do
   e' <- symbolicExecute e
   assignVar m e'
@@ -76,25 +74,24 @@ symbolicExecuteImpure (Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCirc
 symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p)) = do
   l' <- symbolicExecute l
   r' <- symbolicExecute r
-  result <- computeTmp2 [show op] t (z3BinaryOperator op) l' r'
+  result <- computeTmp2 [show op] t (translateBinOp op) l' r'
   case proofObligation op of
     Just (failureType, proofObl) -> do
       proofObl' <- computeTmp2 ["proofObligation", show op] Boolean proofObl l' r'
       addProofObligation failureType p proofObl'
     Nothing                      -> return ()
   return result
-symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                         = do
+symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                        = do
   args' <- mapM symbolicExecute args
-  (funcPre, funcPost, func) <- z3FuncDecls m
-  pre <- computeTmpN ["preconditionApp", name] Boolean (mkApp funcPre) args'
-  post <- computeTmpN ["postconditionApp", name] Boolean (mkApp funcPost) args'
-  let pure = funcSymPure m
-  let t = funcSymRetType m
-  let failureType = E.PreconditionViolation $ E.functionOrMethod pure name
+  pre <- computeTmpN ["preconditionApp", name] Boolean (A.App $ A.AppMeta A.PreApp m) args'
+  post <- computeTmpN ["postconditionApp", name] Boolean (A.App $ A.AppMeta A.PostApp m) args'
+  let isPure = funcSymPure m
+  let failureType = E.PreconditionViolation $ E.functionOrMethod isPure name
   addProofObligation failureType p pre
   addAssumption post
-  case pure of
-    True  -> computeTmpN ["funcApp", name] t (mkApp func) args'
+  let t = funcSymRetType m
+  case funcSymPure m of
+    True  -> computeTmpN ["funcApp", name] t (A.App $ A.AppMeta A.FuncApp m) args'
     False -> newTmpVar ["methodResult", name] t
 symbolicExecuteImpure (Sy.Variable _ m _)                                          = return m
 symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (Typed t))              = do
@@ -118,8 +115,9 @@ symbolicExecuteImpure (Sy.While invs cond body (_, NodeMeta p))                 
 
   -- Assume the invariant after the loop.
   mapM (addAssumption <=< symbolicExecutePure) invs
-  -- Execute and assume the negation of the condition.
-  notCond' <- computeTmp1 ["negated", "while", "condition"] Boolean mkNot =<< symbolicExecute cond
+  -- Execute and assume the negation of the condition. Note that we cannot reuse cond'.
+  cond'' <- symbolicExecute cond
+  notCond' <- computeTmp1 ["negated", "while", "condition"] Boolean (A.UnOp A.Not) cond''
   addAssumption notCond'
   return $ error "A while loop doesn't have a return value."
 symbolicExecuteImpure (Sy.Assertion Sy.Assume cond _)                               = do
@@ -138,15 +136,14 @@ symbolicExecuteImpure (Sy.Block stmts exp _)                                    
   symbolicExecute exp
 symbolicExecuteImpure exp                                                           = error $ "Unsupported expression for verifier: " ++ prettyRender exp
 
-symbolicExecutePure :: (MonadState SymbolicStateSpace m, MonadZ3 m) => PureCheckerExpression -> m ResultTmpVar
+symbolicExecutePure :: MonadState SymbolicStateSpace m => PureCheckerExpression -> m ResultTmpVar
 symbolicExecutePure exp = computeToTmpVar ["pure"] (expressionTyp exp) $ do
-  vars <- gets St.variableStates
-  (obl, ass, ast) <- runCondAst <$> runReaderT (z3Expression exp) vars
+  (obl, ass, ast) <- runCondAst <$> translateExpression exp
   St.addProofObligation obl
   St.addAssumption ass
   return ast
   
-shortCircuitExecution :: (MonadState SymbolicStateSpace m, MonadZ3 m, MaybeNegation a) => [String] -> a -> ResultTmpVar -> m ResultTmpVar
+shortCircuitExecution :: (MonadState SymbolicStateSpace m, MaybeNegation a) => [String] -> a -> ResultTmpVar -> m ResultTmpVar
 shortCircuitExecution nameComponents a e | isPositive a = return e
-                                         | otherwise    = computeTmp1 ("negate" : nameComponents) Boolean mkNot e
+                                         | otherwise    = computeTmp1 ("negate" : nameComponents) Boolean (A.UnOp A.Not) e
 

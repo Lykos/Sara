@@ -4,46 +4,46 @@
 module Sara.Z3.Operators where
 
 import Sara.Utils
-import Sara.Z3.Utils
-import Sara.Operators
-import Sara.Errors
-import Z3.Monad
+import qualified Sara.Operators as O
+import qualified Sara.Errors as E
+import qualified Sara.Z3.Ast as A
 
-z3UnaryOperator :: MonadZ3 z3 => UnaryOperator -> AST -> z3 AST
-z3UnaryOperator UnaryPlus e  = return e
-z3UnaryOperator UnaryMinus e = do
-  z <- mkZero
-  mkSub [z, e]
-z3UnaryOperator LogicalNot e = mkNot e
-z3UnaryOperator op _         = error $ "Unsupported unary operator for Z3 verifier: " ++ show op
+translateUnOp :: O.UnaryOperator -> A.Ast -> A.Ast
+translateUnOp O.UnaryPlus  = id
+translateUnOp O.UnaryMinus = A.UnOp A.UnMinus
+translateUnOp O.LogicalNot = A.UnOp A.Not
+translateUnOp op           = error $ "Unsupported unary operator for Z3 verifier: " ++ show op
 
 -- | Returns the proof obligation of a bianary operator, if there is one.
-proofObligation :: BinaryOperator -> Maybe (VerifierFailureType, forall z3 . MonadZ3 z3 => AST -> AST -> z3 AST)
-proofObligation DividedBy = divisionByZeroObl
-proofObligation Modulo    = divisionByZeroObl
-proofObligation _         = Nothing
+proofObligation :: O.BinaryOperator -> Maybe (E.VerifierFailureType, A.Ast -> A.Ast -> A.Ast)
+proofObligation O.DividedBy = divisionByZeroObl
+proofObligation O.Modulo    = divisionByZeroObl
+proofObligation _           = Nothing
 
-divisionByZeroObl :: Maybe (VerifierFailureType, forall z3 . MonadZ3 z3 => AST -> AST -> z3 AST)
-divisionByZeroObl = Just (DivisionByZero, const mkNeZero)
+divisionByZeroObl :: Maybe (E.VerifierFailureType, A.Ast -> A.Ast -> A.Ast)
+divisionByZeroObl = Just (E.DivisionByZero, const neZero)
+
+neZero :: A.Ast -> A.Ast
+neZero = A.UnOp A.Not . A.BinOp A.EqualTo (A.IntConst 0)
 
 -- | Returns the Z3 equivalent for binary operators and possibly their proof obligation.
-z3BinaryOperator :: MonadZ3 z3 => BinaryOperator -> AST -> AST -> z3 AST
-z3BinaryOperator Times           = app2 mkMul
-z3BinaryOperator DividedBy       = mkDiv
-z3BinaryOperator Modulo          = mkMod
-z3BinaryOperator Plus            = app2 mkAdd
-z3BinaryOperator Minus           = app2 mkSub
-z3BinaryOperator LessThan        = mkLt
-z3BinaryOperator AtMost          = mkLe
-z3BinaryOperator GreaterThan     = mkGt
-z3BinaryOperator AtLeast         = mkGe
-z3BinaryOperator EqualTo         = mkEq
-z3BinaryOperator LogicalAnd      = app2 mkAnd
-z3BinaryOperator LogicalXor      = mkXor
-z3BinaryOperator LogicalOr       = app2 mkOr
-z3BinaryOperator Implies         = mkImplies
-z3BinaryOperator ImpliedBy       = flip mkImplies
-z3BinaryOperator NotEqualTo      = \a b -> mkNot =<< mkEq a b
-z3BinaryOperator EquivalentTo    = mkEq
-z3BinaryOperator NotEquivalentTo = \a b -> mkNot =<< mkEq a b
-z3BinaryOperator op              = error $ "Unsupported binary operator for Z3 verifier: " ++ show op
+translateBinOp :: O.BinaryOperator -> A.Ast -> A.Ast -> A.Ast
+translateBinOp O.Times           = app2 (A.NaryOp A.Times)
+translateBinOp O.DividedBy       = A.BinOp A.DividedBy
+translateBinOp O.Modulo          = A.BinOp A.Modulo
+translateBinOp O.Plus            = app2 (A.NaryOp A.Plus)
+translateBinOp O.Minus           = A.BinOp A.Minus
+translateBinOp O.LessThan        = A.BinOp A.LessThan
+translateBinOp O.AtMost          = A.BinOp A.AtMost
+translateBinOp O.GreaterThan     = A.BinOp A.GreaterThan
+translateBinOp O.AtLeast         = A.BinOp A.AtLeast
+translateBinOp O.EqualTo         = A.BinOp A.EqualTo
+translateBinOp O.LogicalAnd      = app2 (A.NaryOp A.And)
+translateBinOp O.LogicalXor      = A.BinOp A.Xor
+translateBinOp O.LogicalOr       = app2 (A.NaryOp A.Or)
+translateBinOp O.Implies         = (A.BinOp A.Implies)
+translateBinOp O.ImpliedBy       = flip (A.BinOp A.Implies)
+translateBinOp O.NotEqualTo      = \a b -> A.UnOp A.Not (A.BinOp A.EqualTo a b)
+translateBinOp O.EquivalentTo    = A.BinOp A.EqualTo
+translateBinOp O.NotEquivalentTo = \a b -> A.UnOp A.Not (A.BinOp A.EqualTo a b)
+translateBinOp op                = error $ "Unsupported binary operator for Z3 verifier: " ++ show op
