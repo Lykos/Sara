@@ -10,6 +10,7 @@ import Data.Functor.Identity
 import qualified Text.Parsec.Expr as Expr
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
+import qualified Sara.Keywords as K
 import Sara.Meta
 import Sara.Lexer as L
 import Sara.Syntax
@@ -27,7 +28,7 @@ function = addNodeMeta $ S.Function <$> Sara.Parser.signature <*> bracedExpressi
 
 extern :: Parser ParserDeclaration
 extern = addNodeMeta $ do
-  reservedToken "extern"
+  keyword K.Extern
   sig <- Sara.Parser.signature
   return $ Extern sig
 
