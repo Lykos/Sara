@@ -3,10 +3,10 @@ module Sara.PrettyPrinter (
   , pretty
   , prettyRender) where
 
+import qualified Sara.Keywords as K
 import Text.PrettyPrint
 import Sara.Types
 import Sara.Operators
-import Sara.Syntax
 import Sara.Syntax as S
 
 prettyRender :: Pretty a => a -> String
@@ -41,22 +41,22 @@ vsep = foldl ($+$) empty
 
 prettyDeclaration :: Declaration a b c d -> Doc
 prettyDeclaration (Function sig body _) = prettyFunction sig body
-prettyDeclaration (Extern sig _)        = text "extern" <+> prettySignature sig
+prettyDeclaration (Extern sig _)        = keyword K.Extern <+> prettySignature sig
 
 prettyFunction :: Signature a b c d -> Expression a b c d -> Doc
 prettyFunction sig body = prettySignature sig $+$ inBlock (prettyExpression body)
 
 prettySignature :: Signature a b c d -> Doc
 prettySignature (Signature pure name args retType preconditions postconditions _) = prettyTyped sig retType
-                                                                                    $+$ conditions "requires" preconditions
-                                                                                    $+$ conditions "ensures" postconditions
-  where sig = text keyword <+> text name
+                                                                                    $+$ conditions K.Requires preconditions
+                                                                                    $+$ conditions K.Ensures postconditions
+  where sig = keyword word <+> text name
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
-        keyword = if pure then "function" else "method"
+        word = if pure then K.Function else K.Method
 
-conditions :: String -> [Expression a b c d] -> Doc
-conditions keyword conds = nest (2 * indentation) $ vsep $ punctuate semi $ map toCond $ conds
-  where toCond cond = text keyword <+> prettyExpression cond
+conditions :: K.Keyword -> [Expression a b c d] -> Doc
+conditions word conds = nest (2 * indentation) $ vsep $ punctuate semi $ map toCond $ conds
+  where toCond cond = keyword word <+> prettyExpression cond
 
 prettyTyped :: Doc -> Type -> Doc
 prettyTyped doc typ     = doc
@@ -92,8 +92,8 @@ prettyUntypedTerm exp = case exp of
 
 prettyUntypedExpression :: Expression a b c d -> Doc
 prettyUntypedExpression S.Unit{}                           = text "()"
-prettyUntypedExpression (S.Boolean True _)                 = text "true"
-prettyUntypedExpression (S.Boolean False _)                = text "false"
+prettyUntypedExpression (S.Boolean True _)                 = keyword K.True
+prettyUntypedExpression (S.Boolean False _)                = keyword K.False
 prettyUntypedExpression (S.Integer n _)                    = integer n
 prettyUntypedExpression (S.Double d _)                     = double d
 prettyUntypedExpression (UnaryOperation op exp _)          = (text . unarySymbol $ op)
@@ -104,23 +104,26 @@ prettyUntypedExpression (BinaryOperation op left right _)  = prettyBinaryTerm le
 prettyUntypedExpression (Variable var _ _)                 = text var
 prettyUntypedExpression (Call name args _ _)               = text name
                                                              <> (parens . hsep . punctuate comma . map prettyExpression) args
-prettyUntypedExpression (Conditional cond ifExp elseExp _) = text "if"
+prettyUntypedExpression (Conditional cond ifExp elseExp _) = keyword K.If
                                                              <+> prettyExpression cond
-                                                             <+> text "then"
+                                                             <+> keyword K.Then
                                                              <+> prettyExpression ifExp
-                                                             <+> text "else"
+                                                             <+> keyword K.Else
                                                              <+> prettyExpression elseExp
-prettyUntypedExpression (Block [] S.Unit{} _)              = text "{}"  -- This is necessary to make the pretty printer the inverse of the parser.
+prettyUntypedExpression (Block [] S.Unit{} _)              = text "{}"  -- This special case is necessary to make the pretty printer the inverse of the parser.
 prettyUntypedExpression (Block stmts exp _)                = inBlock (vsep . punctuate semi . map prettyExpression $ stmts ++ [exp])
-prettyUntypedExpression (While invs cond body _)           = text "while" <+> text "(" <> prettyExpression cond <> text ")"
-                                                             $+$ conditions "invariant" invs
+prettyUntypedExpression (While invs cond body _)           = keyword K.While <+> parens (prettyExpression cond)
+                                                             $+$ conditions K.Invariant invs
                                                              $+$ inBlock (prettyExpression body)
 prettyUntypedExpression (Assertion kind exp _)             = assertKeyword kind <+> prettyExpression exp
 
 assertKeyword :: AssertionKind -> Doc
-assertKeyword Assert            = text "assert"
-assertKeyword Assume            = text "assume"
-assertKeyword AssertAndCollapse = text "assertAndCollapse"
+assertKeyword Assert            = keyword K.Assert
+assertKeyword Assume            = keyword K.Assume
+assertKeyword AssertAndCollapse = keyword K.AssertAndCollapse
 
 inBlock :: Doc -> Doc
 inBlock doc = text "{" $+$ nest indentation doc $+$ text "}"
+
+keyword :: K.Keyword -> Doc
+keyword = text . K.keyword
