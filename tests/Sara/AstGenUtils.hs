@@ -7,6 +7,8 @@
 
 module Sara.AstGenUtils () where
 
+import Debug.Trace
+import Sara.PrettyPrinter
 import Sara.ArbitraryUtils
 import Sara.Syntax
 import Sara.Symbolizer
@@ -309,9 +311,10 @@ arbitraryWhile :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe U
 arbitraryWhile t = do
   isPure <- asks isPureEnv
   case t of
-    T.Unit | not isPure -> Just <$> (While <$> (scale intRoot $ listOf $ subtree T.Boolean) <*> subtree T.Boolean <*> (arbitraryType >>= subtree))
+    T.Unit | not isPure -> Just <$> (While <$> invariant <*> subtree T.Boolean <*> (arbitraryType >>= subtree))
     _                   -> return Nothing
   where subtree t = scale (`div` 2) $ arbitraryExpression t
+        invariant = local (envWithPureness True) (scale intRoot $ listOf $ subtree T.Boolean)
 
 arbitraryLeafExpression :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g UntypedExpression
 arbitraryLeafExpression t = do
@@ -372,7 +375,7 @@ freeVariables = foldMapExpression freeVariable
 
 -- | Returns the called functions in a program. Used to determine which signatures are shrinkable.
 calledFunctions :: TypeCheckerProgram -> S.Set FunctionKey
-calledFunctions = foldMapExpressions calledFunctionsExpression
+calledFunctions prog = let lol = foldMapExpressions calledFunctionsExpression prog in trace ("Called:\n" ++ show lol) lol
   where calledFunctionsExpression c@Call{} = S.singleton $ callFunctionKey c
         calledFunctionsExpression _        = S.empty
 
@@ -413,7 +416,7 @@ shrinkSignature free sig@(Signature pure name args typ precs posts p) = do
   let shrinkedConds = [Signature pure name args typ precs' posts' p | (precs', posts') <- Q.shrink (precs, posts)]
   let shrinkedArgs = [Signature pure name args' typ precs posts p | args' <- shrinkArgs isRemovable args]
   shrinkedNameIdentifiers <- runReaderT (shrinkIdentifier name) functionNames
-  let shrinkedNames = [Signature pure name' args typ precs posts p | name' <- shrinkedNameIdentifiers]
+  let shrinkedNames = [Signature pure name' args typ precs posts p | name' <- shrinkedNameIdentifiers, isRemovable]
   return $ shrinkedConds ++ shrinkedArgs ++ shrinkedNames
   where shrinkArgs :: Bool -> [ParserTypedVariable] -> [[ParserTypedVariable]]
         shrinkArgs isRemovable args = shrinkArgs' isRemovable args $ S.fromList $ map varName args
@@ -425,7 +428,10 @@ shrinkSignature free sig@(Signature pure name args typ precs posts p) = do
                                                                       ++ [x : ys | ys <- shrinkArgs' isRemovable xs argNames]
 
 isRemovableSignature :: S.Set FunctionKey -> TypeCheckerSignature -> Bool
-isRemovableSignature funcs sig = functionKey sig `S.notMember` funcs
+isRemovableSignature funcs sig = if functionKey sig `S.notMember` funcs then
+                                   trace ("Removable:\n" ++ show (functionKey sig)) True
+                                 else
+                                   False
 
 condFreeVariables :: TypeCheckerSignature -> S.Set TypeCheckerTypedVariable
 condFreeVariables Signature{..} = freeVars preconditions `S.union` freeVars postconditions
@@ -490,7 +496,7 @@ instance Q.Arbitrary TypeCheckerDeclaration where
 
 instance Q.Arbitrary TypeCheckerProgram where
   arbitrary = arbitraryProgram
-  shrink = shrinkProgram
+  shrink prog = trace ("Shrinking:\n" ++ prettyRender prog) (shrinkProgram prog)
 
 instance Q.Arbitrary Type where
   arbitrary = arbitraryType
