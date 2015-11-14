@@ -87,6 +87,7 @@ arbitraryIdentifier = do
   id <- arbitraryIdentifierCandidate
   names <- get
   valid <- runReaderT (isNotReserved id) names
+  when valid (modify $ S.insert id)
   if valid then return id else arbitraryIdentifier
 
 -- | Shrinks an identifier given a set of reserved names.
@@ -94,6 +95,7 @@ shrinkIdentifier :: MonadReader (S.Set Name) m => Name -> m [Name]
 shrinkIdentifier n = filterM isNotReserved $ filter validIdentifier (Q.shrink n)
   where validIdentifier []    = False
         validIdentifier (x:_) = x `elem` identifierStarts
+
 -- | Tests whether the identifier is not a reserved name.
 isNotReserved :: MonadReader (S.Set Name) m => Name -> m Bool
 isNotReserved a = do
