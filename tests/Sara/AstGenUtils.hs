@@ -7,8 +7,6 @@
 
 module Sara.AstGenUtils () where
 
-import Debug.Trace
-import Sara.PrettyPrinter
 import Sara.ArbitraryUtils
 import Sara.Syntax
 import Sara.Symbolizer
@@ -377,7 +375,7 @@ freeVariables = foldMapExpression freeVariable
 
 -- | Returns the called functions in a program. Used to determine which signatures are shrinkable.
 calledFunctions :: TypeCheckerProgram -> S.Set FunctionKey
-calledFunctions prog = let lol = foldMapExpressions calledFunctionsExpression prog in trace ("Called:\n" ++ show lol) lol
+calledFunctions = foldMapExpressions calledFunctionsExpression
   where calledFunctionsExpression c@Call{} = S.singleton $ callFunctionKey c
         calledFunctionsExpression _        = S.empty
 
@@ -430,10 +428,7 @@ shrinkSignature free sig@(Signature pure name args typ precs posts p) = do
                                                                       ++ [x : ys | ys <- shrinkArgs' isRemovable xs argNames]
 
 isRemovableSignature :: S.Set FunctionKey -> TypeCheckerSignature -> Bool
-isRemovableSignature funcs sig = if functionKey sig `S.notMember` funcs then
-                                   trace ("Removable:\n" ++ show (functionKey sig)) True
-                                 else
-                                   False
+isRemovableSignature funcs sig = functionKey sig `S.notMember` funcs
 
 condFreeVariables :: TypeCheckerSignature -> S.Set TypeCheckerTypedVariable
 condFreeVariables Signature{..} = freeVars preconditions `S.union` freeVars postconditions
@@ -498,7 +493,7 @@ instance Q.Arbitrary TypeCheckerDeclaration where
 
 instance Q.Arbitrary TypeCheckerProgram where
   arbitrary = arbitraryProgram
-  shrink prog = trace ("Shrinking:\n" ++ prettyRender prog) (shrinkProgram prog)
+  shrink prog = shrinkProgram prog
 
 instance Q.Arbitrary Type where
   arbitrary = arbitraryType
