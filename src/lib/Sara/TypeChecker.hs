@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Sara.TypeChecker ( checkWithoutMain
                         , checkWithMain ) where
 
@@ -6,6 +8,7 @@ import Control.Monad.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Data.Bifunctor
+import qualified Sara.Builtins as B
 import qualified Data.Map.Strict as M
 
 import Sara.Meta
@@ -72,9 +75,12 @@ typeCheckCondType cond = let condPos = expressionPos cond in
 typeCheckCondTypes :: [TypeCheckerExpression] -> ErrorOr ()
 typeCheckCondTypes = mapM_ typeCheckCondType
 
+resultVar :: TypeCheckerSignature -> TypeCheckerTypedVariable
+resultVar Signature{..} = TypedVariable (B.name B.Result) retType ((), snd sigMeta)
+
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
-  runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression program') (TypeCheckerContext funcMap M.empty)
+  runReaderT (weirdTransformExpressions tVarContextTrans typeCheckSingleExpression resultVar program') (TypeCheckerContext funcMap M.empty)
   where program' :: TypeCheckerProgram
         program' = mapExpressionMetas (const $ error "Accessed undefined expression metadata.") program
         tVarContextTrans tVar = local (addVar tVar)

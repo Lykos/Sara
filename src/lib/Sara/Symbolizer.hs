@@ -15,6 +15,7 @@ import Control.Monad.Writer
 import Control.Monad.Trans.State
 import Control.Monad.State.Class as S
 import Data.Bifunctor
+import qualified Sara.Builtins as B
 import qualified Data.Map.Strict as M
 
 data FunctionKey =
@@ -76,9 +77,12 @@ addUndefinedSymbols :: TypeCheckerProgram -> SymbolizerProgram
 addUndefinedSymbols = mapVariableMetas (const $ error "Accessed undefined variable metadata.")
                       . mapFunctionMetas (const $ error "Accessed undefined function metadata.")
 
+resultVar :: SymbolizerSignature -> SymbolizerTypedVariable
+resultVar Signature{..} = TypedVariable (B.name B.Result) retType (BuiltinVar retType B.Result, snd sigMeta)
+
 symbolize :: TypeCheckerProgram -> SymbolizerProgram
 symbolize prog = runReader
-                 (weirdTransformExpressions tVarContextTrans symbolizeExp prog')
+                 (weirdTransformExpressions tVarContextTrans symbolizeExp resultVar prog')
                  (SymbolizerContext functionMap M.empty)
   where (prog', functionMap) = symbolizeFunctions $ symbolizeTypedVars $ addUndefinedSymbols prog
         tVarContextTrans tVar = local $ addVar tVar

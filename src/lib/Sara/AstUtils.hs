@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Sara.AstUtils ( mapFunctionMetas
                      , mapVariableMetas
@@ -27,37 +28,38 @@ import Control.Monad.Identity
 -- | Maps over all function metadata.
 mapFunctionMetas :: (a -> a') -> Program a b c d -> Program a' b c d
 mapFunctionMetas f = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer f id id id nullTVarContextTrans return return return return
+  where transformer = AstTransformer f id id id nullTVarContextTrans Nothing return return return return
 
 -- | Maps over all variable metadata.
 mapVariableMetas :: (b -> b') -> Program a b c d -> Program a b' c d
 mapVariableMetas f = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer id f id id nullTVarContextTrans return return return return
+  where transformer = AstTransformer id f id id nullTVarContextTrans Nothing return return return return
 
 -- | Maps over all expression metadata in the abstract syntax tree.
 mapExpressionMetas :: (c -> c') -> Program a b c d -> Program a b c' d
 mapExpressionMetas f = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer id id f id nullTVarContextTrans return return return return
+  where transformer = AstTransformer id id f id nullTVarContextTrans Nothing return return return return
 
 -- | Maps over all node metadata in the abstract syntax tree.
 mapNodeMetas :: (d -> d') -> Program a b c d -> Program a b c d'
 mapNodeMetas g = runIdentity . transformProgramInternal transformer
-  where transformer = AstTransformer id id id g nullTVarContextTrans return return return return
+  where transformer = AstTransformer id id id g nullTVarContextTrans Nothing return return return return
 
 -- | Performs a transformation on all expressions in the AST.
 -- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
 weirdTransformExpressions :: Monad m =>
                              (forall x . TypedVariable b d -> m x -> m x)       -- ^ Context transformer based on a typed variable
                              -> (Expression a b c d -> m (Expression a b c d))  -- ^ Expression transformer
+                             -> (Signature a b c d -> TypedVariable b d)        -- ^ Special result variable that exists in all postconditions
                              -> Program a b c d                                 -- ^ Input program
                              -> m (Program a b c d)                             -- ^ Output program
-weirdTransformExpressions tVarExpTrans transExp = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id tVarExpTrans return transExp return return
+weirdTransformExpressions tVarExpTrans transExp resultVar = transformProgramInternal transformer
+  where transformer = AstTransformer id id id id tVarExpTrans (Just resultVar) return transExp return return
 
 -- | Monadic map over all signatures.
 mapMSignatures :: Monad m => (Signature a b c d -> m (Signature a b c d)) -> Program a b c d -> m (Program a b c d)
 mapMSignatures sigTrans = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans return return sigTrans return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return return sigTrans return
 
 -- | Monadic map over all signatures and discard the result.
 mapMSignatures_ :: Monad m => (Signature a b c d -> m ()) -> Program a b c d -> m ()
@@ -67,7 +69,7 @@ mapMSignatures_ sigTrans prog = mapMSignatures sigTrans' prog >> return ()
 -- | Monadic map over all expressions
 mapMExpressions :: Monad m => (Expression a b c d -> m (Expression a b c d)) -> Program a b c d -> m (Program a b c d)
 mapMExpressions expTrans = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans return expTrans return return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return expTrans return return
 
 -- | Map over all expressions
 mapExpressions :: (Expression a b c d -> Expression a b c d) -> Program a b c d -> Program a b c d
@@ -81,39 +83,39 @@ mapMExpressions_ expTrans prog = mapMExpressions expTrans' prog >> return ()
 -- | Monadic map over all typed variables.
 mapMTypedVariables :: Monad m => (TypedVariable b d -> m (TypedVariable b d)) -> Program a b c d -> m (Program a b c d)
 mapMTypedVariables tVarTrans = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans return return return tVarTrans
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return return return tVarTrans
 
 -- | Accumulates a monoid over all signatures
 foldMapSignatures :: Monoid m => (Signature a b c d -> m) -> Program a b c d -> m
 foldMapSignatures f = execWriter . transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans return return (accumulate f) return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return return (accumulate f) return
 
 -- | Monadic map over one expression and its subexpressions and discard the result.
 mapMExpression_ :: Monad m => (Expression a b c d -> m ()) -> Expression a b c d -> m ()
 mapMExpression_ expTrans exp = transformExpressionInternal transformer exp >> return ()
-  where transformer = AstTransformer id id id id nullTVarContextTrans undefined expTrans' undefined undefined
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing undefined expTrans' undefined undefined
         expTrans' exp = expTrans exp >> return exp
 
 -- | Monadic map over all declarations and discard the result.
 mapMDeclarations_ :: Monad m => (Declaration a b c d -> m ()) -> Program a b c d -> m ()
 mapMDeclarations_ declTrans prog = transformProgramInternal transformer prog >> return ()
-  where transformer = AstTransformer id id id id nullTVarContextTrans declTrans' return return return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing declTrans' return return return
         declTrans' decl = declTrans decl >> return decl
 
 -- | Accumulates a monoid over an expression.
 foldMapExpression :: Monoid m => (Expression a b c d -> m) -> Expression a b c d -> m
 foldMapExpression f = execWriter . transformExpressionInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans undefined (accumulate f) undefined undefined
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing undefined (accumulate f) undefined undefined
 
 -- | Accumulates a monoid over all expressions.
 foldMapExpressions :: Monoid m => (Expression a b c d -> m) -> Program a b c d -> m
 foldMapExpressions f = execWriter . transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans return (accumulate f) return return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return (accumulate f) return return
 
 -- | Accumulates a monoid over all declarations.
 foldMapDeclarations :: Monoid m => (Declaration a b c d -> m) -> Program a b c d -> m
 foldMapDeclarations f = execWriter . transformProgramInternal transformer
-  where transformer = AstTransformer id id id id nullTVarContextTrans (accumulate f) return return return
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing (accumulate f) return return return
 
 accumulate :: Monoid m => (a -> m) -> a -> Writer m a
 accumulate f a = tell (f a) >> return a
@@ -127,6 +129,7 @@ data AstTransformer a b c d a' b' c' d' m
                    , expMetaTrans :: c -> c'                                                -- ^ Expression metadata transformer
                    , nodeMetaTrans :: d -> d'                                               -- ^ Node metadata transformer
                    , tVarContextTrans :: forall x . TypedVariable b d -> m x -> m x         -- ^ Context transformation based on a typed variable
+                   , resultVar :: Maybe (Signature a b c d -> TypedVariable b d)            -- ^ Special result variable that exists in all postconditions
                    , declTrans :: (Declaration a' b' c' d' -> m (Declaration a' b' c' d'))  -- ^ Declaration transformer
                    , expTrans :: (Expression a' b' c' d' -> m (Expression a' b' c' d'))     -- ^ Expression transformer
                    , sigTrans :: (Signature a' b' c' d' -> m (Signature a' b' c' d'))       -- ^ Signature transformer
@@ -153,16 +156,19 @@ transformDeclarationInternal transformer decl = foldl (flip $ tVarContextTrans t
 
 -- | Powerful internal function to transform a signature that is used to build up all the exported functions.
 transformSignatureInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> Signature a b c d -> m (Signature a' b' c' d')
-transformSignatureInternal transformer (Signature isPure name args retType precs posts meta) =
-  sigTrans transformer =<< Signature isPure name
+transformSignatureInternal transformer sig@Signature{..} =
+  sigTrans transformer =<< Signature isPure sigName
     <$> mapM (transformTypedVariableInternal transformer) args
     <*> pure retType
-    <*> transformConds precs
-    <*> transformConds posts
+    <*> transformConds preconditions
+    <*> transformedPosts
     <*> pure transformedMeta
   where transformConds = mapM transformCond
         transformCond = transformExpressionInternal transformer
-        transformedMeta = first (funcMetaTrans transformer) $ second (nodeMetaTrans transformer) $ meta
+        transformedMeta = first (funcMetaTrans transformer) $ second (nodeMetaTrans transformer) $ sigMeta
+        transformedPosts = case resultVar transformer of
+          Nothing -> transformConds postconditions
+          Just v  -> (tVarContextTrans transformer) (v sig) $ transformConds postconditions
 
 transformTypedVariableInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> TypedVariable b d -> m (TypedVariable b' d')
 transformTypedVariableInternal transformer (TypedVariable name typ meta) =
