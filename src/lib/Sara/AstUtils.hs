@@ -21,7 +21,6 @@ module Sara.AstUtils ( mapFunctionMetas
 
 import Data.Bifunctor
 import Sara.Syntax
-import Sara.Utils
 import Control.Monad.Writer
 import Control.Monad.Identity
 
@@ -53,8 +52,7 @@ weirdTransformExpressions :: Monad m =>
                              -> Program a b c d                                 -- ^ Input program
                              -> m (Program a b c d)                             -- ^ Output program
 weirdTransformExpressions tVarExpTrans transExp = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id tVarExpTrans' return transExp return return
-        tVarExpTrans' v = return $ tVarExpTrans v
+  where transformer = AstTransformer id id id id tVarExpTrans return transExp return return
 
 -- | Monadic map over all signatures.
 mapMSignatures :: Monad m => (Signature a b c d -> m (Signature a b c d)) -> Program a b c d -> m (Program a b c d)
@@ -120,15 +118,15 @@ foldMapDeclarations f = execWriter . transformProgramInternal transformer
 accumulate :: Monoid m => (a -> m) -> a -> Writer m a
 accumulate f a = tell (f a) >> return a
 
-nullTVarContextTrans :: Monad m => x -> m (m y -> m y)
-nullTVarContextTrans = const $ return id
+nullTVarContextTrans :: Monad m => x -> m y -> m y
+nullTVarContextTrans = const id
 
 data AstTransformer a b c d a' b' c' d' m
   = AstTransformer { funcMetaTrans :: a -> a'                                               -- ^ Function metadata transformer
                    , varMetaTrans :: b -> b'                                                -- ^ Variable metadata transformer
                    , expMetaTrans :: c -> c'                                                -- ^ Expression metadata transformer
                    , nodeMetaTrans :: d -> d'                                               -- ^ Node metadata transformer
-                   , tVarContextTrans :: forall x . TypedVariable b d -> m (m x -> m x)     -- ^ Context transformation based on a typed variable
+                   , tVarContextTrans :: forall x . TypedVariable b d -> m x -> m x         -- ^ Context transformation based on a typed variable
                    , declTrans :: (Declaration a' b' c' d' -> m (Declaration a' b' c' d'))  -- ^ Declaration transformer
                    , expTrans :: (Expression a' b' c' d' -> m (Expression a' b' c' d'))     -- ^ Expression transformer
                    , sigTrans :: (Signature a' b' c' d' -> m (Signature a' b' c' d'))       -- ^ Signature transformer
@@ -144,7 +142,7 @@ transformProgramInternal transformer (Program decls meta) =
 
 -- | Powerful internal function to transform a declaration that is used to build up all the exported functions.
 transformDeclarationInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> Declaration a b c d -> m (Declaration a' b' c' d')
-transformDeclarationInternal transformer decl = foldlM (tVarContextTrans transformer) tVars $ declTrans transformer =<< transformedDecl
+transformDeclarationInternal transformer decl = foldl (flip $ tVarContextTrans transformer) (declTrans transformer =<< transformedDecl) tVars
   where tVars = args $ signature decl
         transformedDecl = transformedDeclWithoutSigAndMeta <*> transformedSig <*> pure transformedMeta
         transformedSig = transformSignatureInternal transformer $ signature decl

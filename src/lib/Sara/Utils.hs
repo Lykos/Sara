@@ -1,7 +1,6 @@
 -- | Module for all the common Haskell functions that have nothing to do with a compiler.
 module Sara.Utils ( tripleSnd
                   , app2
-                  , foldlM
                   , keyBy
                   , (<<) ) where
 
@@ -14,10 +13,6 @@ tripleSnd (_, a, _) = a
 -- | Apply a function that takes a list to two arguments.
 app2 :: ([a] -> b) -> a -> a -> b
 app2 f a b = f [a, b]
-
--- | Applies a transformation of the environment that depends on a value for each value of a list.
-foldlM :: Monad m => (a -> m (m b -> m b)) -> [a] -> m b -> m b
-foldlM f xs m = foldl (\ a b -> (f b) >>= ($a)) m xs
 
 -- | /O(n*log n)/. Build a map from a list of values and a function that computes the keys for the values.
 -- The resulting map will for a particular keys have a list of all values for which the provided function returned the given key.
