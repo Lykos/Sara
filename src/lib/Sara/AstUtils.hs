@@ -7,11 +7,11 @@ module Sara.AstUtils ( mapFunctionMetas
                      , mapExpressions
                      , mapMExpression_
                      , mapMExpressions_
+                     , mapMTypedVariables
                      , mapMSignatures_
                      , mapMDeclarations_
                      , mapMSignatures
                      , mapMExpressions
-                     , weirdTransformSymbols
                      , weirdTransformExpressions
                      , foldMapSignatures
                      , foldMapDeclarations
@@ -45,25 +45,13 @@ mapNodeMetas :: (d -> d') -> Program a b c d -> Program a b c d'
 mapNodeMetas g = runIdentity . transformProgramInternal transformer
   where transformer = AstTransformer id id id g nullTVarContextTrans return return return return
 
--- | Transformation that can transform all variable and function symbols.
--- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
-weirdTransformSymbols :: Monad m =>
-                         (forall x . TypedVariable b' d -> m (m x -> m x))       -- ^ Context transformer based on a typed variable
-                         -> (Expression a' b' c d -> m (Expression a' b' c d))  -- ^ Expression transformer
-                         -> (Signature a' b' c d -> m (Signature a' b' c d))    -- ^ Signature transformer
-                         -> (TypedVariable b' d -> m (TypedVariable b' d))      -- ^ TypedVariable transformer
-                         -> Program a' b' c d                                   -- ^ Input program
-                         -> m (Program a' b' c d)                               -- ^ Output program
-weirdTransformSymbols tVarExpTrans expTrans sigTrans tVarTrans = transformProgramInternal transformer
-  where transformer = AstTransformer id id id id tVarExpTrans return expTrans sigTrans tVarTrans
-
 -- | Performs a transformation on all expressions in the AST.
 -- The second argument can be used to do a context transformation based on an encountered typed variable that is valid for the current scope.
 weirdTransformExpressions :: Monad m =>
-                             (forall x . TypedVariable b d -> m x -> m x)         -- ^ Context transformer based on a typed variable
-                             -> (Expression a b c' d -> m (Expression a b c' d))  -- ^ Expression transformer
-                             -> Program a b c' d                                  -- ^ Input program
-                             -> m (Program a b c' d)                              -- ^ Output program
+                             (forall x . TypedVariable b d -> m x -> m x)       -- ^ Context transformer based on a typed variable
+                             -> (Expression a b c d -> m (Expression a b c d))  -- ^ Expression transformer
+                             -> Program a b c d                                 -- ^ Input program
+                             -> m (Program a b c d)                             -- ^ Output program
 weirdTransformExpressions tVarExpTrans transExp = transformProgramInternal transformer
   where transformer = AstTransformer id id id id tVarExpTrans' return transExp return return
         tVarExpTrans' v = return $ tVarExpTrans v
@@ -91,6 +79,11 @@ mapExpressions f = runIdentity . mapMExpressions (Identity . f)
 mapMExpressions_ :: Monad m => (Expression a b c d -> m ()) -> Program a b c d -> m ()
 mapMExpressions_ expTrans prog = mapMExpressions expTrans' prog >> return ()
   where expTrans' exp = expTrans exp >> return exp
+
+-- | Monadic map over all typed variables.
+mapMTypedVariables :: Monad m => (TypedVariable b d -> m (TypedVariable b d)) -> Program a b c d -> m (Program a b c d)
+mapMTypedVariables tVarTrans = transformProgramInternal transformer
+  where transformer = AstTransformer id id id id nullTVarContextTrans return return return tVarTrans
 
 -- | Accumulates a monoid over all signatures
 foldMapSignatures :: Monoid m => (Signature a b c d -> m) -> Program a b c d -> m

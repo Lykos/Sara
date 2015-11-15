@@ -10,7 +10,6 @@ import Sara.Syntax
 import Sara.Types
 import Sara.Meta
 import Sara.AstUtils
-import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.Trans.State
@@ -22,7 +21,7 @@ data FunctionKey =
   FunctionKey { funcName :: Name, funcType :: [Type] }
   deriving (Eq, Ord, Show)
 
-type FunctionMap = M.Map FunctionKey (TypeCheckerSignature, FunctionMeta)
+type FunctionMap = M.Map FunctionKey (SymbolizerSignature, FunctionMeta)
 type VariableMap = M.Map Name (SymbolizerTypedVariable, VariableMeta)
 type IdMap = M.Map Name Id
 
@@ -32,29 +31,31 @@ data SymbolizerContext
     deriving (Eq, Ord, Show)
 
 functionKey :: Signature a b c d -> FunctionKey
-functionKey Signature{ sigName = name, args = args } = FunctionKey name $ map varType args
+functionKey Signature{..} = FunctionKey sigName $ map varType args
 
 lolTyp :: Expression a b TypMeta d -> Type
 lolTyp = typTyp . expressionMeta
 
 callFunctionKey :: Expression a b TypMeta d -> FunctionKey
-callFunctionKey Call{ expName = name, expArgs = args } = FunctionKey name (map lolTyp args)
-callFunctionKey _                                      = error "Can only get the call function key for Call expressions."
+callFunctionKey Call{..} = FunctionKey expName (map lolTyp expArgs)
+callFunctionKey _        = error "Can only get the call function key for Call expressions."
 
-functions :: TypeCheckerProgram -> FunctionMap
-functions prog = execWriter (evalStateT (mapMSignatures_ addSignature prog) M.empty)
-  where addSignature :: TypeCheckerSignature -> StateT IdMap (WriterT FunctionMap Identity) ()
-        addSignature sig = do
+symbolizeFunctions :: SymbolizerProgram -> (SymbolizerProgram, FunctionMap)
+symbolizeFunctions prog = runWriter (evalStateT (mapMSignatures symbolizeSignature prog) M.empty)
+  where symbolizeSignature :: (MonadState IdMap m, MonadWriter FunctionMap m) => SymbolizerSignature -> m SymbolizerSignature
+        symbolizeSignature sig@Signature{..} = do
           sym <- getNewFunctionSymbol sig
           tell $ M.singleton (functionKey sig) (sig, sym)
+          let sigMeta' = (first $ const sym) $ sigMeta
+          return sig{ sigMeta = sigMeta' }
 
-getNewFunctionSymbol :: MonadState IdMap s => Signature a b c d -> s FunctionMeta
+getNewFunctionSymbol :: MonadState IdMap m => Signature a b c d -> m FunctionMeta
 getNewFunctionSymbol Signature{..} = getNewSymbol (FunctionMeta isPure (map varType args) retType) sigName
 
-getNewVariableSymbol :: MonadState IdMap s => TypedVariable b d -> s VariableMeta
+getNewVariableSymbol :: MonadState IdMap m => TypedVariable b d -> m VariableMeta
 getNewVariableSymbol TypedVariable{..} = getNewSymbol (VariableMeta varType) varName
 
-getNewSymbol :: MonadState IdMap s => (Name -> Id -> e) -> Name -> s e
+getNewSymbol :: MonadState IdMap m => (Name -> Id -> e) -> Name -> m e
 getNewSymbol f name = do
   existing <- S.gets $ M.lookup name
   let id = case existing of
@@ -63,20 +64,28 @@ getNewSymbol f name = do
   S.modify $ M.insert name id
   return $ f name id
 
+symbolizeTypedVars :: SymbolizerProgram -> SymbolizerProgram
+symbolizeTypedVars prog = evalState (mapMTypedVariables symbolizeTypedVar prog) M.empty
+  where symbolizeTypedVar :: MonadState IdMap m => SymbolizerTypedVariable -> m SymbolizerTypedVariable
+        symbolizeTypedVar v@TypedVariable{..} = do
+          sym <- getNewVariableSymbol v
+          let varMeta' = (first $ const sym) $ varMeta
+          return $ v{ varMeta = varMeta' }
+
+addUndefinedSymbols :: TypeCheckerProgram -> SymbolizerProgram
+addUndefinedSymbols = mapVariableMetas (const $ error "Accessed undefined variable metadata.")
+                      . mapFunctionMetas (const $ error "Accessed undefined function metadata.")
+
 symbolize :: TypeCheckerProgram -> SymbolizerProgram
 symbolize prog = runReader
-                 (evalStateT (weirdTransformSymbols tVarContextTrans symbolizeExp symbolizeSig symbolizeTypedVar prog') M.empty)
-                 (SymbolizerContext (functions prog) M.empty)
-  where prog' :: SymbolizerProgram
-        prog' = mapVariableMetas (const $ error "Accessed undefined variable metadata.")
-                $ mapFunctionMetas (const $ error "Accessed undefined function metadata.") prog
-        tVarContextTrans tVar = do
-          sym <- getNewVariableSymbol tVar
-          return $ local (addVar tVar sym)
-        addVar :: SymbolizerTypedVariable -> VariableMeta -> SymbolizerContext -> SymbolizerContext
-        addVar tVar sym context = context{ vars = vars' }
-          where vars' = M.insert (varName tVar) (tVar, sym) $ vars context
-        symbolizeExp :: SymbolizerExpression -> StateT IdMap (ReaderT SymbolizerContext Identity) SymbolizerExpression
+                 (weirdTransformExpressions tVarContextTrans symbolizeExp prog')
+                 (SymbolizerContext functionMap M.empty)
+  where (prog', functionMap) = symbolizeFunctions $ symbolizeTypedVars $ addUndefinedSymbols prog
+        tVarContextTrans tVar = local $ addVar tVar
+        addVar :: SymbolizerTypedVariable -> SymbolizerContext -> SymbolizerContext
+        addVar v@TypedVariable{..} context = context{ vars = vars' }
+          where vars' = M.insert (varName) (v, fst varMeta) $ vars context
+        symbolizeExp :: MonadReader SymbolizerContext m => SymbolizerExpression -> m SymbolizerExpression
         symbolizeExp c@Call{}                           = do
           funcs' <- asks funcs
           let callKey = callFunctionKey c
@@ -91,18 +100,3 @@ symbolize prog = runReader
                 Nothing        -> error $ "Variable " ++ name ++ " not found in symbol table " ++ show vars' ++ "."
           return v{ expVarMeta = expVarMeta' }
         symbolizeExp exp                                     = return exp
-        symbolizeSig sig@Signature{ sigMeta = sigMeta } = do
-          funcs' <- asks funcs
-          let funcKey = functionKey sig
-          let meta = case funcKey `M.lookup` funcs' of
-                Just (_, meta) -> meta
-                Nothing        -> error $ "Function declaration " ++ show funcKey ++ " not found in symbol table " ++ show funcs' ++ "."
-          let sigMeta' = (first $ const meta) $ sigMeta
-          return sig{ sigMeta = sigMeta' }
-        symbolizeTypedVar var@TypedVariable{ varName = name, varMeta = varMeta }  = do
-          vars' <- asks vars
-          let meta = case name `M.lookup` vars' of
-                Just (_, meta) -> meta
-                Nothing        -> error $ "Variable declaration " ++ name ++ " not found in symbol table " ++ show vars' ++ "."
-          let varMeta' = (first $ const meta) $ varMeta
-          return var{ varMeta = varMeta' }
