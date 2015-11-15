@@ -1,0 +1,4 @@
+// errors PositionedError ResultArg 4:24
+method main(): Integer { 3 };
+
+function f(a: Integer, result: Integer): Integer { 0 }

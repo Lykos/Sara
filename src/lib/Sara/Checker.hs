@@ -46,6 +46,9 @@ checkArgs args functionOrMethod = evalStateT (mapM_ checkArg args) M.empty
         checkArg var = do
           let name = varName var
           let pos = typedVarPos var
+          case name of
+            "result" -> lift $ resultArg pos
+            _        -> return ()
           previousPos <- gets $ M.lookup name
           case previousPos of
             Just pos' -> lift $ redeclaredArgument name functionOrMethod pos' pos

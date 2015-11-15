@@ -37,7 +37,7 @@ reservedNames = [ "//", "returns", "errors", "PositionedError", "UnknownElementE
                 , "RedeclaredElementError", "RedeclaredFunction", "AssignmentError"
                 , "NoMain", "PureFunction", "PurePrecondition", "PurePostcondition"
                 , "Function", "Method", "RedeclaredArgument", "PureAssertion", "Assert"
-                , "Assume", "AssertAndCollapse", "PureInvariant" ] ++ L.reservedNames
+                , "Assume", "AssertAndCollapse", "PureInvariant", "ResultArg" ] ++ L.reservedNames
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
@@ -60,7 +60,7 @@ expectation :: Parser Expectation
 expectation = do
   whiteSpaceToken
   reservedToken "//"
-  try returnExpectation <|> errorExpectation <?> "expectation"
+  returnExpectation <|> errorExpectation <?> "expectation"
 
 returnExpectation :: Parser Expectation
 returnExpectation = do
@@ -71,7 +71,7 @@ returnExpectation = do
 errorExpectation :: Parser Expectation
 errorExpectation = do
   reservedToken "errors"
-  err <- try noMain <|> positionedError <?> "error expectation"
+  err <- noMain <|> positionedError <?> "error expectation"
   return $ Errors err
 
 positionedError :: Parser E.Error
@@ -82,13 +82,14 @@ positionedError = do
   return $ E.PositionedError err pos
 
 unpositionedError :: Parser E.PositionedError
-unpositionedError = try unknownElementError
-                  <|> try typeMismatchError
-                  <|> try differentTypesError
-                  <|> try mainArgsError
-                  <|> try impureExpressionError
-                  <|> try redeclaredElementError
+unpositionedError = unknownElementError
+                  <|> typeMismatchError
+                  <|> differentTypesError
+                  <|> mainArgsError
+                  <|> impureExpressionError
+                  <|> redeclaredElementError
                   <|> assignmentError
+                  <|> resultArgError
 
 unknownElementError :: Parser E.PositionedError
 unknownElementError = do
@@ -97,9 +98,9 @@ unknownElementError = do
   return $ E.UnknownElementError el
 
 unknownElement :: Parser E.UnknownElement
-unknownElement = try unknownUnOp
-                 <|> try unknownBinOp
-                 <|> try unknownVariable
+unknownElement = unknownUnOp
+                 <|> unknownBinOp
+                 <|> unknownVariable
                  <|> unknownFunction
 
 unknownUnOp :: Parser E.UnknownElement
@@ -142,9 +143,9 @@ typeMismatchError = do
   return $ E.TypeMismatchError m s t
 
 mismatchType :: Parser E.MismatchType
-mismatchType = try condition
-               <|> try returnType
-               <|> try mainReturnType
+mismatchType = condition
+               <|> returnType
+               <|> mainReturnType
                <?> "mismatch type"
 
 condition :: Parser E.MismatchType
@@ -175,11 +176,11 @@ impureExpressionError = do
   return $ E.ImpureExpressionError context
 
 pureContext :: Parser E.PureContext
-pureContext = try pureFunction
-              <|> try purePrecondition
-              <|> try purePostcondition
-              <|> try pureInvariant
-              <|> try pureAssertion
+pureContext = pureFunction
+              <|> purePrecondition
+              <|> purePostcondition
+              <|> pureInvariant
+              <|> pureAssertion
               <?> "pure context type"
 
 pureFunction :: Parser E.PureContext
@@ -213,8 +214,8 @@ pureAssertion = do
 
 assertionKind :: Parser AssertionKind
 assertionKind = do
-  try (reservedToken "Assert" >> return Assert)
-  <|> try (reservedToken "Assume" >> return Assume)
+  (reservedToken "Assert" >> return Assert)
+  <|> (reservedToken "Assume" >> return Assume)
   <|> (reservedToken "AssertAndCollapse" >> return AssertAndCollapse)
 
 functionOrMethod :: Parser E.FunctionOrMethod
@@ -240,7 +241,7 @@ redeclaredElementError = do
   return $ E.RedeclaredElementError r pos
 
 redeclaredElement :: Parser E.RedeclaredElement
-redeclaredElement = try redeclaredFunction
+redeclaredElement = redeclaredFunction
                     <|> redeclaredArgument
                     <?> "redeclared element expectation"
 
@@ -262,6 +263,11 @@ assignmentError :: Parser E.PositionedError
 assignmentError = do
   reservedToken "AssignmentError"
   return E.AssignmentError
+
+resultArgError :: Parser E.PositionedError
+resultArgError = do
+  reservedToken "ResultArg"
+  return E.ResultArgError
 
 noMain :: Parser E.Error
 noMain = reservedToken "NoMain" >> return E.NoMain

@@ -27,6 +27,7 @@ module Sara.Errors( ErrorOr
                   , notAssignable
                   , otherError
                   , unsolvableError
+                  , resultArg
                   , functionOrMethod ) where
 
 import Sara.Types
@@ -61,6 +62,7 @@ data PositionedError
   | AssignmentError
   | VerifierError SymbolicExecutionStart SourcePos VerifierFailureModel VerifierFailureType
   | UnsolvableError SymbolicExecutionStart
+  | ResultArgError
   deriving (Eq, Ord, Show)
 
 data PureContext
@@ -156,6 +158,8 @@ renderPositionedError (VerifierError symbolicExecutionStart pos model failureTyp
         failureTypeLine = renderFailureType failureType
 renderPositionedError (UnsolvableError symbolicExecutionStart)                       =
   T.concat [T.pack "Couldn't determine whether it is possible to fail after ", renderSymbolicExecutionStart symbolicExecutionStart]
+renderPositionedError ResultArgError                                                 =
+  T.pack "The name \"result\" is not allowed for arguments."
 
 renderModel :: VerifierFailureModel -> [T.Text]
 renderModel (VerifierFailureModel model) = map renderModelElement model
@@ -309,6 +313,9 @@ otherError s = throwError $ OtherError s
 
 unsolvableError :: Monad m => SymbolicExecutionStart -> SourcePos -> ExceptT Error m a
 unsolvableError start = positionedError $ UnsolvableError start
+
+resultArg :: Monad m => SourcePos -> ExceptT Error m a
+resultArg = positionedError ResultArgError
 
 functionOrMethod :: Bool -> Name -> FunctionOrMethod
 functionOrMethod True name  = Function name
