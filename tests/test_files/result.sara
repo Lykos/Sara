@@ -1,0 +1,4 @@
+// returns 5
+method main(): Integer
+  ensures result == 5
+{ 5 }

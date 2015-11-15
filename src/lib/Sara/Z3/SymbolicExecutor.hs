@@ -20,6 +20,7 @@ import Sara.Z3.CondAst ( runCondAst )
 import qualified Sara.Z3.SymbolicState as St
 import qualified Sara.Errors as E
 import qualified Sara.Syntax as Sy
+import qualified Sara.Builtins as B
 import Sara.Z3.Operators
 import Sara.Operators
 
@@ -31,7 +32,10 @@ symbolicExecuteDecl' :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSp
 symbolicExecuteDecl' (Sy.Function Sy.Signature{..} body _) = do
   setArgs args
   mapM_ (addAssumption <=< symbolicExecutePure) preconditions
-  symbolicExecute body
+  let expMeta = (ExpressionMeta retType isPure, snd sigMeta)
+  let resultVar = Sy.Variable (B.name B.Result) (BuiltinVar retType B.Result) expMeta
+  let body' = Sy.BinaryOperation Assign resultVar body expMeta
+  symbolicExecute body'
   mapM_ addPostcondition postconditions
   collapseAndStop
   where addPostcondition cond = addProofObligation E.PostconditionViolation (expressionPos cond) =<< symbolicExecutePure cond
@@ -83,16 +87,17 @@ symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p
   return result
 symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                        = do
   args' <- mapM symbolicExecute args
-  pre <- computeTmpN ["preconditionApp", name] Boolean (A.App $ A.AppMeta A.PreApp m) args'
-  post <- computeTmpN ["postconditionApp", name] Boolean (A.App $ A.AppMeta A.PostApp m) args'
   let isPure = funcSymPure m
+  let t = funcSymRetType m
+  result <- case isPure of
+    True  -> computeTmpN ["funcApp", name] t (A.App $ A.AppMeta A.FuncApp m) args'
+    False -> newTmpVar ["methodResult", name] t
+  pre <- computeTmpN ["preconditionApp", name] Boolean (A.App $ A.AppMeta A.PreApp m) args'
+  post <- computeTmpN ["postconditionApp", name] Boolean (A.App $ A.AppMeta A.PostApp m) (result : args')
   let failureType = E.PreconditionViolation $ E.functionOrMethod isPure name
   addProofObligation failureType p pre
   addAssumption post
-  let t = funcSymRetType m
-  case funcSymPure m of
-    True  -> computeTmpN ["funcApp", name] t (A.App $ A.AppMeta A.FuncApp m) args'
-    False -> newTmpVar ["methodResult", name] t
+  return result
 symbolicExecuteImpure (Sy.Variable _ m _)                                          = return m
 symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (Typed t))              = do
   cond' <- symbolicExecute cond

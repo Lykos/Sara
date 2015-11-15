@@ -5,6 +5,7 @@ method main(): Integer {
 
 method fib(n: Integer, a: Integer, b: Integer, c: Integer, i: Integer): Integer
   requires n >= 0
+  ensures result == fib_stupid(n)
 {
   a = 0;
   b = 1;

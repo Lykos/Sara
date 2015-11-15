@@ -36,13 +36,14 @@ translateExpression (S.Conditional c t e _)        = do
   return $ combine3 A.Ite c' t' e'
 translateExpression c@(S.Call name a m _)          = do
   a' <- mapM translateExpression a
+  let results = combineN (A.App (A.AppMeta A.FuncApp m)) a'
+  let result = ast results
   let args = map ast a'
   let pre = A.App (A.AppMeta A.PreApp m) args
-  let post = A.App (A.AppMeta A.PostApp m) args
-  let func = A.App (A.AppMeta A.FuncApp m)
+  let post = A.App (A.AppMeta A.PostApp m) (result : args)
   let pos = expressionPos c
   let failureType = PreconditionViolation (E.Function name)
-  return $ addProofObligation pre failureType pos $ addAssumption post $ combineN func a'
+  return $ addProofObligation pre failureType pos $ addAssumption post results
 translateExpression exp                            = error $ "Unsupported expression for pure verifier: " ++ prettyRender exp
 
 translateUnOp :: UnaryOperator -> CondAst -> CondAst

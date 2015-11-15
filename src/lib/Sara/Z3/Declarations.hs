@@ -12,6 +12,7 @@ import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.CondAst as C
 import qualified Sara.Z3.SymbolicState as S
 import qualified Sara.Syntax as S
+import qualified Sara.Builtins as B
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import Sara.Z3.PureExpression
@@ -30,11 +31,13 @@ translateFunctions contracts = foldMapDeclarations translateFunc
 translateContracts :: PureCheckerProgram -> M.Map A.AppMeta ([VariableMeta], A.Ast)
 translateContracts = M.fromList . foldMapSignatures translateSig
         -- TODO: Use AstWrapper types for precondition and postcondition
-  where translateSig S.Signature{..} = [ translateConditions A.PreApp preconditions
-                                       , translateConditions A.PostApp postconditions ]
+  where translateSig S.Signature{..} = [ translateConditions A.PreApp preconditions argSyms
+                                       , translateConditions A.PostApp postconditions (resultVar : argSyms) ]
           where pos = nodePos $ snd sigMeta
-                translateConditions appKind conditions = (A.AppMeta appKind $ fst sigMeta,
-                                                          (map (fst . S.varMeta) args, translateN args conditions))
+                resultVar = BuiltinVar retType B.Result
+                argSyms = map (fst . S.varMeta) args
+                translateConditions appKind conditions argSyms = (A.AppMeta appKind $ fst sigMeta,
+                                                                  (argSyms, translateN args conditions))
                 translateN args conds = A.NaryOp A.And $ map C.ast $ withInitialState args pos (mapM translateExpression conds)
 
 withInitialState :: [PureCheckerTypedVariable] -> SourcePos -> State S.SymbolicState a -> a
