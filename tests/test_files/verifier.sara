@@ -1,0 +1,31 @@
+// returns 13
+method main(): Integer {
+  fib(7, 0, 0, 0, 0)
+};
+
+method fib(n: Integer, a: Integer, b: Integer, c: Integer, i: Integer): Integer
+  requires n >= 0
+{
+  a = 0;
+  b = 1;
+  i = 0;
+  while (i < n)
+    invariant a == fib_stupid(i);
+    invariant b == fib_stupid(i + 1);
+    invariant i >= 0;
+    invariant i <= n
+  {
+    c = a;
+    a = b;
+    b = a + c;
+    i = i + 1
+  };
+  assert a == fib_stupid(n);
+  a
+};
+
+function fib_stupid(n: Integer): Integer
+  requires n >= 0
+{
+  if n == 0 then 0 else if n == 1 then 1 else fib_stupid(n - 1) + fib_stupid(n - 2)
+}
