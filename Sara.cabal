@@ -50,6 +50,7 @@ library
                      , Sara.PureChecker
                      , Sara.Utils
                      , Sara.Keywords
+                     , Sara.Builtins
                      , Sara.Z3.SymbolicState
                      , Sara.Z3.SymbolicExecutor
                      , Sara.Z3.SymbolicStateSpace

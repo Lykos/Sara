@@ -13,6 +13,7 @@ import Data.Monoid
 import qualified Data.Map as M
 import Sara.AstUtils
 import Sara.Meta
+import qualified Sara.Builtins as B
 import Sara.Operators
 import Sara.Syntax
 import Sara.Errors
@@ -46,9 +47,9 @@ checkArgs args functionOrMethod = evalStateT (mapM_ checkArg args) M.empty
         checkArg var = do
           let name = varName var
           let pos = typedVarPos var
-          case name of
-            "result" -> lift $ resultArg pos
-            _        -> return ()
+          case B.builtinVar name of
+            Just B.Result -> lift $ resultArg pos
+            _             -> return ()
           previousPos <- gets $ M.lookup name
           case previousPos of
             Just pos' -> lift $ redeclaredArgument name functionOrMethod pos' pos

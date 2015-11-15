@@ -4,6 +4,7 @@ module Sara.Meta where
 
 import Text.Parsec.Pos
 import qualified Sara.Syntax as S
+--import qualified Sara.Builtins as B
 import Sara.Types
 
 newtype NodeMeta
@@ -32,6 +33,7 @@ data VariableMeta =
   VariableMeta { varSymType :: Type
                , varSymName :: S.Name
                , varSymId :: Id}
+--  | BuiltinVar B.BuiltinVar
   deriving (Eq, Ord, Show)
 
 type ParserProgram = S.Program () () () NodeMeta
