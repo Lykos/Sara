@@ -35,7 +35,8 @@ findFailure model ProofPart{..} = do
         Nothing              -> return Nothing
         Just (failure, pos)  -> return $ Just $ E.PositionedError (E.VerifierError startType startPos model' failure) pos
   where evaluateVars model vars = mapM (evaluateVar model) (M.toList vars)
-        evaluateVar model ((VariableMeta _ name _), var) = do
+        evaluateVar model (m, var) = do
+          let name = varSymName m
           var' <- codegen var
           val <- eval model var'
           val' <- case val of

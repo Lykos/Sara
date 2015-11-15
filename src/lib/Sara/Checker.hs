@@ -47,7 +47,7 @@ checkArgs args functionOrMethod = evalStateT (mapM_ checkArg args) M.empty
         checkArg var = do
           let name = varName var
           let pos = typedVarPos var
-          case B.builtinVar name of
+          case B.stringToBuiltinVar name of
             Just B.Result -> lift $ resultArg pos
             _             -> return ()
           previousPos <- gets $ M.lookup name

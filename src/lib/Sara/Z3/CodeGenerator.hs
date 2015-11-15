@@ -46,8 +46,9 @@ z3VarSymbol :: MonadZ3 z3 => VariableMeta -> z3 Symbol
 z3VarSymbol = mkStringSymbol . z3VarName
 
 z3Var :: MonadZ3 z3 => VariableMeta -> z3 AST
-z3Var m@(VariableMeta typ _ _) = do
+z3Var m = do
   sym <- z3VarSymbol m
+  let typ = varSymType m
   sort <- z3Sort typ
   mkVar sym sort
 

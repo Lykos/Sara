@@ -36,7 +36,7 @@ function :: AppMeta -> Doc
 function = text . z3FuncName
 
 typedVariable :: VariableMeta -> Doc
-typedVariable m@(VariableMeta typ _ _) = variable m <> colon <+> text (show typ)
+typedVariable m = variable m <> colon <+> text (show $ varSymType m)
 
 unary :: UnaryOperator -> Doc
 unary = text . unary'

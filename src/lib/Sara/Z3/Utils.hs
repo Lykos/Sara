@@ -10,6 +10,7 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 import Z3.Monad
 import Sara.Meta
+import qualified Sara.Builtins as B
 import Sara.Z3.Ast
 import Data.List
 
@@ -22,6 +23,7 @@ z3SymbolName prefix name index = z3Name [prefix, name, show index]
 
 z3VarName :: VariableMeta -> String
 z3VarName (VariableMeta _ name index) = z3SymbolName "var" name index
+z3VarName (BuiltinVar _ b)            = B.name b
 
 appPrefix :: AppKind -> String
 appPrefix PreApp  = "pre"
