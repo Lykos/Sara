@@ -23,6 +23,10 @@ Independent:
 - Use better type classes for metadata
 - Sort imports
 - Information hiding for metadata
+- Check that vardefs are not used as expressions.
+- Optional types for expressions
+- Make variable symbol only dependent on scopes.
+- Check that vals are not reassigned
 
 Main workflow:
 - Vars/Vals
@@ -42,10 +46,5 @@ Main workflow:
 - Traits
 - Pattern Matching
 - Custom operators
-- Higher order functions
 - Standard library
-- Optional types for expressions
-- Make variable symbol only dependent on scopes.
-- Check that vardefs are not used as expressions.
-- Check that vardefs are not used as expressions.
-- Check that vals are not reassigned
+- Higher order functions
