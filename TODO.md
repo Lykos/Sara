@@ -1,45 +1,47 @@
+Independent:
 - Commandline Options
-- Extern
 - Write README
-- Long arithmetic
-- Optimizations for long arithmetic
-- Function pointers
 - Generated tests for errors
 - Optional semicolons
 - Remove Unit expressions at some point after the type checker
 - More LLVM annotations
 - Syntactic sugar
-- Optional semicolons
-- Structs
-- Vars/Vals
-- mutable type system
-- Generics
-- Arrays
-- Classes
-- Dynamic method calls
-- Traits
-- Pattern Matching
-- Uniform Access principle
 - Split pure and non-pure expressions
-- Garbage collector
-- Type symbols
+- Uniform Access principle
 - Verifier tests
 - Better error messages for precondition failures
 - Suggestions for verifier errors
 - Consistency checks for assumptions/proof obligations
-- Framing
-- Casts
 - Use monad classes everywhere
 - Pretty print metadata
 - Split directory structure
-- custom operators
-- Tuples
-- Standard library
 - I/O
+- Refactor CodeGenerator
 - Function symbols without index
 - Use symbols and not names in code generator
 - Use more RecordWildCards
 - Use better type classes for metadata
-- Optional types for expressions
 - Sort imports
 - Information hiding for metadata
+
+Main workflow:
+- Vars/Vals
+- Type symbols
+- Structs
+- Tuples
+- Extern
+- Garbage collector
+- Long arithmetic
+- Optimizations for long arithmetic
+- Generics
+- Arrays
+- Classes
+- Framing
+- mutable type system
+- Dynamic method calls
+- Traits
+- Pattern Matching
+- Custom operators
+- Higher order functions
+- Standard library
+- Optional types for expressions
