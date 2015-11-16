@@ -20,6 +20,7 @@ module Sara.AstUtils ( mapFunctionMetas
                      , foldMapExpressions
                      , children ) where
 
+import Data.Maybe
 import Sara.Syntax
 import Control.Monad.Writer
 import Control.Monad.Identity
@@ -189,7 +190,11 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
             UnaryOperation op exp _ _          -> UnaryOperation op <$> transformSubExp exp
             Conditional cond ifExp elseExp _ _ -> Conditional <$> transformSubExp cond <*> transformSubExp ifExp <*> transformSubExp elseExp
             Call name args callMeta _ _        -> Call name <$> mapM transformSubExp args <*> pure (funcMetaTrans transformer $ callMeta)
-            Block stmts exp _ _                -> Block <$> mapM transformSubExp stmts <*> transformSubExp exp
+            Block stmts exp _ _                -> foldl (flip $ tVarContextTrans transformer) transformedBlock tVars
+              where transformedBlock = Block <$> mapM transformSubExp stmts <*> transformSubExp exp
+                    tVars = catMaybes $ map extractTVar stmts
+                    extractTVar (VarDef t _ _ _ _) = Just t
+                    extractTVar _                  = Nothing
             While invs cond body _ _           -> While <$> mapM transformSubExp invs <*> transformSubExp cond <*> transformSubExp body
             Variable name varMeta _ _          -> return $ Variable name (varMetaTrans transformer $ varMeta)
             Boolean b _ _                      -> return $ Boolean b
@@ -197,6 +202,7 @@ transformExpressionInternal transformer exp = expTrans transformer =<< transform
             Double d _ _                       -> return $ Double d
             Unit _ _                           -> return $ Unit
             Assertion k exp _ _                -> Assertion k <$> transformSubExp exp
+            VarDef t v exp _ _                 -> VarDef <$> transformTypedVariableInternal transformer t <*> pure v <*> transformSubExp exp
 
 -- | Returns the direct children of an expression.
 children :: Expression a b c d -> [Expression a b c d]
@@ -212,3 +218,4 @@ children Integer{}                            = []
 children Double{}                             = []
 children Unit{}                               = []
 children (Assertion _ exp _ _)                = [exp]
+children (VarDef _ _ exp _ _)                 = [exp]

@@ -18,6 +18,8 @@ data Keyword
   | Assume
   | AssertAndCollapse
   | Invariant
+  | Val
+  | Var
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 keyword :: Keyword -> String

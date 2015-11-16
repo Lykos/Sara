@@ -7,7 +7,7 @@ module Sara.CodeGenerator ( codegen
                           , PredeterminedForValue(..)
                           , ValueWhenPredetermined(..)
                           , ValueWhenNotPredetermined(..)
-                          , withModule) where
+                          , withModule ) where
 
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
@@ -35,12 +35,12 @@ type SymbolTable = M.Map VariableMeta Operand
 
 data CodegenState
   = CodegenState {
-    currentBlock :: Name                     -- Name of the active block to append to
+    currentBlock :: Name                   -- Name of the active block to append to
   , blocks       :: M.Map Name BlockState  -- Blocks for function
-  , symtab       :: SymbolTable              -- Function scope symbol table
-  , blockCount   :: Int                      -- Count of basic blocks
-  , count        :: Word                     -- Count of unnamed instructions
-  , names        :: Names                    -- Name Supply
+  , symtab       :: SymbolTable            -- Function scope symbol table
+  , blockCount   :: Int                    -- Count of basic blocks
+  , count        :: Word                   -- Count of unnamed instructions
+  , names        :: Names                  -- Name Supply
   } deriving Show
 
 data BlockState
@@ -157,7 +157,7 @@ define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body =
 extern :: MonadState Module m => PureCheckerSignature -> m ()
 extern = flip define []
 
-local :: Name ->  Type -> Operand
+local :: Name -> Type -> Operand
 local = flip LocalReference
 
 assign :: MonadState CodegenState m => VariableMeta -> Operand -> m ()
@@ -228,11 +228,16 @@ codegenFunction signature body = define signature bls
       setBlock entry
       forM_ (S.args signature) $ \arg -> do
         let meta = S.varMeta arg
-        let t = typ $ S.varType arg
-        var <- alloca t
-        store var (local (varMetaName meta) t) t
-        assign meta var
+        let t = typ $ varSymType meta
+        initializeVar meta $ local (varMetaName meta) t
       codegenExpression body >>= ret
+
+initializeVar :: MonadState CodegenState m => VariableMeta -> Operand -> m ()
+initializeVar meta o = do
+  let t = typ $ varSymType meta
+  var <- alloca t
+  store var o t
+  assign meta var
 
 varMetaName :: VariableMeta -> Name
 varMetaName (VariableMeta _ name index) = Name $ name ++ show index
@@ -455,3 +460,7 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     setBlock exitBlock
     unit
   S.Assertion{}                          -> unit
+  (S.VarDef tVar _ exp _ _)              -> do
+    exp' <- codegenExpression exp
+    initializeVar (S.varMeta tVar) exp'
+    unit

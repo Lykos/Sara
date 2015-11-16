@@ -26,6 +26,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Maybe
+import Data.List
 import qualified Data.Map.Strict as M
 import Sara.AstTestUtils
 
@@ -302,8 +303,24 @@ arbitraryConditional t = Conditional <$> subtree T.Boolean <*> subtree t <*> sub
   where subtree t = scale (`div` 3) $ arbitraryExpression t
 
 arbitraryBlock :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g IncompleteExpression
-arbitraryBlock t = Block <$> stmts <*> exp
-  where stmts = scale intRoot $ listOf $ arbitraryType >>= arbitraryExpression
+arbitraryBlock t = do
+  newVars <- evalStateT (scale ((`div` 2) . intRoot) $ listOf $ arbitraryTypedVariable) S.empty
+  arbitraryBlockWithNewVars [] newVars
+  where arbitraryBlockWithNewVars defs (var:vars) = do
+          exp' <- local (withoutVarEnvTransform var) $ arbitraryExpression (varType var)
+          pure <- asks isPureEnv
+          isVal <- if pure then return True else arbitraryBool
+          def <- addExpMeta T.Unit $ return $ VarDef var isVal exp'
+          local (varEnvTransform var) $ arbitraryBlockWithNewVars (def : defs) vars
+        arbitraryBlockWithNewVars defs []         = do
+          stmts' <- stmts
+          exp' <- exp
+          return $ Block (defs ++ stmts') exp'
+        withoutVarEnvTransform :: TypeCheckerTypedVariable -> GeneratorEnv -> GeneratorEnv
+        withoutVarEnvTransform var env = env{ variables = M.adjust (delete $ varName var) (varType var) (variables env) }
+        varEnvTransform :: TypeCheckerTypedVariable -> GeneratorEnv -> GeneratorEnv
+        varEnvTransform var env = env{ variables = M.insertWith (++) (varType var) [varName var] (variables env) }
+        stmts = scale ((`div` 2) . intRoot) $ listOf $ arbitraryType >>= arbitraryExpression
         exp = scale intRoot $ arbitraryExpression t
 
 arbitraryWhile :: (MonadGen g, MonadReader GeneratorEnv g) => Type -> g (Maybe IncompleteExpression)
@@ -397,13 +414,24 @@ shrinkExpression (Call name args cm m p)                 = childrenWithType m ar
         shrinkArgs (x:xs) = [y : xs | y <- Q.shrink x] ++ [x : ys | ys <- shrinkArgs xs]
 shrinkExpression (Conditional cond ifExp elseExp m p) = childrenWithType m [cond, ifExp, elseExp]
                                                         ++ [Conditional c i e m p | (c, i, e) <- Q.shrink (cond, ifExp, elseExp)]
-shrinkExpression (Block stmts exp m p)                = [exp]
+shrinkExpression (Block stmts exp m p)                = [exp | S.null $ freeVariables exp `S.intersection` definedVars]
                                                         ++ [Block (init stmts) (last stmts) m p | not (null stmts), expressionTyp' (last stmts) == typTyp m]
-                                                        ++ [Block s e m p | (s, e) <- Q.shrink (stmts, exp)]
+                                                        ++ [Block s exp m p | s <- shrinkStmts stmts]
+                                                        ++ [Block stmts e m p | e <- Q.shrink exp]
+  where freeVars = foldMap freeVariables (exp : stmts)
+        definedVars = foldMap definedVar (exp : stmts)
+        definedVar (VarDef v _ _ _ _) = S.singleton v
+        definedVar _                  = S.empty
+        isRemovable (VarDef v _ _ _ _) = v `notElem` freeVars
+        isRemovable _                  = True
+        shrinkStmts :: [TypeCheckerExpression] -> [[TypeCheckerExpression]]
+        shrinkStmts []     = []
+        shrinkStmts (x:xs) = [xs | isRemovable x] ++ [y : xs | y <- Q.shrink x] ++ [x : ys | ys <- shrinkStmts xs]
 shrinkExpression (While invs cond body m p)           = S.Unit m p
                                                         : childrenWithType m [body]
                                                         ++ [While i c b m p | (i, c, b) <- Q.shrink (invs, cond, body)]
 shrinkExpression (Assertion k exp m p)                = S.Unit m p : [Assertion k e m p | e <- Q.shrink exp]
+shrinkExpression (VarDef var isVal exp m p)           = [VarDef var isVal e m p | e <- Q.shrink exp]
 
 childrenWithType :: TypMeta -> [TypeCheckerExpression] -> [TypeCheckerExpression]
 childrenWithType m = filter (\c -> expressionTyp' c == (typTyp m))

@@ -72,4 +72,5 @@ preservesPureness Variable{}                        = True
 preservesPureness Call{ expCallMeta = sym }         = funcSymPure sym
 preservesPureness Conditional{}                     = True
 preservesPureness Block{}                           = True
+preservesPureness VarDef{ isVal = True }            = True
 preservesPureness _                                 = False

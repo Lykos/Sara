@@ -86,22 +86,25 @@ typeCheckExpressions funcMap program =
         addVar tVar context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) tVar $ vars context
         typeCheckSingleExpression exp = case exp of
-          S.Boolean{}                          -> typed T.Boolean
-          S.Integer{}                          -> typed T.Integer
-          S.Double{}                           -> typed T.Double
-          S.Unit{}                             -> typed T.Unit
-          UnaryOperation op subExp _ _         -> typed =<< unOpType op (expressionTyp' subExp)
-          BinaryOperation op left right _ _    -> typed =<< binOpType op (expressionTyp' left) (expressionTyp' right)
-          Variable name _ _ _                  -> typed =<< varType name
-          Call name args _ _ _                 -> typed =<< funcType name (map expressionTyp' args)
-          Conditional cond thenExp elseExp _ _ -> typed
-                                                  =<< conditionalType (expressionTyp' thenExp) (expressionTyp' elseExp)
-                                                  << lift (typeCheckCondType cond)
-          Block _ exp _ _                      -> typed (expressionTyp' exp)
-          While invs cond _ _ _                -> typed T.Unit
-                                                  << lift (typeCheckCondType cond)
-                                                  << lift (typeCheckCondTypes invs)
-          Assertion _ cond _ _                 -> typed T.Unit << lift (typeCheckCondType cond)
+          S.Boolean{}                              -> typed T.Boolean
+          S.Integer{}                              -> typed T.Integer
+          S.Double{}                               -> typed T.Double
+          S.Unit{}                                 -> typed T.Unit
+          UnaryOperation op subExp _ _             -> typed =<< unOpType op (expressionTyp' subExp)
+          BinaryOperation Assign left right _ _    -> typed (expressionTyp' left)
+                                                      << checkSuperType (expressionTyp' left) (expressionTyp' right)
+          BinaryOperation op left right _ _        -> typed =<< binOpType op (expressionTyp' left) (expressionTyp' right)
+          Variable name _ _ _                      -> typed =<< varType name
+          Call name args _ _ _                     -> typed =<< funcType name (map expressionTyp' args)
+          Conditional cond thenExp elseExp _ _     -> typed
+                                                      =<< conditionalType (expressionTyp' thenExp) (expressionTyp' elseExp)
+                                                      << lift (typeCheckCondType cond)
+          Block _ exp _ _                          -> typed (expressionTyp' exp)
+          While invs cond _ _ _                    -> typed T.Unit
+                                                      << lift (typeCheckCondType cond)
+                                                      << lift (typeCheckCondTypes invs)
+          Assertion _ cond _ _                     -> typed T.Unit << lift (typeCheckCondType cond)
+          VarDef (TypedVariable _ t _ _) _ exp _ _ -> typed T.Unit << checkSuperType t (expressionTyp' exp)
           where pos = expressionPos exp
                 conditionalType thenType elseType | thenType == elseType = return thenType
                                                   | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
@@ -127,3 +130,8 @@ typeCheckExpressions funcMap program =
                 binOpType op s t = case TypedBinOp op s t `M.lookup` typedBinOps of
                   Nothing -> lift $ unknownBinOp op s t pos
                   Just t  -> return t
+                checkSuperType :: Type -> Type -> ReaderT a (ExceptT Error Identity) ()
+                checkSuperType super sub = if super == sub then
+                                             return ()
+                                           else
+                                             lift $ invalidAssignment super sub pos

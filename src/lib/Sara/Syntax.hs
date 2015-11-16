@@ -27,11 +27,11 @@ class HasNodeMeta a b where
 -- [d:] The metadata used for all nodes.
 data Declaration a b c d
   = Function { signature :: Signature a b c d, body :: Expression a b c d, declMeta :: d }
-  | Extern { signature :: Signature a b c d, declNodeMeta :: d }
+  | Extern { signature :: Signature a b c d, declMeta :: d }
   deriving (Eq, Ord, Show)
 
 instance HasNodeMeta (Declaration a b c d) d where
-  nodeMeta = declNodeMeta
+  nodeMeta = declMeta
 
 -- | Signature with 4 types of metadata:
 -- [a:] The metadata used for signatures and calls.
@@ -98,7 +98,7 @@ data Expression a b c d
   | Conditional { cond :: Expression a b c d, thenExp :: Expression a b c d, elseExp :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | Block { stmts :: [Expression a b c d], inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | While { invariants :: [Expression a b c d], cond :: Expression a b c d, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
-  | VarDef { expName :: Name, isVal :: Bool, inner :: Expression a b c d, expVarMeta :: b, expMeta :: c, expNodeMeta :: d }
+  | VarDef { typedVar :: TypedVariable b d, isVal :: Bool, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   deriving (Eq, Ord, Show)
 
 instance HasExpressionMeta (Expression a b c d) c where

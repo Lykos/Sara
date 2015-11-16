@@ -1,0 +1,6 @@
+// returns 10
+method main(): Integer {
+  val a: Integer = 4;
+  var b: Integer = 6;
+  a + b
+}

@@ -159,6 +159,7 @@ simpleExpression = addExpressionMeta $
                    <|> assert
                    <|> assume
                    <|> assertAndCollapse
+                   <|> varDef
                    <|> try call
                    <|> variable
 
@@ -181,17 +182,6 @@ double :: Parser IncompleteExpression
 double = do
   d <- doubleToken
   return $ S.Double d
-
-variable :: Parser IncompleteExpression
-variable = do
-  var <- identifierToken
-  return $ Variable var ()
-
-call :: Parser IncompleteExpression
-call = do
-  name <- identifierToken
-  args <- parensToken $ commaSep expression
-  return $ Call name args ()
 
 conditional :: Parser IncompleteExpression
 conditional = do
@@ -234,6 +224,25 @@ assertion word kind = do
   keyword word
   cond <- expression
   return $ Assertion kind cond
+
+varDef :: Parser IncompleteExpression
+varDef = do
+  isVal <- (keyword K.Val >> return True) <|> (keyword K.Var >> return False)
+  var <- typedVariable
+  reservedOpToken "="
+  rhs <- expression
+  return $ VarDef var isVal rhs
+
+call :: Parser IncompleteExpression
+call = do
+  name <- identifierToken
+  args <- parensToken $ commaSep expression
+  return $ Call name args ()
+
+variable :: Parser IncompleteExpression
+variable = do
+  var <- identifierToken
+  return $ Variable var ()
 
 bracedExpression :: Parser ParserExpression
 bracedExpression = simplifyBlock <$> addExpressionMeta block

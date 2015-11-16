@@ -18,6 +18,7 @@ module Sara.Errors( ErrorOr
                   , noMain
                   , invalidMainRetType
                   , invalidRetType
+                  , invalidAssignment
                   , impureExpression
                   , invalidMainArgs
                   , redeclaredFunction
@@ -89,6 +90,7 @@ data MismatchType
   = Condition
   | ReturnType
   | MainReturnType
+  | Assignment
   deriving (Eq, Ord, Show)
 
 data RedeclaredElement
@@ -298,6 +300,9 @@ invalidMainArgs = positionedError . MainArgsError
 
 invalidMainRetType :: Monad m => Type -> SourcePos -> ExceptT Error m a
 invalidMainRetType t = positionedError $ TypeMismatchError MainReturnType Ty.Integer t
+
+invalidAssignment :: Monad m => Type -> Type -> SourcePos -> ExceptT Error m a
+invalidAssignment expected actual = positionedError $ TypeMismatchError Assignment expected actual
 
 noMain :: Monad m => ExceptT Error m a
 noMain = throwError NoMain

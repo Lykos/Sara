@@ -118,6 +118,8 @@ prettyUntypedExpression (While invs cond body _ _)           = keyword K.While <
                                                              $+$ conditions K.Invariant invs
                                                              $+$ inBlock (prettyExpression body)
 prettyUntypedExpression (Assertion kind exp _ _)             = assertKeyword kind <+> prettyExpression exp
+prettyUntypedExpression (VarDef tVar isVal exp _ _)          = keyword word <+> prettyTypedVariable tVar <+> equals <+> prettyExpression exp
+  where word = if isVal then K.Val else K.Var
 
 assertKeyword :: AssertionKind -> Doc
 assertKeyword Assert            = keyword K.Assert

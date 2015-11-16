@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternSynonyms #-}
-
 module Sara.Meta where
 
 import Text.Parsec.Pos
@@ -101,5 +99,3 @@ signaturePos = nodePos . S.nodeMeta
 
 declarationPos :: S.Declaration a b c NodeMeta -> SourcePos
 declarationPos = nodePos . S.nodeMeta
-
-pattern Typed t <- (ExpressionMeta t _, _)
