@@ -38,3 +38,8 @@
 - I/O
 - Function symbols without index
 - Use symbols and not names in code generator
+- Use more RecordWildCards
+- Use better type classes for metadata
+- Optional types for expressions
+- Sort imports
+- Information hiding for metadata
