@@ -23,10 +23,8 @@ addPureAnnotations = mapExpressions addAnnotation . mapExpressionMetas changeMet
   where changeMeta :: TypMeta -> ExpressionMeta
         changeMeta = (\(TypMeta t) -> ExpressionMeta t (error "Pure annotation is not defined yet."))
         addAnnotation :: PureCheckerExpression -> PureCheckerExpression
-        addAnnotation exp = exp{ expMeta = (expMeta', m) }
+        addAnnotation exp = exp{ expMeta = expMeta' }
           where expMeta' = ExpressionMeta (expressionTyp exp) (isPureLol exp)
-                m :: NodeMeta
-                m = nodeMeta exp
 
 checkSignatures :: PureCheckerProgram -> ErrorOr ()
 checkSignatures = mapMSignatures_ checkOneSignature

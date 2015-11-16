@@ -14,7 +14,6 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.Trans.State
 import Control.Monad.State.Class as S
-import Data.Bifunctor
 import qualified Sara.Builtins as B
 import qualified Data.Map.Strict as M
 
@@ -45,9 +44,8 @@ symbolizeFunctions :: SymbolizerProgram -> (SymbolizerProgram, FunctionMap)
 symbolizeFunctions prog = runWriter (evalStateT (mapMSignatures symbolizeSignature prog) M.empty)
   where symbolizeSignature :: (MonadState IdMap m, MonadWriter FunctionMap m) => SymbolizerSignature -> m SymbolizerSignature
         symbolizeSignature sig@Signature{..} = do
-          sym <- getNewFunctionSymbol sig
-          tell $ M.singleton (functionKey sig) (sig, sym)
-          let sigMeta' = (first $ const sym) $ sigMeta
+          sigMeta' <- getNewFunctionSymbol sig
+          tell $ M.singleton (functionKey sig) (sig, sigMeta')
           return sig{ sigMeta = sigMeta' }
 
 getNewFunctionSymbol :: MonadState IdMap m => Signature a b c d -> m FunctionMeta
@@ -69,8 +67,7 @@ symbolizeTypedVars :: SymbolizerProgram -> SymbolizerProgram
 symbolizeTypedVars prog = evalState (mapMTypedVariables symbolizeTypedVar prog) M.empty
   where symbolizeTypedVar :: MonadState IdMap m => SymbolizerTypedVariable -> m SymbolizerTypedVariable
         symbolizeTypedVar v@TypedVariable{..} = do
-          sym <- getNewVariableSymbol v
-          let varMeta' = (first $ const sym) $ varMeta
+          varMeta' <- getNewVariableSymbol v
           return $ v{ varMeta = varMeta' }
 
 addUndefinedSymbols :: TypeCheckerProgram -> SymbolizerProgram
@@ -78,7 +75,7 @@ addUndefinedSymbols = mapVariableMetas (const $ error "Accessed undefined variab
                       . mapFunctionMetas (const $ error "Accessed undefined function metadata.")
 
 resultVar :: SymbolizerSignature -> SymbolizerTypedVariable
-resultVar Signature{..} = TypedVariable (B.name B.Result) retType (BuiltinVar retType B.Result, snd sigMeta)
+resultVar Signature{..} = TypedVariable (B.name B.Result) retType (BuiltinVar retType B.Result) sigNodeMeta
 
 symbolize :: TypeCheckerProgram -> SymbolizerProgram
 symbolize prog = runReader
@@ -88,7 +85,7 @@ symbolize prog = runReader
         tVarContextTrans tVar = local $ addVar tVar
         addVar :: SymbolizerTypedVariable -> SymbolizerContext -> SymbolizerContext
         addVar v@TypedVariable{..} context = context{ vars = vars' }
-          where vars' = M.insert (varName) (v, fst varMeta) $ vars context
+          where vars' = M.insert (varName) (v, varMeta) $ vars context
         symbolizeExp :: MonadReader SymbolizerContext m => SymbolizerExpression -> m SymbolizerExpression
         symbolizeExp c@Call{}                           = do
           funcs' <- asks funcs

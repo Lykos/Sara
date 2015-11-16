@@ -20,7 +20,6 @@ module Sara.AstUtils ( mapFunctionMetas
                      , foldMapExpressions
                      , children ) where
 
-import Data.Bifunctor
 import Sara.Syntax
 import Control.Monad.Writer
 import Control.Monad.Identity
@@ -162,50 +161,54 @@ transformSignatureInternal transformer sig@Signature{..} =
     <*> pure retType
     <*> transformConds preconditions
     <*> transformedPosts
-    <*> pure transformedMeta
+    <*> pure transformedSigMeta
+    <*> pure transformedNodeMeta
   where transformConds = mapM transformCond
         transformCond = transformExpressionInternal transformer
-        transformedMeta = first (funcMetaTrans transformer) $ second (nodeMetaTrans transformer) $ sigMeta
+        transformedSigMeta = funcMetaTrans transformer $ sigMeta
+        transformedNodeMeta = nodeMetaTrans transformer $ sigNodeMeta
         transformedPosts = case resultVar transformer of
           Nothing -> transformConds postconditions
           Just v  -> (tVarContextTrans transformer) (v sig) $ transformConds postconditions
 
 transformTypedVariableInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> TypedVariable b d -> m (TypedVariable b' d')
-transformTypedVariableInternal transformer (TypedVariable name typ meta) =
-  tVarTrans transformer $ TypedVariable name typ $ transformedMeta
-  where transformedMeta = first (varMetaTrans transformer) $ second (nodeMetaTrans transformer) $ meta
+transformTypedVariableInternal transformer (TypedVariable name typ varMeta nodeMeta) =
+  tVarTrans transformer $ TypedVariable name typ transformedVarMeta transformedNodeMeta
+  where transformedVarMeta = varMetaTrans transformer varMeta
+        transformedNodeMeta = nodeMetaTrans transformer nodeMeta
 
 -- | Powerful internal function to transform an expression that is used to build up all the exported functions.
 transformExpressionInternal :: Monad m => AstTransformer a b c d a' b' c' d' m -> Expression a b c d -> m (Expression a' b' c' d')
 transformExpressionInternal transformer exp = expTrans transformer =<< transformedExp
     where transformSubExp = transformExpressionInternal transformer
-          transformedExp = transformedExpWithoutMeta <*> pure transformedMeta
-          transformedMeta = first (expMetaTrans transformer) $ second (nodeMetaTrans transformer) $ expMeta exp
+          transformedExp = transformedExpWithoutMeta <*> pure transformedExpMeta <*> pure transformedNodeMeta
+          transformedExpMeta = expMetaTrans transformer $ expMeta exp
+          transformedNodeMeta = nodeMetaTrans transformer $ nodeMeta exp
           transformedExpWithoutMeta = case exp of
-            BinaryOperation op left right _  -> BinaryOperation op <$> transformSubExp left <*> transformSubExp right
-            UnaryOperation op exp _          -> UnaryOperation op <$> transformSubExp exp
-            Conditional cond ifExp elseExp _ -> Conditional <$> transformSubExp cond <*> transformSubExp ifExp <*> transformSubExp elseExp
-            Call name args callMeta _        -> Call name <$> mapM transformSubExp args <*> pure (funcMetaTrans transformer $ callMeta)
-            Block stmts exp _                -> Block <$> mapM transformSubExp stmts <*> transformSubExp exp
-            While invs cond body _           -> While <$> mapM transformSubExp invs <*> transformSubExp cond <*> transformSubExp body
-            Variable name varMeta _          -> return $ Variable name (varMetaTrans transformer $ varMeta)
-            Boolean b _                      -> return $ Boolean b
-            Integer n _                      -> return $ Integer n
-            Double d _                       -> return $ Double d
-            Unit _                           -> return $ Unit
-            Assertion k exp _                -> Assertion k <$> transformSubExp exp
+            BinaryOperation op left right _ _  -> BinaryOperation op <$> transformSubExp left <*> transformSubExp right
+            UnaryOperation op exp _ _          -> UnaryOperation op <$> transformSubExp exp
+            Conditional cond ifExp elseExp _ _ -> Conditional <$> transformSubExp cond <*> transformSubExp ifExp <*> transformSubExp elseExp
+            Call name args callMeta _ _        -> Call name <$> mapM transformSubExp args <*> pure (funcMetaTrans transformer $ callMeta)
+            Block stmts exp _ _                -> Block <$> mapM transformSubExp stmts <*> transformSubExp exp
+            While invs cond body _ _           -> While <$> mapM transformSubExp invs <*> transformSubExp cond <*> transformSubExp body
+            Variable name varMeta _ _          -> return $ Variable name (varMetaTrans transformer $ varMeta)
+            Boolean b _ _                      -> return $ Boolean b
+            Integer n _ _                      -> return $ Integer n
+            Double d _ _                       -> return $ Double d
+            Unit _ _                           -> return $ Unit
+            Assertion k exp _ _                -> Assertion k <$> transformSubExp exp
 
 -- | Returns the direct children of an expression.
 children :: Expression a b c d -> [Expression a b c d]
-children (BinaryOperation _ left right _)   = [left, right]
-children (UnaryOperation _ exp _)           = [exp]
-children (Conditional cond ifExp elseExp _) = [cond, ifExp, elseExp]
-children (Call _ args _ _)                  = args
-children (Block stmts exp _)                = stmts ++ [exp]
-children (While invs cond body _)           = invs ++ [cond, body]
-children Variable{}                         = []
-children Boolean{}                          = []
-children Integer{}                          = []
-children Double{}                           = []
-children Unit{}                             = []
-children (Assertion _ exp _)                = [exp]
+children (BinaryOperation _ left right _ _)   = [left, right]
+children (UnaryOperation _ exp _ _)           = [exp]
+children (Conditional cond ifExp elseExp _ _) = [cond, ifExp, elseExp]
+children (Call _ args _ _ _)                  = args
+children (Block stmts exp _ _)                = stmts ++ [exp]
+children (While invs cond body _ _)           = invs ++ [cond, body]
+children Variable{}                           = []
+children Boolean{}                            = []
+children Integer{}                            = []
+children Double{}                             = []
+children Unit{}                               = []
+children (Assertion _ exp _ _)                = [exp]

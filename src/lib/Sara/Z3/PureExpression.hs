@@ -17,24 +17,24 @@ import Text.Parsec.Pos (SourcePos)
 
 -- | Create an expression and its precondition and postcondition.
 translateExpression :: (MonadState S.SymbolicState m) => PureCheckerExpression -> m CondAst
-translateExpression (S.Boolean b _)                = return $ trivial $ A.BoolConst b
-translateExpression (S.Integer n _)                = return $ trivial $ A.IntConst n
-translateExpression (S.UnaryOperation op e _)      = do
+translateExpression (S.Boolean b _ _)                = return $ trivial $ A.BoolConst b
+translateExpression (S.Integer n _ _)                = return $ trivial $ A.IntConst n
+translateExpression (S.UnaryOperation op e _ _)      = do
   e' <- translateExpression e
   return $ translateUnOp op e'
-translateExpression b@(S.BinaryOperation op l r _) = do
+translateExpression b@(S.BinaryOperation op l r _ _) = do
   l' <- translateExpression l
   r' <- translateExpression r
   -- TODO short circuit
   let pos = expressionPos b
   return $ translateBinOp pos op l' r'
-translateExpression (S.Variable _ m _)             = trivial <$> S.getOrCreateVar m
-translateExpression (S.Conditional c t e _)        = do
+translateExpression (S.Variable _ m _ _)             = trivial <$> S.getOrCreateVar m
+translateExpression (S.Conditional c t e _ _)        = do
   c' <- translateExpression c
   t' <- conditionOn (ast c') <$> translateExpression t
   e' <- conditionOnNot (ast c') <$> translateExpression e
   return $ combine3 A.Ite c' t' e'
-translateExpression c@(S.Call name a m _)          = do
+translateExpression c@(S.Call name a m _ _)          = do
   a' <- mapM translateExpression a
   let results = combineN (A.App (A.AppMeta A.FuncApp m)) a'
   let result = ast results

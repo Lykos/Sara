@@ -32,9 +32,11 @@ symbolicExecuteDecl' :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSp
 symbolicExecuteDecl' (Sy.Function Sy.Signature{..} body _) = do
   setArgs args
   mapM_ (addAssumption <=< symbolicExecutePure) preconditions
-  let expMeta = (ExpressionMeta retType isPure, snd sigMeta)
-  let resultVar = Sy.Variable (B.name B.Result) (BuiltinVar retType B.Result) expMeta
-  let body' = Sy.BinaryOperation Assign resultVar body expMeta
+  let varExpMeta = ExpressionMeta retType True
+  let varMeta = BuiltinVar retType B.Result
+  let resultVar = Sy.Variable (B.name B.Result) varMeta varExpMeta sigNodeMeta
+  let expMeta = ExpressionMeta retType isPure
+  let body' = Sy.BinaryOperation Assign resultVar body expMeta sigNodeMeta
   symbolicExecute body'
   mapM_ addPostcondition postconditions
   collapseAndStop
@@ -53,20 +55,21 @@ collapseAndStop = collapse (error "After collapse and stop, there is no start ty
 
 setArgs :: MonadState SymbolicStateSpace m => [PureCheckerTypedVariable] -> m ()
 setArgs args = mapM_ setArg args
-  where setArg (Sy.TypedVariable name t (m, _)) = assignVar m =<< setNewTmpVar ["arg", name] t (A.Var m)
+  where setArg (Sy.TypedVariable name t m _) = assignVar m =<< setNewTmpVar ["arg", name] t (A.Var m)
 
 symbolicExecute :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m) => PureCheckerExpression -> m ResultTmpVar
 symbolicExecute exp = if expressionPure exp then symbolicExecutePure exp else symbolicExecuteImpure exp
 
 symbolicExecuteImpure :: (MonadWriter [P.ProofPart] m, MonadState SymbolicStateSpace m) => PureCheckerExpression -> m ResultTmpVar
-symbolicExecuteImpure (Sy.Boolean b _)                                             = setNewTmpVar ["boolean"] Boolean $ A.BoolConst b
-symbolicExecuteImpure (Sy.Integer n _)                                             = setNewTmpVar ["integer"] Integer $ A.IntConst n
-symbolicExecuteImpure (Sy.UnaryOperation op e (Typed t))                           = computeTmp1 [show op] t (translateUnOp op) =<< symbolicExecute e
-symbolicExecuteImpure (Sy.BinaryOperation Assign (Sy.Variable _ m _) e _)          = do
+symbolicExecuteImpure (Sy.Boolean b _ _)                                             = setNewTmpVar ["boolean"] Boolean $ A.BoolConst b
+symbolicExecuteImpure (Sy.Integer n _ _)                                             = setNewTmpVar ["integer"] Integer $ A.IntConst n
+symbolicExecuteImpure (Sy.UnaryOperation op e (ExpressionMeta t _) _)                = computeTmp1 [show op] t (translateUnOp op) =<< symbolicExecute e
+symbolicExecuteImpure (Sy.BinaryOperation Assign (Sy.Variable _ m _ _) e _ _)        = do
   e' <- symbolicExecute e
   assignVar m e'
   return e'
-symbolicExecuteImpure (Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r (Typed t)) = do
+symbolicExecuteImpure b@(Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCircuitKind{..}) l r _ _) = do
+  let t = expressionTyp b
   l' <- symbolicExecute l
   let name = show op
   let executionWhenShortCircuit    = shortCircuitExecution ["whenShortCircuit", name] valueWhenPredetermined l'
@@ -75,7 +78,7 @@ symbolicExecuteImpure (Sy.BinaryOperation op@(shortCircuitKind -> Just ShortCirc
   case predeterminedForValue of
     PredeterminedForFalse -> splitStates executionWhenShortCircuit executionWhenNotShortCircuit
     PredeterminedForTrue  -> splitStates executionWhenNotShortCircuit executionWhenShortCircuit
-symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p)) = do
+symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _) (NodeMeta p))  = do
   l' <- symbolicExecute l
   r' <- symbolicExecute r
   result <- computeTmp2 [show op] t (translateBinOp op) l' r'
@@ -85,7 +88,7 @@ symbolicExecuteImpure (Sy.BinaryOperation op l r (ExpressionMeta t _, NodeMeta p
       addProofObligation failureType p proofObl'
     Nothing                      -> return ()
   return result
-symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                        = do
+symbolicExecuteImpure (Sy.Call name args m _ (NodeMeta p))                           = do
   args' <- mapM symbolicExecute args
   let isPure = funcSymPure m
   let t = funcSymRetType m
@@ -98,11 +101,11 @@ symbolicExecuteImpure (Sy.Call name args m (_, NodeMeta p))                     
   addProofObligation failureType p pre
   addAssumption post
   return result
-symbolicExecuteImpure (Sy.Variable _ m _)                                          = return m
-symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (Typed t))              = do
+symbolicExecuteImpure (Sy.Variable _ m _ _)                                          = return m
+symbolicExecuteImpure (Sy.Conditional cond thenExp elseExp (ExpressionMeta t _) _)   = do
   cond' <- symbolicExecute cond
   splitStatesOn ["split", "if"] t cond' (symbolicExecute thenExp) (symbolicExecute elseExp)
-symbolicExecuteImpure (Sy.While invs cond body (_, NodeMeta p))                    = do
+symbolicExecuteImpure (Sy.While invs cond body _ (NodeMeta p))                       = do
   -- Prove the invariant upon entry.
   mapM (addProofObligation E.LoopEntryInvariantViolation p <=< symbolicExecutePure) invs
   collapse AfterLoopEntry p
@@ -125,21 +128,21 @@ symbolicExecuteImpure (Sy.While invs cond body (_, NodeMeta p))                 
   notCond' <- computeTmp1 ["negated", "while", "condition"] Boolean (A.UnOp A.Not) cond''
   addAssumption notCond'
   return $ error "A while loop doesn't have a return value."
-symbolicExecuteImpure (Sy.Assertion Sy.Assume cond _)                               = do
+symbolicExecuteImpure (Sy.Assertion Sy.Assume cond _ _)                               = do
   addAssumption =<< symbolicExecutePure cond
   return $ error "An assert doesn't have a return value."
-symbolicExecuteImpure (Sy.Assertion Sy.Assert cond (_, NodeMeta p))                 = do
+symbolicExecuteImpure (Sy.Assertion Sy.Assert cond _ (NodeMeta p))                    = do
   addProofObligation E.AssertionViolation p =<< symbolicExecutePure cond
   return $ error "An assume doesn't have a return value."
-symbolicExecuteImpure (Sy.Assertion Sy.AssertAndCollapse cond (_, NodeMeta p))      = do
+symbolicExecuteImpure (Sy.Assertion Sy.AssertAndCollapse cond _ (NodeMeta p))         = do
   addProofObligation E.AssertionViolation p =<< symbolicExecutePure cond
   collapse AfterAssertAndCollapse p
   addAssumption =<< symbolicExecutePure cond
   return $ error "An assertAndCollapse doesn't have a return value."
-symbolicExecuteImpure (Sy.Block stmts exp _)                                        = do
+symbolicExecuteImpure (Sy.Block stmts exp _ _)                                        = do
   mapM_ symbolicExecute stmts
   symbolicExecute exp
-symbolicExecuteImpure exp                                                           = error $ "Unsupported expression for verifier: " ++ prettyRender exp
+symbolicExecuteImpure exp                                                             = error $ "Unsupported expression for verifier: " ++ prettyRender exp
 
 symbolicExecutePure :: MonadState SymbolicStateSpace m => PureCheckerExpression -> m ResultTmpVar
 symbolicExecutePure exp = computeToTmpVar ["pure"] (expressionTyp exp) $ do

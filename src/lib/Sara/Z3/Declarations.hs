@@ -21,8 +21,8 @@ import Text.Parsec.Pos
 -- Translates all function definitions.
 translateFunctions :: M.Map A.AppMeta ([VariableMeta], A.Ast) -> PureCheckerProgram -> [(A.AppMeta, ([VariableMeta], A.Ast))]
 translateFunctions contracts = foldMapDeclarations translateFunc
-  where translateFunc S.Function{..} | S.isPure signature = [ (A.AppMeta A.FuncApp (fst $ S.sigMeta signature),
-                                                               (map (fst . S.varMeta) args, translate (nodePos declMeta) args body)) ]
+  where translateFunc S.Function{..} | S.isPure signature = [ (A.AppMeta A.FuncApp (S.sigMeta signature),
+                                                               (map S.varMeta args, translate (nodePos declMeta) args body)) ]
           where args = S.args signature
         translateFunc _                                   = []
         translate pos args exp = A.substituteFuncs contracts $ C.ast $ withInitialState args pos (translateExpression exp)
@@ -33,17 +33,17 @@ translateContracts = M.fromList . foldMapSignatures translateSig
         -- TODO: Use AstWrapper types for precondition and postcondition
   where translateSig S.Signature{..} = [ translateConditions A.PreApp preconditions argSyms
                                        , translateConditions A.PostApp postconditions (resultVar : argSyms) ]
-          where pos = nodePos $ snd sigMeta
+          where pos = nodePos sigNodeMeta
                 resultVar = BuiltinVar retType B.Result
-                argSyms = map (fst . S.varMeta) args
-                translateConditions appKind conditions argSyms = (A.AppMeta appKind $ fst sigMeta,
+                argSyms = map S.varMeta args
+                translateConditions appKind conditions argSyms = (A.AppMeta appKind $ sigMeta,
                                                                   (argSyms, translateN args conditions))
                 translateN args conds = A.NaryOp A.And $ map C.ast $ withInitialState args pos (mapM translateExpression conds)
 
 withInitialState :: [PureCheckerTypedVariable] -> SourcePos -> State S.SymbolicState a -> a
 withInitialState args pos f = evalState (setArgs >> f) initialState
   where initialState = (S.empty pos S.AfterMethodEntry)
-        setArgs = mapM_ (setArg . fst . S.varMeta) args
+        setArgs = mapM_ (setArg . S.varMeta) args
         setArg v = S.setVar v (A.Var v)
 
 -- | Creates function definitions for all functions in the map using a quantified formula for each function.

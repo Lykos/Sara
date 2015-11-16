@@ -4,7 +4,6 @@ import Control.Monad.Except
 import Text.Parsec.Pos
 import qualified Sara.Syntax as S
 import qualified Sara.Errors as E
-import Sara.Types
 import Sara.PrettyPrinter
 import Sara.Meta
 import Sara.AstUtils
@@ -24,15 +23,6 @@ clearSymbols = mapVariableMetas (const ()) . mapFunctionMetas (const ())
 
 mkNodeMeta :: NodeMeta
 mkNodeMeta = NodeMeta position
-
-type ExpMeta = (TypMeta, NodeMeta)
-
-mkExpMeta :: Type -> ExpMeta
-mkExpMeta t = (TypMeta t, NodeMeta position)
-
--- | Creates metadata for nodes that need two types of metadata. One unit metadata and one NodeMetadata.
-mkNodePlusMeta :: ((), NodeMeta)
-mkNodePlusMeta = ((), mkNodeMeta)
 
 testfile :: String
 testfile = "<testfile>"

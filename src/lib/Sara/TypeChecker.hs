@@ -7,7 +7,6 @@ import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
-import Data.Bifunctor
 import qualified Sara.Builtins as B
 import qualified Data.Map.Strict as M
 
@@ -76,7 +75,7 @@ typeCheckCondTypes :: [TypeCheckerExpression] -> ErrorOr ()
 typeCheckCondTypes = mapM_ typeCheckCondType
 
 resultVar :: TypeCheckerSignature -> TypeCheckerTypedVariable
-resultVar Signature{..} = TypedVariable (B.name B.Result) retType ((), snd sigMeta)
+resultVar Signature{..} = TypedVariable (B.name B.Result) retType () sigNodeMeta
 
 typeCheckExpressions :: FunctionMap -> ParserProgram -> ErrorOr TypeCheckerProgram
 typeCheckExpressions funcMap program =
@@ -87,29 +86,27 @@ typeCheckExpressions funcMap program =
         addVar tVar context = context{ vars = vars' }
           where vars' = M.insert (varName tVar) tVar $ vars context
         typeCheckSingleExpression exp = case exp of
-          S.Boolean{}                        -> typed T.Boolean
-          S.Integer{}                        -> typed T.Integer
-          S.Double{}                         -> typed T.Double
-          S.Unit{}                           -> typed T.Unit
-          UnaryOperation op subExp _         -> typed =<< unOpType op (expressionTyp' subExp)
-          BinaryOperation op left right _    -> typed =<< binOpType op (expressionTyp' left) (expressionTyp' right)
-          Variable name _ _                  -> typed =<< varType name
-          Call name args _ _                 -> typed =<< funcType name (map expressionTyp' args)
-          Conditional cond thenExp elseExp _ -> typed
-                                                =<< conditionalType (expressionTyp' thenExp) (expressionTyp' elseExp)
-                                                << lift (typeCheckCondType cond)
-          Block _ exp _                      -> typed (expressionTyp' exp)
-          While invs cond _ _                -> typed T.Unit
-                                                << lift (typeCheckCondType cond)
-                                                << lift (typeCheckCondTypes invs)
-          Assertion _ cond _                 -> typed T.Unit << lift (typeCheckCondType cond)
+          S.Boolean{}                          -> typed T.Boolean
+          S.Integer{}                          -> typed T.Integer
+          S.Double{}                           -> typed T.Double
+          S.Unit{}                             -> typed T.Unit
+          UnaryOperation op subExp _ _         -> typed =<< unOpType op (expressionTyp' subExp)
+          BinaryOperation op left right _ _    -> typed =<< binOpType op (expressionTyp' left) (expressionTyp' right)
+          Variable name _ _ _                  -> typed =<< varType name
+          Call name args _ _ _                 -> typed =<< funcType name (map expressionTyp' args)
+          Conditional cond thenExp elseExp _ _ -> typed
+                                                  =<< conditionalType (expressionTyp' thenExp) (expressionTyp' elseExp)
+                                                  << lift (typeCheckCondType cond)
+          Block _ exp _ _                      -> typed (expressionTyp' exp)
+          While invs cond _ _ _                -> typed T.Unit
+                                                  << lift (typeCheckCondType cond)
+                                                  << lift (typeCheckCondTypes invs)
+          Assertion _ cond _ _                 -> typed T.Unit << lift (typeCheckCondType cond)
           where pos = expressionPos exp
                 conditionalType thenType elseType | thenType == elseType = return thenType
                                                   | otherwise            = lift $ mismatchingCondTypes thenType elseType pos
                 typed :: Type -> ReaderT TypeCheckerContext (ExceptT Error Identity) TypeCheckerExpression
-                typed t = return exp{ expMeta = meta' }
-                  where meta' :: (TypMeta, NodeMeta)
-                        meta' = first (const $ TypMeta t) (expMeta exp)
+                typed t = return exp{ expMeta = TypMeta t }
                 varType :: Name -> ReaderT TypeCheckerContext (ExceptT Error Identity) Type
                 varType name = do
                   vars' <- asks vars

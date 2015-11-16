@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Sara.PrettyPrinter (
   Pretty
   , pretty
@@ -47,12 +49,12 @@ prettyFunction :: Signature a b c d -> Expression a b c d -> Doc
 prettyFunction sig body = prettySignature sig $+$ inBlock (prettyExpression body)
 
 prettySignature :: Signature a b c d -> Doc
-prettySignature (Signature pure name args retType preconditions postconditions _) = prettyTyped sig retType
-                                                                                    $+$ conditions K.Requires preconditions
-                                                                                    $+$ conditions K.Ensures postconditions
-  where sig = keyword word <+> text name
+prettySignature Signature{..} = prettyTyped sig retType
+                                $+$ conditions K.Requires preconditions
+                                $+$ conditions K.Ensures postconditions
+  where sig = keyword word <+> text sigName
               <> (parens . hsep . punctuate comma . map prettyTypedVariable) args
-        word = if pure then K.Function else K.Method
+        word = if isPure then K.Function else K.Method
 
 conditions :: K.Keyword -> [Expression a b c d] -> Doc
 conditions word conds = nest (2 * indentation) $ vsep $ punctuate semi $ map toCond $ conds
@@ -64,7 +66,7 @@ prettyTyped doc typ     = doc
                           <+> prettyType typ
 
 prettyTypedVariable :: TypedVariable b d -> Doc
-prettyTypedVariable (TypedVariable name typ _) = prettyTyped (text name) typ
+prettyTypedVariable TypedVariable{..} = prettyTyped (text varName) varType
 
 prettyType :: Type -> Doc
 prettyType = text . show
@@ -91,31 +93,31 @@ prettyUntypedTerm exp = case exp of
   _                -> prettyBinaryTerm exp
 
 prettyUntypedExpression :: Expression a b c d -> Doc
-prettyUntypedExpression S.Unit{}                           = text "()"
-prettyUntypedExpression (S.Boolean True _)                 = keyword K.True
-prettyUntypedExpression (S.Boolean False _)                = keyword K.False
-prettyUntypedExpression (S.Integer n _)                    = integer n
-prettyUntypedExpression (S.Double d _)                     = double d
-prettyUntypedExpression (UnaryOperation op exp _)          = (text . unarySymbol $ op)
+prettyUntypedExpression S.Unit{}                             = text "()"
+prettyUntypedExpression (S.Boolean True _ _)                 = keyword K.True
+prettyUntypedExpression (S.Boolean False _ _)                = keyword K.False
+prettyUntypedExpression (S.Integer n _ _)                    = integer n
+prettyUntypedExpression (S.Double d _ _)                     = double d
+prettyUntypedExpression (UnaryOperation op exp _ _)          = (text . unarySymbol $ op)
                                                              <> prettyTerm exp
-prettyUntypedExpression (BinaryOperation op left right _)  = prettyBinaryTerm left
+prettyUntypedExpression (BinaryOperation op left right _ _)  = prettyBinaryTerm left
                                                              <+> (text . binarySymbol $ op)
                                                              <+> prettyBinaryTerm right
-prettyUntypedExpression (Variable var _ _)                 = text var
-prettyUntypedExpression (Call name args _ _)               = text name
+prettyUntypedExpression (Variable var _ _ _)                 = text var
+prettyUntypedExpression (Call name args _ _ _)               = text name
                                                              <> (parens . hsep . punctuate comma . map prettyExpression) args
-prettyUntypedExpression (Conditional cond ifExp elseExp _) = keyword K.If
+prettyUntypedExpression (Conditional cond ifExp elseExp _ _) = keyword K.If
                                                              <+> prettyExpression cond
                                                              <+> keyword K.Then
                                                              <+> prettyExpression ifExp
                                                              <+> keyword K.Else
                                                              <+> prettyExpression elseExp
-prettyUntypedExpression (Block [] S.Unit{} _)              = text "{}"  -- This special case is necessary to make the pretty printer the inverse of the parser.
-prettyUntypedExpression (Block stmts exp _)                = inBlock (vsep . punctuate semi . map prettyExpression $ stmts ++ [exp])
-prettyUntypedExpression (While invs cond body _)           = keyword K.While <+> parens (prettyExpression cond)
+prettyUntypedExpression (Block [] S.Unit{} _ _)              = text "{}"  -- This special case is necessary to make the pretty printer the inverse of the parser.
+prettyUntypedExpression (Block stmts exp _ _)                = inBlock (vsep . punctuate semi . map prettyExpression $ stmts ++ [exp])
+prettyUntypedExpression (While invs cond body _ _)           = keyword K.While <+> parens (prettyExpression cond)
                                                              $+$ conditions K.Invariant invs
                                                              $+$ inBlock (prettyExpression body)
-prettyUntypedExpression (Assertion kind exp _)             = assertKeyword kind <+> prettyExpression exp
+prettyUntypedExpression (Assertion kind exp _ _)             = assertKeyword kind <+> prettyExpression exp
 
 assertKeyword :: AssertionKind -> Doc
 assertKeyword Assert            = keyword K.Assert

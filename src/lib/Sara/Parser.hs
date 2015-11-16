@@ -42,7 +42,7 @@ signature = do
   retType <- typeExpression
   precs <- conditions K.Requires
   posts <- conditions K.Ensures
-  return $ Signature pure name args retType precs posts $ mkExpMeta pos
+  return $ Signature pure name args retType precs posts () $ NodeMeta pos
 
 pureKeyword :: Parser Bool
 pureKeyword = (keyword K.Function >> return True)
@@ -63,7 +63,7 @@ typedVariable = do
   name <- identifierToken
   colon
   varType <- typeExpression
-  return $ TypedVariable name varType $ mkExpMeta pos
+  return $ TypedVariable name varType () $ NodeMeta pos
 
 typeExpression :: Parser Type
 typeExpression = unitType
@@ -123,16 +123,16 @@ unaryOperator operator = Expr.Prefix (operation (unarySymbol operator) (unaryOpe
 binaryOperator :: BinaryOperator -> Expr.Assoc -> Expr.Operator String () Data.Functor.Identity.Identity ParserExpression
 binaryOperator operator = Expr.Infix (operation (binarySymbol operator) (binaryOperation operator))
 
-operation :: String -> (ExpMeta -> a) -> Parser a
-operation symbol op = addExpressionMeta $ do
+operation :: String -> (NodeMeta -> a) -> Parser a
+operation symbol op = addNodeMeta $ do
   reservedOpToken symbol
   return op
 
-unaryOperation :: UnaryOperator -> ExpMeta -> ParserExpression -> ParserExpression
-unaryOperation op meta exp = UnaryOperation op exp meta
+unaryOperation :: UnaryOperator -> NodeMeta -> ParserExpression -> ParserExpression
+unaryOperation op meta exp = UnaryOperation op exp () meta
 
-binaryOperation :: BinaryOperator -> ExpMeta -> ParserExpression -> ParserExpression -> ParserExpression
-binaryOperation op meta left right = BinaryOperation op left right meta
+binaryOperation :: BinaryOperator -> NodeMeta -> ParserExpression -> ParserExpression -> ParserExpression
+binaryOperation op meta left right = BinaryOperation op left right () meta
 
 term :: Parser ParserExpression
 term = simpleExpression
@@ -144,11 +144,8 @@ addNodeMeta parser = do
   ast <- parser
   return $ ast $ NodeMeta pos
 
-addExpressionMeta :: Parser (ExpMeta -> a) -> Parser a
-addExpressionMeta parser = do
-  pos <- getPosition
-  ast <- parser
-  return $ ast $ mkExpMeta pos
+addExpressionMeta :: Parser (Incomplete a) -> Parser a
+addExpressionMeta parser = addNodeMeta $ parser <*> pure ()
 
 simpleExpression :: Parser ParserExpression
 simpleExpression = addExpressionMeta $
@@ -165,41 +162,38 @@ simpleExpression = addExpressionMeta $
                    <|> try call
                    <|> variable
 
-type ExpMeta = ((), NodeMeta)
-type UntypedExpression = ExpMeta -> ParserExpression
+type Incomplete a = () -> NodeMeta -> a
+type IncompleteExpression = Incomplete ParserExpression
 
-mkExpMeta :: SourcePos -> ExpMeta
-mkExpMeta pos = ((), NodeMeta pos)
-
-unit :: Parser UntypedExpression
+unit :: Parser IncompleteExpression
 unit = L.symbol "()" >> return S.Unit
 
-boolean :: Parser UntypedExpression
+boolean :: Parser IncompleteExpression
 boolean = (keyword K.True >> return (S.Boolean True))
           <|> (keyword K.False >> return (S.Boolean False))
 
-integer :: Parser UntypedExpression
+integer :: Parser IncompleteExpression
 integer = do
   n <- integerToken
   return $ S.Integer n
 
-double :: Parser UntypedExpression
+double :: Parser IncompleteExpression
 double = do
   d <- doubleToken
   return $ S.Double d
 
-variable :: Parser UntypedExpression
+variable :: Parser IncompleteExpression
 variable = do
   var <- identifierToken
   return $ Variable var ()
 
-call :: Parser UntypedExpression
+call :: Parser IncompleteExpression
 call = do
   name <- identifierToken
   args <- parensToken $ commaSep expression
   return $ Call name args ()
 
-conditional :: Parser UntypedExpression
+conditional :: Parser IncompleteExpression
 conditional = do
   keyword K.If
   cond <- expression
@@ -209,16 +203,16 @@ conditional = do
   thenExpr <- expression
   return $ Conditional cond ifExpr thenExpr
 
-block :: Parser UntypedExpression
+block :: Parser IncompleteExpression
 block = do
   pos <- getPosition
   exps <- bracesToken $ semiSep expression
   return $ if null exps then
-             Block [] (S.Unit $ mkExpMeta pos)
+             Block [] (S.Unit () $ NodeMeta pos)
            else
              Block (init exps) (last exps)
 
-while :: Parser UntypedExpression
+while :: Parser IncompleteExpression
 while = do
   keyword K.While
   cond <- parensToken $ expression
@@ -226,16 +220,16 @@ while = do
   body <- bracedExpression
   return $ While invs cond body
 
-assert :: Parser UntypedExpression
+assert :: Parser IncompleteExpression
 assert = assertion K.Assert Assert
 
-assume :: Parser UntypedExpression
+assume :: Parser IncompleteExpression
 assume = assertion K.Assume Assume
 
-assertAndCollapse :: Parser UntypedExpression
+assertAndCollapse :: Parser IncompleteExpression
 assertAndCollapse = assertion K.AssertAndCollapse AssertAndCollapse
 
-assertion :: K.Keyword -> AssertionKind -> Parser UntypedExpression
+assertion :: K.Keyword -> AssertionKind -> Parser IncompleteExpression
 assertion word kind = do
   keyword word
   cond <- expression
@@ -244,8 +238,8 @@ assertion word kind = do
 bracedExpression :: Parser ParserExpression
 bracedExpression = simplifyBlock <$> addExpressionMeta block
   where simplifyBlock :: ParserExpression -> ParserExpression
-        simplifyBlock (Block [] e _) = e
-        simplifyBlock b              = b
+        simplifyBlock (Block [] e _ _) = e
+        simplifyBlock b                = b
 
 contents :: Parser a -> Parser a
 contents p = do

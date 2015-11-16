@@ -157,7 +157,7 @@ define :: PureCheckerSignature -> [BasicBlock] -> LLVM ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
-  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _) <- args], False)
+  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _ _) <- args], False)
   , returnType  = typ retty
   , basicBlocks = body
   }
@@ -394,34 +394,34 @@ shortCircuit name ShortCircuitKind{..} left right = do
 
 codegenExpression :: PureCheckerExpression -> Codegen Operand
 codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
-  S.Unit{}                             -> unit
-  (S.Boolean b _)                      -> boolean b
-  (S.Integer n _)                      -> integer n
-  (S.Double d _)                       -> double d
-  (S.UnaryOperation op exp _)          -> do
+  S.Unit{}                               -> unit
+  (S.Boolean b _ _)                      -> boolean b
+  (S.Integer n _ _)                      -> integer n
+  (S.Double d _ _)                       -> double d
+  (S.UnaryOperation op exp _ _)          -> do
     let op' = unaryInstruction (T.TypedUnOp op (expressionTyp exp))
     exp' <- codegenExpression exp
     op' exp' t'
-  (S.BinaryOperation Assign var val _) -> do
+  (S.BinaryOperation Assign var val _ _) -> do
     let name = case var of
-          (S.Variable name _ _) -> name
+          (S.Variable name _ _ _) -> name
           _                     -> error $ "Unsupported assignment lhs " ++ show var ++ "."
     var' <- getVar name
     val' <- codegenExpression val
     store var' val' t'
-  (S.BinaryOperation op@(shortCircuitKind -> Just kind) left right _) -> shortCircuit (show op) kind left right
-  (S.BinaryOperation op left right _)  -> do
+  (S.BinaryOperation op@(shortCircuitKind -> Just kind) left right _ _) -> shortCircuit (show op) kind left right
+  (S.BinaryOperation op left right _ _)  -> do
     let op' = binaryInstruction (T.TypedBinOp op (expressionTyp left) (expressionTyp right))
     left' <- codegenExpression left
     right' <- codegenExpression right
     op' left' right' t'
-  (S.Variable name _ _)                -> do
+  (S.Variable name _ _ _)                -> do
     var' <- getVar name
     load var' t'
-  (S.Call name args _ _)               -> do
+  (S.Call name args _ _ _)               -> do
     args' <- mapM codegenExpression args
     call name args' t'
-  (S.Conditional cond ifExp elseExp _) -> do
+  (S.Conditional cond ifExp elseExp _ _) -> do
     ifBlock <- addBlock "if.then"
     elseBlock <- addBlock "if.else"
     exitBlock <- addBlock "if.exit"
@@ -441,10 +441,10 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
 
     setBlock exitBlock
     phi [(ifVal, ifBlock), (elseVal, elseBlock)] t'
-  (S.Block stmts exp _)                -> do
+  (S.Block stmts exp _ _)                -> do
     mapM codegenExpression stmts
     codegenExpression exp
-  (S.While _ cond body _)              -> do
+  (S.While _ cond body _ _)              -> do
     whileBlock <- addBlock "while.body"
     exitBlock <- addBlock "while.exit"
     
@@ -458,4 +458,4 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
 
     setBlock exitBlock
     unit
-  S.Assertion{}                        -> unit
+  S.Assertion{}                          -> unit
