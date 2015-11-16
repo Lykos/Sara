@@ -45,3 +45,7 @@ Main workflow:
 - Higher order functions
 - Standard library
 - Optional types for expressions
+- Make variable symbol only dependent on scopes.
+- Check that vardefs are not used as expressions.
+- Check that vardefs are not used as expressions.
+- Check that vals are not reassigned
