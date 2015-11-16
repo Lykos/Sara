@@ -1,1 +1,33 @@
+- Commandline Options
+- Extern
+- Write README
+- Long arithmetic
+- Optimizations for long arithmetic
+- Function pointers
+- Generated tests for errors
+- Optional semicolons
+- Remove Unit expressions at some point after the type checker
+- More LLVM annotations
+- Syntactic sugar
+- Optional semicolons
+- Structs
+- Vars/Vals
+- mutable type system
+- Generics
+- Arrays
+- Classes
+- Dynamic method calls
+- Traits
+- Pattern Matching
+- Uniform Access principle
+- Split pure and non-pure expressions
+- Garbage collector
+- Type symbols
+- Verifier tests
+- Better error messages for precondition failures
+- Suggestions for verifier errors
+- Consistency checks for assumptions/proof obligations
+- Framing
+- Casts
+- Use monad classes everywhere
 - Pretty print metadata.
