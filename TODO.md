@@ -30,4 +30,11 @@
 - Framing
 - Casts
 - Use monad classes everywhere
-- Pretty print metadata.
+- Pretty print metadata
+- Split directory structure
+- custom operators
+- Tuples
+- Standard library
+- I/O
+- Function symbols without index
+- Use symbols and not names in code generator
