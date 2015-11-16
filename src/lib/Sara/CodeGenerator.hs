@@ -31,7 +31,7 @@ import qualified LLVM.General.AST.CallingConvention as CC
 import qualified LLVM.General.AST.IntegerPredicate as IP
 import qualified LLVM.General.AST.FloatingPointPredicate as FP
 
-type SymbolTable = [(String, Operand)] --M.Map VariableMeta Operand
+type SymbolTable = M.Map VariableMeta Operand
 
 data CodegenState
   = CodegenState {
@@ -77,7 +77,7 @@ emptyBlock :: Int -> BlockState
 emptyBlock i = BlockState i [] Nothing
 
 emptyCodegen :: CodegenState
-emptyCodegen = CodegenState (Name entryBlockName) M.empty [] 1 0 M.empty
+emptyCodegen = CodegenState (Name entryBlockName) M.empty M.empty 1 0 M.empty
 
 execCodegen :: State CodegenState a -> CodegenState
 execCodegen m = execState m emptyCodegen
@@ -149,7 +149,7 @@ define :: MonadState Module m => PureCheckerSignature -> [BasicBlock] -> m ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
-  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _ _) <- args], False)
+  , parameters  = ([Parameter (typ ty) (varMetaName m) [] | (S.TypedVariable _ ty m _) <- args], False)
   , returnType  = typ retty
   , basicBlocks = body
   }
@@ -160,15 +160,15 @@ extern = flip define []
 local :: Name ->  Type -> Operand
 local = flip LocalReference
 
-assign :: MonadState CodegenState m => String -> Operand -> m ()
+assign :: MonadState CodegenState m => VariableMeta -> Operand -> m ()
 assign var x = do
   lcls <- gets symtab
-  modify $ \s -> s{ symtab = (var, x) : lcls }
+  modify $ \s -> s{ symtab = M.insert var x lcls }
 
-getVar :: MonadState CodegenState m => String -> m Operand
+getVar :: MonadState CodegenState m => VariableMeta -> m Operand
 getVar var = do
   syms <- gets symtab
-  case lookup var syms of
+  case M.lookup var syms of
     Just x  -> return x
     Nothing -> error $ "Local variable not in scope: " ++ show var
 
@@ -227,12 +227,16 @@ codegenFunction signature body = define signature bls
       entry <- addBlock entryBlockName
       setBlock entry
       forM_ (S.args signature) $ \arg -> do
-        let name = S.varName arg
+        let meta = S.varMeta arg
         let t = typ $ S.varType arg
         var <- alloca t
-        store var (local (Name name) t) t
-        assign name var
+        store var (local (varMetaName meta) t) t
+        assign meta var
       codegenExpression body >>= ret
+
+varMetaName :: VariableMeta -> Name
+varMetaName (VariableMeta _ name index) = Name $ name ++ show index
+varMetaName (BuiltinVar _ e)            = error $ "No code generation for builtin variable " ++ show e ++ " supported."
 
 codegenProgram :: MonadState Module m => PureCheckerProgram -> m ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
@@ -395,10 +399,10 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     exp' <- codegenExpression exp
     op' exp' t'
   (S.BinaryOperation Assign var val _ _) -> do
-    let name = case var of
-          (S.Variable name _ _ _) -> name
-          _                     -> error $ "Unsupported assignment lhs " ++ show var ++ "."
-    var' <- getVar name
+    let m = case var of
+          (S.Variable _ m _ _) -> m
+          _                       -> error $ "Unsupported assignment lhs " ++ show var ++ "."
+    var' <- getVar m
     val' <- codegenExpression val
     store var' val' t'
   (S.BinaryOperation op@(shortCircuitKind -> Just kind) left right _ _) -> shortCircuit (show op) kind left right
@@ -407,8 +411,8 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     left' <- codegenExpression left
     right' <- codegenExpression right
     op' left' right' t'
-  (S.Variable name _ _ _)                -> do
-    var' <- getVar name
+  (S.Variable _ m _ _)                   -> do
+    var' <- getVar m
     load var' t'
   (S.Call name args _ _ _)               -> do
     args' <- mapM codegenExpression args
