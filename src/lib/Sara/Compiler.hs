@@ -11,6 +11,7 @@ import Sara.Meta
 import Sara.Z3.Verifier
 
 import qualified Z3.Monad as Z3
+import Z3.Opts
 import Control.Monad.Identity
 import Control.Monad.Except
 import Data.Int
@@ -80,7 +81,8 @@ checkStage :: (PureCheckerProgram -> IO ()) -> ParserProgram -> ErrorOrIO PureCh
 checkStage report program = stage report $ toErrorOrIO $ checkWithMain program
 
 verifyStage :: PureCheckerProgram -> ErrorOrIO ()
-verifyStage prog = ExceptT $ Z3.evalZ3 (runExceptT $ verify prog)
+verifyStage prog = ExceptT $ Z3.evalZ3With Nothing opts (runExceptT $ verify prog)
+  where opts = stdOpts +? opt "auto_config" False
 
 compile' :: Bool -> (Context -> M.Module -> IO (Either Error a)) -> Reporter -> Module -> String -> String -> ErrorOrIO a
 compile' verify moduleReporter reporter mod filename input = do
