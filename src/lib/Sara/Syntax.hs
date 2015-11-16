@@ -98,6 +98,7 @@ data Expression a b c d
   | Conditional { cond :: Expression a b c d, thenExp :: Expression a b c d, elseExp :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | Block { stmts :: [Expression a b c d], inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | While { invariants :: [Expression a b c d], cond :: Expression a b c d, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
+  | VarDef { expName :: Name, isVal :: Bool, inner :: Expression a b c d, expVarMeta :: b, expMeta :: c, expNodeMeta :: d }
   deriving (Eq, Ord, Show)
 
 instance HasExpressionMeta (Expression a b c d) c where
