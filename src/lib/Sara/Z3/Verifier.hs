@@ -20,8 +20,18 @@ generateProofParts :: MonadZ3 m => PureCheckerProgram -> m [P.ProofPart]
 generateProofParts prog = do
   execWriterT (mapMDeclarations_ symbolicExecuteDecl prog)
 
+setParams :: MonadZ3 m => m ()
+setParams = do
+  params <- mkParams
+  mbqi <- mkStringSymbol "mbqi"
+  paramsSetBool params mbqi False
+  solverSetParams params
+  s <- paramsToString params
+  liftIO $ putStrLn s
+
 verify :: MonadZ3 m => PureCheckerProgram -> ExceptT Error m ()
 verify prog = do
+  setParams
   let contracts = translateContracts prog
   proofParts <- generateProofParts prog
   let proofParts' = map (P.substituteFuncs contracts) proofParts
