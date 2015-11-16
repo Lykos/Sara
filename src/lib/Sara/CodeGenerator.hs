@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Sara.CodeGenerator ( codegen
                           , PredeterminedForValue(..)
@@ -16,9 +17,9 @@ import Sara.Meta
 import Data.Word
 import Data.List
 import Data.Function
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
-import Control.Monad.State
+import Control.Monad.State.Strict
 
 import LLVM.General.AST
 import LLVM.General.AST.Global
@@ -30,12 +31,12 @@ import qualified LLVM.General.AST.CallingConvention as CC
 import qualified LLVM.General.AST.IntegerPredicate as IP
 import qualified LLVM.General.AST.FloatingPointPredicate as FP
 
-type SymbolTable = [(String, Operand)]
+type SymbolTable = M.Map VariableMeta Operand
 
 data CodegenState
   = CodegenState {
     currentBlock :: Name                     -- Name of the active block to append to
-  , blocks       :: Map.Map Name BlockState  -- Blocks for function
+  , blocks       :: M.Map Name BlockState  -- Blocks for function
   , symtab       :: SymbolTable              -- Function scope symbol table
   , blockCount   :: Int                      -- Count of basic blocks
   , count        :: Word                     -- Count of unnamed instructions
@@ -49,19 +50,10 @@ data BlockState
   , term  :: Maybe (Named Terminator)       -- Block terminator
   } deriving Show
 
-newtype Codegen a = Codegen { runCodegen :: State CodegenState a }
-  deriving (Functor, Applicative, Monad, MonadState CodegenState)
-  
-newtype LLVM a = LLVM { unLLVM :: State Module a }
-  deriving (Functor, Applicative, Monad, MonadState Module)
-
-runLLVM :: Module -> LLVM a -> Module
-runLLVM = flip (execState . unLLVM)
-
 emptyModule :: String -> Module
 emptyModule label = defaultModule { moduleName = label }
 
-addDefn :: Definition -> LLVM ()
+addDefn :: MonadState Module m => Definition -> m ()
 addDefn d = do
   defs <- gets moduleDefinitions
   modify $ \s -> s { moduleDefinitions = defs ++ [d] }
@@ -70,7 +62,7 @@ sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
 sortBlocks = sortBy (compare `on` (idx . snd))
 
 createBlocks :: CodegenState -> [BasicBlock]
-createBlocks m = map makeBlock $ sortBlocks $ Map.toList (blocks m)
+createBlocks m = map makeBlock $ sortBlocks $ M.toList (blocks m)
 
 makeBlock :: (Name, BlockState) -> BasicBlock
 makeBlock (l, BlockState _ s t) = BasicBlock l s (maketerm t)
@@ -85,12 +77,12 @@ emptyBlock :: Int -> BlockState
 emptyBlock i = BlockState i [] Nothing
 
 emptyCodegen :: CodegenState
-emptyCodegen = CodegenState (Name entryBlockName) Map.empty [] 1 0 Map.empty
+emptyCodegen = CodegenState (Name entryBlockName) M.empty M.empty 1 0 M.empty
 
-execCodegen :: Codegen a -> CodegenState
-execCodegen m = execState (runCodegen m) emptyCodegen
+execCodegen :: State CodegenState a -> CodegenState
+execCodegen m = execState m emptyCodegen
 
-addBlock :: String -> Codegen Name
+addBlock :: MonadState CodegenState m => String -> m Name
 addBlock bname = do
   bls <- gets blocks
   ix  <- gets blockCount
@@ -99,44 +91,44 @@ addBlock bname = do
   let new = emptyBlock ix
       (qname, supply) = uniqueName bname nms
 
-  modify $ \s -> s { blocks = Map.insert (Name qname) new bls
+  modify $ \s -> s { blocks = M.insert (Name qname) new bls
                    , blockCount = ix + 1
                    , names = supply }
   return (Name qname)
 
-setBlock :: Name -> Codegen Name
+setBlock :: MonadState CodegenState m => Name -> m Name
 setBlock bname = do
   modify $ \s -> s { currentBlock = bname }
   return bname
 
-getBlock :: Codegen Name
+getBlock :: MonadState CodegenState m => m Name
 getBlock = gets currentBlock
 
-modifyBlock :: BlockState -> Codegen ()
+modifyBlock :: MonadState CodegenState m => BlockState -> m ()
 modifyBlock new = do
   active <- gets currentBlock
-  modify $ \s -> s { blocks = Map.insert active new (blocks s) }
+  modify $ \s -> s { blocks = M.insert active new (blocks s) }
 
-current :: Codegen BlockState
+current :: MonadState CodegenState m => m BlockState
 current = do
   c <- gets currentBlock
   blks <- gets blocks
-  case Map.lookup c blks of
+  case M.lookup c blks of
     Just x -> return x
     Nothing -> error $ "No such block: " ++ show c
 
-newTmpName :: Codegen Word
+newTmpName :: MonadState CodegenState m => m Word
 newTmpName = do
   i <- gets count
   modify $ \s -> s { count = i + 1 }
   return $ i + 1
 
-type Names = Map.Map String Int
+type Names = M.Map String Int
 
 uniqueName :: String -> Names -> (String, Names)
-uniqueName nm ns = case Map.lookup nm ns of
-  Nothing -> (nm,  Map.insert nm 1 ns)
-  Just ix -> (nm ++ show ix, Map.insert nm (ix+1) ns)
+uniqueName nm ns = case M.lookup nm ns of
+  Nothing -> (nm,  M.insert nm 1 ns)
+  Just ix -> (nm ++ show ix, M.insert nm (ix+1) ns)
 
 booleanBits :: Word32
 booleanBits = 1
@@ -153,34 +145,34 @@ typ T.Double  = FloatingPointType 64 IEEE
 booleanType :: Type
 booleanType = typ T.Boolean
 
-define :: PureCheckerSignature -> [BasicBlock] -> LLVM ()
+define :: MonadState Module m => PureCheckerSignature -> [BasicBlock] -> m ()
 define S.Signature{ S.sigName = label, S.args = args, S.retType = retty } body = addDefn $
   GlobalDefinition $ functionDefaults {
     name        = Name label
-  , parameters  = ([Parameter (typ ty) (Name nm) [] | (S.TypedVariable nm ty _ _) <- args], False)
+  , parameters  = ([Parameter (typ ty) (varMetaName m) [] | (S.TypedVariable _ ty m _) <- args], False)
   , returnType  = typ retty
   , basicBlocks = body
   }
 
-extern :: PureCheckerSignature -> LLVM ()
+extern :: MonadState Module m => PureCheckerSignature -> m ()
 extern = flip define []
 
 local :: Name ->  Type -> Operand
 local = flip LocalReference
 
-assign :: String -> Operand -> Codegen ()
+assign :: MonadState CodegenState m => VariableMeta -> Operand -> m ()
 assign var x = do
   lcls <- gets symtab
-  modify $ \s -> s { symtab = (var, x) : lcls }
+  modify $ \s -> s{ symtab = M.insert var x lcls }
 
-getVar :: String -> Codegen Operand
+getVar :: MonadState CodegenState m => VariableMeta -> m Operand
 getVar var = do
   syms <- gets symtab
-  case lookup var syms of
+  case M.lookup var syms of
     Just x  -> return x
     Nothing -> error $ "Local variable not in scope: " ++ show var
 
-instr :: Instruction -> Type -> Codegen Operand
+instr :: MonadState CodegenState m => Instruction -> Type -> m Operand
 instr ins t = do
   n   <- newTmpName
   blk <- current
@@ -189,64 +181,68 @@ instr ins t = do
   modifyBlock $ blk { stack = i ++ [ref := ins] }
   return $ local ref t
 
-terminator :: Named Terminator -> Codegen (Named Terminator)
+terminator :: MonadState CodegenState m => Named Terminator -> m (Named Terminator)
 terminator trm = do
   blk <- current
   modifyBlock $ blk { term = Just trm }
   return trm
 
-br :: Name -> Codegen (Named Terminator)
+br :: MonadState CodegenState m => Name -> m (Named Terminator)
 br val = terminator $ Do $ Br val []
 
-cbr :: Operand -> Name -> Name -> Codegen (Named Terminator)
+cbr :: MonadState CodegenState m => Operand -> Name -> Name -> m (Named Terminator)
 cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
 
-phi :: [(Operand, Name)] -> Type -> Codegen Operand
+phi :: MonadState CodegenState m => [(Operand, Name)] -> Type -> m Operand
 phi incoming ty = (instr $ Phi ty incoming []) ty
 
-ret :: Operand -> Codegen (Named Terminator)
+ret :: MonadState CodegenState m => Operand -> m (Named Terminator)
 ret val = terminator $ Do $ Ret (Just val) []
 
-call :: S.Name -> [Operand] -> Type -> Codegen Operand
+call :: MonadState CodegenState m => S.Name -> [Operand] -> Type -> m Operand
 call name args retType = (instr $ Call Nothing CC.C [] (Right fn) (toArgs args) [] []) retType
   where fn = ConstantOperand $ C.GlobalReference retType $ Name name
         toArgs :: [Operand] -> [(Operand, [A.ParameterAttribute])]
         toArgs = map (\x -> (x, []))
 
-alloca :: Type -> Codegen Operand
+alloca :: MonadState CodegenState m => Type -> m Operand
 alloca ty = (instr $ Alloca ty Nothing 0 []) ty
 
-store :: Operand -> Operand -> Type -> Codegen Operand
+store :: MonadState CodegenState m => Operand -> Operand -> Type -> m Operand
 store ptr val = instr $ Store False ptr val Nothing 0 []
 
-load :: Operand -> Type -> Codegen Operand
+load :: MonadState CodegenState m => Operand -> Type -> m Operand
 load ptr = instr $ Load False ptr Nothing 0 []
 
-codegenDeclaration :: PureCheckerDeclaration -> LLVM ()
+codegenDeclaration :: MonadState Module m => PureCheckerDeclaration -> m ()
 codegenDeclaration (S.Extern sig _)        = extern sig
 codegenDeclaration (S.Function sig body _) = do
   f <- codegenFunction sig body
   return f
 
-codegenFunction :: PureCheckerSignature -> PureCheckerExpression -> LLVM ()
+codegenFunction :: MonadState Module m => PureCheckerSignature -> PureCheckerExpression -> m ()
 codegenFunction signature body = define signature bls
   where
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName
       setBlock entry
       forM_ (S.args signature) $ \arg -> do
-        let name = S.varName arg
+        let meta = S.varMeta arg
         let t = typ $ S.varType arg
         var <- alloca t
-        store var (local (Name name) t) t
-        assign name var
+        store var (local (varMetaName meta) t) t
+        assign meta var
       codegenExpression body >>= ret
 
-codegenProgram :: PureCheckerProgram -> LLVM ()
+varMetaName :: VariableMeta -> Name
+varMetaName (VariableMeta _ name index) = Name $ name ++ show index
+varMetaName (BuiltinVar _ e)            = error $ "No code generation for builtin variable " ++ show e ++ " supported."
+
+codegenProgram :: MonadState Module m => PureCheckerProgram -> m ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
 
 codegen :: Module -> PureCheckerProgram -> Module
-codegen mod program = runLLVM mod $ codegenProgram program
+codegen mod program = execState (codegenProgram program) mod
 
 withModule :: String -> (Module -> a) -> a
 withModule name f = f $ emptyModule name
@@ -258,36 +254,36 @@ booleanToInteger :: Bool -> Integer
 booleanToInteger True  = 1
 booleanToInteger False = 0
 
-unit :: Codegen Operand
+unit :: MonadState CodegenState m => m Operand
 unit = true1
 
-boolean :: Bool -> Codegen Operand
+boolean :: MonadState CodegenState m => Bool -> m Operand
 boolean b = return $ cons $ C.Int booleanBits $ booleanToInteger b
 
-true1 :: Codegen Operand
+true1 :: MonadState CodegenState m => m Operand
 true1 = boolean True
 
-integer :: Integer -> Codegen Operand
+integer :: MonadState CodegenState m => Integer -> m Operand
 integer n = return $ cons $ C.Int integerBits n
 
-true64 :: Codegen Operand
+true64 :: MonadState CodegenState m => m Operand
 true64 = integer 0xFFFFFFFFFFFFFFFF
 
-integerZero :: Codegen Operand
+integerZero :: MonadState CodegenState m => m Operand
 integerZero = integer 0
 
-double :: Double -> Codegen Operand
+double :: MonadState CodegenState m => Double -> m Operand
 double d = return $ cons $ C.Float $ F.Double d
 
-doubleZero :: Codegen Operand
+doubleZero :: MonadState CodegenState m => m Operand
 doubleZero = double 0
 
-logicalNot :: Operand -> Codegen Operand
+logicalNot :: MonadState CodegenState m => Operand -> m Operand
 logicalNot a = do
   true <- true1
   (instr $ Xor true a []) booleanType
 
-unaryInstruction :: T.TypedUnOp -> Operand -> Type -> Codegen Operand
+unaryInstruction :: MonadState CodegenState m => T.TypedUnOp -> Operand -> Type -> m Operand
 unaryInstruction (T.TypedUnOp UnaryPlus T.Integer) a _  = return a
 unaryInstruction (T.TypedUnOp UnaryPlus T.Double) a _   = return a
 unaryInstruction (T.TypedUnOp UnaryMinus T.Integer) a t = do
@@ -302,7 +298,7 @@ unaryInstruction (T.TypedUnOp BitwiseNot T.Integer) a t = do
 unaryInstruction (T.TypedUnOp LogicalNot T.Boolean) a _ = logicalNot a
 unaryInstruction unop _ _                               = error $ "Unsupported unary operation " ++ show unop ++ "."
 
-binaryInstruction :: T.TypedBinOp -> Operand -> Operand -> Type -> Codegen Operand
+binaryInstruction :: MonadState CodegenState m => T.TypedBinOp -> Operand -> Operand -> Type -> m Operand
 binaryInstruction (T.TypedBinOp LeftShift T.Integer T.Integer) a b =
   instr $ Shl False False a b []
 binaryInstruction (T.TypedBinOp RightShift T.Integer T.Integer) a b =
@@ -365,7 +361,7 @@ binaryInstruction (T.TypedBinOp NotEquivalentTo T.Boolean T.Boolean) a b =
   instr $ ICmp IP.NE a b []
 binaryInstruction binop _ _ = error $ "Unsupported binary operation " ++ show binop ++ "."
 
-shortCircuit :: String -> ShortCircuitKind -> PureCheckerExpression -> PureCheckerExpression -> Codegen Operand
+shortCircuit :: MonadState CodegenState m => String -> ShortCircuitKind -> PureCheckerExpression -> PureCheckerExpression -> m Operand
 shortCircuit name ShortCircuitKind{..} left right = do
   rightBlock <- addBlock $ name ++ ".right"
   exitBlock <- addBlock $ name ++ ".exit"
@@ -392,7 +388,7 @@ shortCircuit name ShortCircuitKind{..} left right = do
   setBlock exitBlock
   phi [(leftResult, leftBlock), (rightResult, rightBlock)] booleanType
 
-codegenExpression :: PureCheckerExpression -> Codegen Operand
+codegenExpression :: MonadState CodegenState m => PureCheckerExpression -> m Operand
 codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
   S.Unit{}                               -> unit
   (S.Boolean b _ _)                      -> boolean b
@@ -403,10 +399,10 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     exp' <- codegenExpression exp
     op' exp' t'
   (S.BinaryOperation Assign var val _ _) -> do
-    let name = case var of
-          (S.Variable name _ _ _) -> name
-          _                     -> error $ "Unsupported assignment lhs " ++ show var ++ "."
-    var' <- getVar name
+    let m = case var of
+          (S.Variable _ m _ _) -> m
+          _                       -> error $ "Unsupported assignment lhs " ++ show var ++ "."
+    var' <- getVar m
     val' <- codegenExpression val
     store var' val' t'
   (S.BinaryOperation op@(shortCircuitKind -> Just kind) left right _ _) -> shortCircuit (show op) kind left right
@@ -415,8 +411,8 @@ codegenExpression exp = let t' = typ $ expressionTyp exp in case exp of
     left' <- codegenExpression left
     right' <- codegenExpression right
     op' left' right' t'
-  (S.Variable name _ _ _)                -> do
-    var' <- getVar name
+  (S.Variable _ m _ _)                   -> do
+    var' <- getVar m
     load var' t'
   (S.Call name args _ _ _)               -> do
     args' <- mapM codegenExpression args
