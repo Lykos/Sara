@@ -1,4 +1,5 @@
 Independent:
+- Take assignment as a separate syntactic construct after the parser
 - Commandline Options
 - Write README
 - Generated tests for errors
@@ -21,11 +22,15 @@ Independent:
 - Use more RecordWildCards
 - Use better type classes for metadata
 - Sort imports
+- qualify imports
 - Information hiding for metadata
 - Check that vardefs are not used as expressions.
 - Optional types for expressions
 - Make variable symbol only dependent on scopes.
 - Check that vals are not reassigned
+- Generate names with $ uniformly
+- Type safety for names
+- Intermediate language for verification
 
 Main workflow:
 - Type symbols
