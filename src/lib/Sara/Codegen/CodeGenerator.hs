@@ -4,10 +4,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Sara.Codegen.CodeGenerator ( codegen
-                          , PredeterminedForValue(..)
-                          , ValueWhenPredetermined(..)
-                          , ValueWhenNotPredetermined(..)
-                          , withModule ) where
+                                  , PredeterminedForValue(..)
+                                  , ValueWhenPredetermined(..)
+                                  , ValueWhenNotPredetermined(..)
+                                  , withModule ) where
 
 import qualified Sara.Ast.Syntax as S
 import qualified Sara.Ast.Types as T

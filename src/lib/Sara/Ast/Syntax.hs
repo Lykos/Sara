@@ -87,7 +87,6 @@ assertionKinds = enumFrom minBound
 -- [d:] The metadata used for all nodes.
 data Expression a b c d
   = Unit { expMeta :: c, expNodeMeta :: d }
-  | Assertion { assertionKind :: AssertionKind, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | Boolean { boolValue :: Bool, expMeta :: c, expNodeMeta :: d }
   | Integer { intValue :: Integer, expMeta :: c, expNodeMeta :: d }
   | Double { doubleValue :: Double, expMeta :: c, expNodeMeta :: d }
@@ -98,6 +97,7 @@ data Expression a b c d
   | Conditional { cond :: Expression a b c d, thenExp :: Expression a b c d, elseExp :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | Block { stmts :: [Expression a b c d], inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | While { invariants :: [Expression a b c d], cond :: Expression a b c d, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
+  | Assertion { assertionKind :: AssertionKind, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   | VarDef { typedVar :: TypedVariable b d, isVal :: Bool, inner :: Expression a b c d, expMeta :: c, expNodeMeta :: d }
   deriving (Eq, Ord, Show)
 
