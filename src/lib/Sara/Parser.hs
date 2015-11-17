@@ -15,7 +15,7 @@ import Sara.Meta
 import Sara.Lexer as L
 import Sara.Syntax
 import Sara.Types
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Errors
 
 declaration :: Parser ParserDeclaration

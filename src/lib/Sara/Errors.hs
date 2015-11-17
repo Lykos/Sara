@@ -33,7 +33,7 @@ module Sara.Errors( ErrorOr
 
 import Sara.Types
 import qualified Sara.Types as Ty
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Syntax ( AssertionKind(..) )
 import qualified Sara.PrettyPrinter as P
 

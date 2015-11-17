@@ -5,7 +5,7 @@ module Sara.PureChecker ( checkPureness ) where
 import Sara.Syntax as S
 import Sara.AstUtils
 import Sara.Meta
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Errors
 import Text.Parsec.Pos
 import Data.Maybe

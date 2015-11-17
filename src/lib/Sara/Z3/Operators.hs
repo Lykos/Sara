@@ -4,7 +4,7 @@
 module Sara.Z3.Operators where
 
 import Sara.Utils
-import qualified Sara.Operators as O
+import qualified Sara.Ast.Operators as O
 import qualified Sara.Errors as E
 import qualified Sara.Z3.Ast as A
 

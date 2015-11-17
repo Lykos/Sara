@@ -9,7 +9,7 @@ import Sara.Errors as E
 import Sara.Z3.CondAst
 import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.Operators as O
-import Sara.Operators
+import Sara.Ast.Operators
 import qualified Sara.Z3.SymbolicState as S
 import qualified Sara.Syntax as S
 import Sara.Meta

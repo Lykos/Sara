@@ -22,7 +22,7 @@ import qualified Sara.Errors as E
 import qualified Sara.Syntax as Sy
 import qualified Sara.Builtins as B
 import Sara.Z3.Operators
-import Sara.Operators
+import Sara.Ast.Operators
 
 -- | Generate all the proof parts for a declaration.
 symbolicExecuteDecl :: MonadWriter [P.ProofPart] m => PureCheckerDeclaration -> m ()

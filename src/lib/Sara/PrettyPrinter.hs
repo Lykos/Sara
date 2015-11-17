@@ -8,7 +8,7 @@ module Sara.PrettyPrinter (
 import qualified Sara.Keywords as K
 import Text.PrettyPrint
 import Sara.Types
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Syntax as S
 
 prettyRender :: Pretty a => a -> String

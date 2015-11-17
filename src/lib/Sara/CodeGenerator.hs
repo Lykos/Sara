@@ -11,7 +11,7 @@ module Sara.CodeGenerator ( codegen
 
 import qualified Sara.Syntax as S
 import qualified Sara.Types as T
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Meta
 
 import Data.Word

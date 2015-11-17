@@ -1,6 +1,6 @@
 module Sara.Lexer where
 
-import Sara.Operators
+import Sara.Ast.Operators
 import qualified Sara.Keywords as K
 import Text.Parsec
 import Text.Parsec.String (Parser)

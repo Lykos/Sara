@@ -1,6 +1,6 @@
 module Sara.OperatorsTest (operatorsGroup) where
 
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.AstGenUtils()
 
 import Test.Framework

@@ -41,7 +41,7 @@ library
                      , Sara.TypeChecker
                      , Sara.AstUtils
                      , Sara.Types
-                     , Sara.Operators
+                     , Sara.Ast.Operators
                      , Sara.Lexer
                      , Sara.CodeGenerator
                      , Sara.Meta

@@ -14,7 +14,7 @@ import qualified Data.Map as M
 import Sara.AstUtils
 import Sara.Meta
 import qualified Sara.Builtins as B
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Syntax
 import Sara.Errors
 import qualified Sara.Types as T

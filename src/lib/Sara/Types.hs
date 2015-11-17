@@ -1,6 +1,6 @@
 module Sara.Types where
 
-import Sara.Operators
+import Sara.Ast.Operators
 import qualified Data.Map.Strict as Map
 
 data Type

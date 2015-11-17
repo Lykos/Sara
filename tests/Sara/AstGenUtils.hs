@@ -13,7 +13,7 @@ import Sara.Symbolizer
 import Sara.Types
 import Sara.Lexer
 import Sara.Meta
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.AstUtils
 import Sara.GenT
 import Sara.Utils

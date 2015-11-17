@@ -4,7 +4,7 @@
 module Sara.Syntax where
 
 import Sara.Types
-import Sara.Operators
+import Sara.Ast.Operators
 
 type Name = String
 

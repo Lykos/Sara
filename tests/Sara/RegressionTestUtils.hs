@@ -2,7 +2,7 @@ module Sara.RegressionTestUtils (
   Expectation(..)
   , parseExpectation) where
 
-import Sara.Operators
+import Sara.Ast.Operators
 import Sara.Syntax ( AssertionKind(..) )
 import qualified Sara.Errors as E
 import qualified Sara.Parser as P
