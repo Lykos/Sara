@@ -29,7 +29,6 @@ Independent:
 - Check that vals are not reassigned
 
 Main workflow:
-- Vars/Vals
 - Type symbols
 - Structs
 - Tuples
