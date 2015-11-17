@@ -14,7 +14,7 @@ module Sara.Z3.Ast ( Pattern(..)
 
 import Data.List
 import qualified Data.Map.Strict as M
-import Sara.Meta ( VariableMeta, FunctionMeta )
+import Sara.Ast.Meta ( VariableMeta, FunctionMeta )
 
 data AppKind
   = PreApp

@@ -9,8 +9,8 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Z3.Monad
-import Sara.Meta
-import qualified Sara.Builtins as B
+import Sara.Ast.Meta
+import qualified Sara.Ast.Builtins as B
 import Sara.Z3.Ast
 import Data.List
 

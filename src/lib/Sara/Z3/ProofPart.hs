@@ -11,7 +11,7 @@ import qualified Data.Map as M
 import qualified Sara.Errors as E
 import qualified Sara.Z3.Ast as A
 import Sara.Z3.CodeGenerator ( codegen )
-import Sara.Meta
+import Sara.Ast.Meta
 import Z3.Monad
 import Text.Parsec.Pos
 

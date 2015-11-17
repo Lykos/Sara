@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.PureChecker ( checkPureness ) where
+module Sara.Semantic.PureChecker ( checkPureness ) where
 
-import Sara.Syntax as S
-import Sara.AstUtils
-import Sara.Meta
+import Sara.Ast.Syntax as S
+import Sara.Ast.AstUtils
+import Sara.Ast.Meta
 import Sara.Ast.Operators
 import Sara.Errors
 import Text.Parsec.Pos

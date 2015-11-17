@@ -4,15 +4,15 @@
 module Sara.Z3.Declarations ( translateContracts, translateFuncDefs ) where
 
 import Control.Monad.State.Strict
-import Sara.Meta
+import Sara.Ast.Meta
 import Sara.Utils
-import Sara.AstUtils
+import Sara.Ast.AstUtils
 import Data.Maybe
 import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.CondAst as C
 import qualified Sara.Z3.SymbolicState as S
-import qualified Sara.Syntax as S
-import qualified Sara.Builtins as B
+import qualified Sara.Ast.Syntax as S
+import qualified Sara.Ast.Builtins as B
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import Sara.Z3.PureExpression

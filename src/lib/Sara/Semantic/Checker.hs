@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.Checker ( checkWithoutMain
+module Sara.Semantic.Checker ( checkWithoutMain
                     , checkWithMain ) where
 
 import Text.Parsec.Pos
@@ -11,11 +11,11 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Monoid
 import qualified Data.Map as M
-import Sara.AstUtils
-import Sara.Meta
-import qualified Sara.Builtins as B
+import Sara.Ast.AstUtils
+import Sara.Ast.Meta
+import qualified Sara.Ast.Builtins as B
 import Sara.Ast.Operators
-import Sara.Syntax
+import Sara.Ast.Syntax
 import Sara.Errors
 import qualified Sara.Ast.Types as T
 

@@ -3,16 +3,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sara.CodeGenerator ( codegen
+module Sara.Codegen.CodeGenerator ( codegen
                           , PredeterminedForValue(..)
                           , ValueWhenPredetermined(..)
                           , ValueWhenNotPredetermined(..)
                           , withModule ) where
 
-import qualified Sara.Syntax as S
+import qualified Sara.Ast.Syntax as S
 import qualified Sara.Ast.Types as T
 import Sara.Ast.Operators
-import Sara.Meta
+import Sara.Ast.Meta
 
 import Data.Word
 import Data.List

@@ -24,11 +24,11 @@ import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.AstWrapper as W
 import Sara.Z3.ProofPart
 import Sara.Z3.Utils
-import Sara.Syntax ( Name )
+import Sara.Ast.Syntax ( Name )
 import Sara.Errors ( VerifierFailureType )
 import qualified Sara.Z3.SymbolicState as S
 import Sara.Ast.Types ( Type( Boolean ) )
-import Sara.Meta
+import Sara.Ast.Meta
 import Text.Parsec.Pos
 
 type ResultTmpVar = VariableMeta

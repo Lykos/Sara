@@ -1,25 +1,25 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Sara.TypeChecker ( checkWithoutMain
+module Sara.Semantic.TypeChecker ( checkWithoutMain
                         , checkWithMain ) where
 
 import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
-import qualified Sara.Builtins as B
+import qualified Sara.Ast.Builtins as B
 import qualified Data.Map.Strict as M
 
-import Sara.Meta
-import Sara.Syntax as S
+import Sara.Ast.Meta
+import Sara.Ast.Syntax as S
 import Sara.Ast.Types as T
 import Sara.Ast.Operators
-import Sara.AstUtils
+import Sara.Ast.AstUtils
 import Sara.Utils
 import Sara.Errors
-import qualified Sara.Checker as C
-import Sara.PureChecker
-import Sara.Symbolizer
+import qualified Sara.Semantic.Checker as C
+import Sara.Semantic.PureChecker
+import Sara.Semantic.Symbolizer
 
 type FunctionMap = M.Map FunctionKey ParserSignature
 type VariableMap = M.Map Name ParserTypedVariable

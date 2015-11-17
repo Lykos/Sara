@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Sara.Syntax where
+module Sara.Ast.Syntax where
 
 import Sara.Ast.Types
 import Sara.Ast.Operators

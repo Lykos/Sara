@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Sara.AstUtils ( mapFunctionMetas
+module Sara.Ast.AstUtils ( mapFunctionMetas
                      , mapVariableMetas
                      , mapExpressionMetas
                      , mapNodeMetas
@@ -21,7 +21,7 @@ module Sara.AstUtils ( mapFunctionMetas
                      , children ) where
 
 import Data.Maybe
-import Sara.Syntax
+import Sara.Ast.Syntax
 import Control.Monad.Writer
 import Control.Monad.Identity
 

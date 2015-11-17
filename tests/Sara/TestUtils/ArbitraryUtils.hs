@@ -1,8 +1,8 @@
 -- | Helper functions to generate values of primitives.
 -- These are copied from Test.QuickCheck.Arbitrary and adjusted to use MonadGen
-module Sara.ArbitraryUtils where
+module Sara.TestUtils.ArbitraryUtils where
 
-import Sara.GenT
+import Sara.TestUtils.GenT
 import Data.Ratio ( (%) )
 
 -- | Generates a boolean.

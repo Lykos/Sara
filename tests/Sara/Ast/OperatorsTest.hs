@@ -1,7 +1,7 @@
-module Sara.OperatorsTest (operatorsGroup) where
+module Sara.Ast.OperatorsTest (operatorsGroup) where
 
 import Sara.Ast.Operators
-import Sara.AstGenUtils()
+import Sara.TestUtils.AstGenUtils()
 
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2

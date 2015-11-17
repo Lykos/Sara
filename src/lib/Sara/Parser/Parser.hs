@@ -1,6 +1,6 @@
-module Sara.Parser (
-  Sara.Parser.parse
-  , Sara.Parser.signature
+module Sara.Parser.Parser (
+  Sara.Parser.Parser.parse
+  , Sara.Parser.Parser.signature
   , typeExpression) where
 
 import Text.Parsec
@@ -8,12 +8,12 @@ import Text.Parsec.String (Parser)
 import Data.Functor.Identity
 
 import qualified Text.Parsec.Expr as Expr
-import qualified Sara.Syntax as S
+import qualified Sara.Ast.Syntax as S
 import qualified Sara.Ast.Types as T
-import qualified Sara.Keywords as K
-import Sara.Meta
-import Sara.Lexer as L
-import Sara.Syntax
+import qualified Sara.Parser.Keywords as K
+import Sara.Ast.Meta
+import Sara.Parser.Lexer as L
+import Sara.Ast.Syntax
 import Sara.Ast.Types
 import Sara.Ast.Operators
 import Sara.Errors
@@ -24,12 +24,12 @@ declaration = function
               <?> "declaration"
 
 function :: Parser ParserDeclaration
-function = addNodeMeta $ S.Function <$> Sara.Parser.signature <*> bracedExpression
+function = addNodeMeta $ S.Function <$> Sara.Parser.Parser.signature <*> bracedExpression
 
 extern :: Parser ParserDeclaration
 extern = addNodeMeta $ do
   keyword K.Extern
-  sig <- Sara.Parser.signature
+  sig <- Sara.Parser.Parser.signature
   return $ Extern sig
 
 signature :: Parser ParserSignature

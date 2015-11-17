@@ -1,10 +1,10 @@
-module Sara.TypeCheckerTest (typeCheckerGroup) where
+module Sara.Semantic.TypeCheckerTest (typeCheckerGroup) where
 
 import Control.Monad.Except
-import Sara.AstGenUtils()
-import Sara.AstTestUtils
-import Sara.TypeChecker
-import Sara.Meta
+import Sara.TestUtils.AstGenUtils()
+import Sara.TestUtils.AstTestUtils
+import Sara.Semantic.TypeChecker
+import Sara.Ast.Meta
 
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2

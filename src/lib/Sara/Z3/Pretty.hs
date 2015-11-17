@@ -3,7 +3,7 @@ module Sara.Z3.Pretty ( prettyRender ) where
 import Text.PrettyPrint
 import Sara.Z3.Ast
 import Sara.Z3.Utils
-import Sara.Meta
+import Sara.Ast.Meta
 
 prettyRender :: Ast -> String
 prettyRender = render . pretty

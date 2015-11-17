@@ -3,7 +3,7 @@ module Sara.Z3.CodeGenerator where
 import Z3.Monad
 import Sara.Z3.Ast
 import Sara.Z3.Utils
-import Sara.Meta
+import Sara.Ast.Meta
 import Sara.Utils
 import Sara.Ast.Types
 

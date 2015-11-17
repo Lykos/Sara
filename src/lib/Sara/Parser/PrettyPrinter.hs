@@ -1,15 +1,15 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Sara.PrettyPrinter (
+module Sara.Parser.PrettyPrinter (
   Pretty
   , pretty
   , prettyRender) where
 
-import qualified Sara.Keywords as K
+import qualified Sara.Parser.Keywords as K
 import Text.PrettyPrint
 import Sara.Ast.Types
 import Sara.Ast.Operators
-import Sara.Syntax as S
+import Sara.Ast.Syntax as S
 
 prettyRender :: Pretty a => a -> String
 prettyRender = render . pretty

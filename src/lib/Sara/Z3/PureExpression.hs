@@ -4,15 +4,15 @@
 module Sara.Z3.PureExpression ( translateExpression ) where
 
 import Control.Monad.State.Strict
-import Sara.PrettyPrinter
+import Sara.Parser.PrettyPrinter
 import Sara.Errors as E
 import Sara.Z3.CondAst
 import qualified Sara.Z3.Ast as A
 import qualified Sara.Z3.Operators as O
 import Sara.Ast.Operators
 import qualified Sara.Z3.SymbolicState as S
-import qualified Sara.Syntax as S
-import Sara.Meta
+import qualified Sara.Ast.Syntax as S
+import Sara.Ast.Meta
 import Text.Parsec.Pos (SourcePos)
 
 -- | Create an expression and its precondition and postcondition.

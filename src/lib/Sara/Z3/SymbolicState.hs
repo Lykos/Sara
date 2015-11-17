@@ -22,7 +22,7 @@ import qualified Sara.Z3.ProofPart as P
 import qualified Sara.Errors as E
 import qualified Sara.Z3.AstWrapper as W
 import qualified Sara.Z3.Ast as A
-import Sara.Meta
+import Sara.Ast.Meta
 import Text.Parsec.Pos
 
 data SymbolicState

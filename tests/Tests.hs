@@ -1,8 +1,8 @@
 module Main where
 
-import Sara.ParserTest
-import Sara.OperatorsTest
-import Sara.TypeCheckerTest
+import Sara.Parser.ParserTest
+import Sara.Ast.OperatorsTest
+import Sara.Semantic.TypeCheckerTest
 import Sara.CompilerTest
 import Sara.RegressionTest
 

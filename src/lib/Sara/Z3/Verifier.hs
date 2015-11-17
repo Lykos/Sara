@@ -4,7 +4,7 @@
 module Sara.Z3.Verifier ( verify ) where
 
 import Sara.Errors as E
-import Sara.AstUtils
+import Sara.Ast.AstUtils
 import Sara.Z3.AstWrapper
 import Sara.Z3.SymbolicExecutor
 import Control.Monad.Except
@@ -12,7 +12,7 @@ import Control.Monad.Writer
 import qualified Sara.Z3.ProofPart as P
 import Sara.Z3.Pretty ( prettyRender )
 import Sara.Z3.CodeGenerator ( codegen )
-import Sara.Meta
+import Sara.Ast.Meta
 import Sara.Z3.Declarations
 import Z3.Monad
 

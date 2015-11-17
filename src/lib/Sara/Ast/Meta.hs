@@ -1,8 +1,8 @@
-module Sara.Meta where
+module Sara.Ast.Meta where
 
 import Text.Parsec.Pos
-import qualified Sara.Syntax as S
-import qualified Sara.Builtins as B
+import qualified Sara.Ast.Syntax as S
+import qualified Sara.Ast.Builtins as B
 import Sara.Ast.Types
 
 newtype NodeMeta

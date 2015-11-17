@@ -2,8 +2,8 @@ module Sara.RegressionTest (regressionGroup) where
 
 import Sara.Errors
 import Sara.Compiler
-import Sara.TestUtils
-import Sara.RegressionTestUtils
+import Sara.TestUtils.TestUtils
+import Sara.TestUtils.RegressionTestUtils
 
 import System.FilePath
 import System.Directory

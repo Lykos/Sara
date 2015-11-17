@@ -1,11 +1,11 @@
 module Sara.CompilerTest (compilerGroup) where
 
-import Sara.PrettyPrinter
-import Sara.AstGenUtils()
-import Sara.AstTestUtils
+import Sara.Parser.PrettyPrinter
+import Sara.TestUtils.AstGenUtils()
+import Sara.TestUtils.AstTestUtils
 import Sara.Compiler
-import Sara.TestUtils
-import Sara.Meta
+import Sara.TestUtils.TestUtils
+import Sara.Ast.Meta
 
 import Data.Either
 import Control.Monad.Except

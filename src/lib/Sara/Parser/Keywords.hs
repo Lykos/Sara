@@ -1,4 +1,4 @@
-module Sara.Keywords where
+module Sara.Parser.Keywords where
 
 import Data.Char
 

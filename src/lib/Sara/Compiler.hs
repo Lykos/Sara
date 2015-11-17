@@ -1,13 +1,13 @@
 module Sara.Compiler ( run
                      , compile) where
 
-import Sara.Parser
-import Sara.TypeChecker
-import Sara.Syntax
-import Sara.CodeGenerator
+import Sara.Parser.Parser
+import Sara.Semantic.TypeChecker
+import Sara.Ast.Syntax
+import Sara.Codegen.CodeGenerator
 import Sara.Errors
 import Sara.Reporter
-import Sara.Meta
+import Sara.Ast.Meta
 import Sara.Z3.Verifier
 
 import qualified Z3.Monad as Z3

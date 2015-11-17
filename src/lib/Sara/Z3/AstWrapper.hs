@@ -18,7 +18,7 @@ module Sara.Z3.AstWrapper ( ProofObligation
 
 import qualified Sara.Z3.Ast as A
 import Sara.Z3.CodeGenerator
-import Sara.Meta
+import Sara.Ast.Meta
 import Data.Maybe
 import Sara.Errors (VerifierFailureType)
 import Text.Parsec.Pos (SourcePos)

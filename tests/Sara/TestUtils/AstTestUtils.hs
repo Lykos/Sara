@@ -1,12 +1,12 @@
-module Sara.AstTestUtils where
+module Sara.TestUtils.AstTestUtils where
 
 import Control.Monad.Except
 import Text.Parsec.Pos
-import qualified Sara.Syntax as S
+import qualified Sara.Ast.Syntax as S
 import qualified Sara.Errors as E
-import Sara.PrettyPrinter
-import Sara.Meta
-import Sara.AstUtils
+import Sara.Parser.PrettyPrinter
+import Sara.Ast.Meta
+import Sara.Ast.AstUtils
 import Test.QuickCheck.Property
 
 clearPositions :: ParserProgram -> ParserProgram

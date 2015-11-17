@@ -2,9 +2,9 @@ module Sara.Reporter ( Reporter(..)
                      , reportProgram
                      , report ) where
 
-import Sara.Meta
-import Sara.Syntax
-import Sara.PrettyPrinter
+import Sara.Ast.Meta
+import Sara.Ast.Syntax
+import Sara.Parser.PrettyPrinter
 import LLVM.General.Module
 
 data Reporter

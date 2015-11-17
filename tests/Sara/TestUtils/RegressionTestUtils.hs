@@ -1,12 +1,12 @@
-module Sara.RegressionTestUtils (
+module Sara.TestUtils.RegressionTestUtils (
   Expectation(..)
   , parseExpectation) where
 
 import Sara.Ast.Operators
-import Sara.Syntax ( AssertionKind(..) )
+import Sara.Ast.Syntax ( AssertionKind(..) )
 import qualified Sara.Errors as E
-import qualified Sara.Parser as P
-import qualified Sara.Lexer as L
+import qualified Sara.Parser.Parser as P
+import qualified Sara.Parser.Lexer as L
 
 import Data.Int
 import Text.Parsec

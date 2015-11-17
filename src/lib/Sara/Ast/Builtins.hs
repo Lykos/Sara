@@ -1,6 +1,6 @@
 -- | Special variables and functions that are built in.
 
-module Sara.Builtins ( BuiltinVar(..)
+module Sara.Ast.Builtins ( BuiltinVar(..)
                      , stringToBuiltinVar
                      , name ) where
 

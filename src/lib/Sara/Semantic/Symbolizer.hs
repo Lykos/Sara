@@ -1,20 +1,20 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Sara.Symbolizer ( FunctionKey(..)
+module Sara.Semantic.Symbolizer ( FunctionKey(..)
                        , functionKey
                        , callFunctionKey
                        , symbolize ) where
 
-import Sara.Syntax
+import Sara.Ast.Syntax
 import Sara.Ast.Types
-import Sara.Meta
-import Sara.AstUtils
+import Sara.Ast.Meta
+import Sara.Ast.AstUtils
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.Trans.State
 import Control.Monad.State.Class as S
-import qualified Sara.Builtins as B
+import qualified Sara.Ast.Builtins as B
 import qualified Data.Map.Strict as M
 
 data FunctionKey =

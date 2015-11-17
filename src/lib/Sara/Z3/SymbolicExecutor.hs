@@ -9,8 +9,8 @@ module Sara.Z3.SymbolicExecutor ( symbolicExecuteDecl
 
 import Control.Monad.State.Strict
 import Control.Monad.Writer
-import Sara.PrettyPrinter
-import Sara.Meta
+import Sara.Parser.PrettyPrinter
+import Sara.Ast.Meta
 import Sara.Ast.Types ( Type (..) )
 import qualified Sara.Z3.ProofPart as P
 import qualified Sara.Z3.Ast as A
@@ -19,8 +19,8 @@ import Sara.Z3.PureExpression
 import Sara.Z3.CondAst ( runCondAst )
 import qualified Sara.Z3.SymbolicState as St
 import qualified Sara.Errors as E
-import qualified Sara.Syntax as Sy
-import qualified Sara.Builtins as B
+import qualified Sara.Ast.Syntax as Sy
+import qualified Sara.Ast.Builtins as B
 import Sara.Z3.Operators
 import Sara.Ast.Operators
 

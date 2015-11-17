@@ -1,4 +1,4 @@
-module Sara.TestUtils where
+module Sara.TestUtils.TestUtils where
 
 import Sara.Reporter
 

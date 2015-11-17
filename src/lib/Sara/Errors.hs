@@ -34,8 +34,8 @@ module Sara.Errors( ErrorOr
 import Sara.Ast.Types
 import qualified Sara.Ast.Types as Ty
 import Sara.Ast.Operators
-import Sara.Syntax ( AssertionKind(..) )
-import qualified Sara.PrettyPrinter as P
+import Sara.Ast.Syntax ( AssertionKind(..) )
+import qualified Sara.Parser.PrettyPrinter as P
 
 import qualified Data.Text as T
 import Text.Parsec.Pos

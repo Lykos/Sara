@@ -1,10 +1,10 @@
-module Sara.ParserTest (parserGroup) where
+module Sara.Parser.ParserTest (parserGroup) where
 
-import Sara.Meta
-import Sara.AstGenUtils()
-import Sara.AstTestUtils
-import qualified Sara.Parser as P
-import Sara.PrettyPrinter
+import Sara.Ast.Meta
+import Sara.TestUtils.AstGenUtils()
+import Sara.TestUtils.AstTestUtils
+import qualified Sara.Parser.Parser as P
+import Sara.Parser.PrettyPrinter
 
 import Control.Monad.Except
 import Test.Framework

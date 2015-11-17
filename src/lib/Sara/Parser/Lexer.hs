@@ -1,7 +1,7 @@
-module Sara.Lexer where
+module Sara.Parser.Lexer where
 
 import Sara.Ast.Operators
-import qualified Sara.Keywords as K
+import qualified Sara.Parser.Keywords as K
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)

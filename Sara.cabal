@@ -33,24 +33,24 @@ executable sara
 
 library
   exposed-modules:     Sara.Compiler
-                     , Sara.Syntax
-                     , Sara.PrettyPrinter
+                     , Sara.Ast.Syntax
+                     , Sara.Parser.PrettyPrinter
                      , Sara.Errors
                      , Sara.Reporter
-                     , Sara.Parser
-                     , Sara.TypeChecker
-                     , Sara.AstUtils
+                     , Sara.Parser.Parser
+                     , Sara.Semantic.TypeChecker
+                     , Sara.Ast.AstUtils
                      , Sara.Ast.Types
                      , Sara.Ast.Operators
-                     , Sara.Lexer
-                     , Sara.CodeGenerator
-                     , Sara.Meta
-                     , Sara.Symbolizer
-                     , Sara.Checker
-                     , Sara.PureChecker
+                     , Sara.Parser.Lexer
+                     , Sara.Codegen.CodeGenerator
+                     , Sara.Ast.Meta
+                     , Sara.Semantic.Symbolizer
+                     , Sara.Semantic.Checker
+                     , Sara.Semantic.PureChecker
                      , Sara.Utils
-                     , Sara.Keywords
-                     , Sara.Builtins
+                     , Sara.Parser.Keywords
+                     , Sara.Ast.Builtins
                      , Sara.Z3.SymbolicState
                      , Sara.Z3.SymbolicExecutor
                      , Sara.Z3.SymbolicStateSpace

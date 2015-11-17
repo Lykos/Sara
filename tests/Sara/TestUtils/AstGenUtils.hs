@@ -5,19 +5,19 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Sara.AstGenUtils () where
+module Sara.TestUtils.AstGenUtils () where
 
-import Sara.ArbitraryUtils
-import Sara.Syntax
-import Sara.Symbolizer
+import Sara.TestUtils.ArbitraryUtils
+import Sara.Ast.Syntax
+import Sara.Semantic.Symbolizer
 import Sara.Ast.Types
-import Sara.Lexer
-import Sara.Meta
+import Sara.Parser.Lexer
+import Sara.Ast.Meta
 import Sara.Ast.Operators
-import Sara.AstUtils
-import Sara.GenT
+import Sara.Ast.AstUtils
+import Sara.TestUtils.GenT
 import Sara.Utils
-import qualified Sara.Syntax as S
+import qualified Sara.Ast.Syntax as S
 import qualified Sara.Ast.Types as T
 
 import qualified Data.Set as S
@@ -28,7 +28,7 @@ import Control.Monad.Writer
 import Data.Maybe
 import Data.List
 import qualified Data.Map.Strict as M
-import Sara.AstTestUtils
+import Sara.TestUtils.AstTestUtils
 
 instance (MonadState s m) => MonadState s (GenT m) where
   get = lift get
@@ -128,7 +128,7 @@ initialEnv sigs = GeneratorEnv { callables = callables'
                                , functions = functions'
                                , variables = M.empty
                                , isPureEnv = undefined }
-  where callables' = keyBy Sara.AstGenUtils.retType sigs
+  where callables' = keyBy Sara.TestUtils.AstGenUtils.retType sigs
         functions' = M.map (filter isPureSig) callables'
 
 arbitraryProgram :: MonadGen g => g TypeCheckerProgram
@@ -172,7 +172,7 @@ arbitraryType = elements [T.Unit, T.Boolean, T.Integer, T.Double]
 -- Note that this is not equivalent to the signature being pure since methods also have pure pre- and postconditions.
 partialSigEnvTransform :: Bool -> PartialSignature -> GeneratorEnv -> GeneratorEnv
 partialSigEnvTransform pure sig env = envWithPureness pure $ env{ variables = variables' }
-  where as = M.map (map S.varName) $ keyBy S.varType $ Sara.AstGenUtils.args sig
+  where as = M.map (map S.varName) $ keyBy S.varType $ Sara.TestUtils.AstGenUtils.args sig
         variables' = M.unionWith (++) (variables env) as
 
 arbitrarySignatureForPartialSig :: (MonadGen g, MonadReader GeneratorEnv g) => PartialSignature -> g TypeCheckerSignature
