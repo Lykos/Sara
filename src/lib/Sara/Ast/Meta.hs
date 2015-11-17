@@ -19,25 +19,34 @@ data ExpressionMeta
 
 type Id = Int
 
-data FunctionMeta =
-  FunctionMeta { funcSymPure :: Bool
-               , funcSymArgTypes :: [Type]
-               , funcSymRetType :: Type 
-               , funcSymName :: S.Name
-               , funcSymid :: Id}
+data FunctionMeta
+  = FunctionMeta { funcSymPure :: Bool
+                 , funcSymArgTypes :: [Type]
+                 , funcSymRetType :: Type 
+                 , funcSymName :: S.Name
+                 , funcSymid :: Id}
   deriving (Eq, Ord, Show)
 
-data VariableMeta =
-  VariableMeta { varSymType :: Type
-               , varSymNameNonBuiltin :: S.Name
-               , varSymId :: Id}
+-- Describes which stage generated a temporary variable.
+data TmpVarStage
+  = SideEffectLifter
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+data VariableMeta
+  = VariableMeta { varSymType :: Type
+                 , varSymNameNonBuiltin :: S.Name
+                 , varSymId :: Id }
   | BuiltinVar { varSymType :: Type
                , varSymBuiltin :: B.BuiltinVar }
+  | TmpVar { varSymType :: Type
+           , varSymStage :: TmpVarStage
+           , varSymId :: Id }
   deriving (Eq, Ord, Show)
 
 varSymName :: VariableMeta -> S.Name
 varSymName (VariableMeta _ name _) = name
 varSymName (BuiltinVar _ b)        = B.name b
+varSymName (TmpVar _ s _)          = "tmp$" ++ show s
 
 type ParserProgram = S.Program () () () NodeMeta
 
