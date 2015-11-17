@@ -17,7 +17,7 @@ import qualified Sara.Builtins as B
 import Sara.Ast.Operators
 import Sara.Syntax
 import Sara.Errors
-import qualified Sara.Types as T
+import qualified Sara.Ast.Types as T
 
 checkWithoutMain :: Program a b c NodeMeta -> ErrorOr ()
 checkWithoutMain = checkProgram

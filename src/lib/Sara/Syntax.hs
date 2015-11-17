@@ -3,7 +3,7 @@
 
 module Sara.Syntax where
 
-import Sara.Types
+import Sara.Ast.Types
 import Sara.Ast.Operators
 
 type Name = String

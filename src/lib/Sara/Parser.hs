@@ -9,12 +9,12 @@ import Data.Functor.Identity
 
 import qualified Text.Parsec.Expr as Expr
 import qualified Sara.Syntax as S
-import qualified Sara.Types as T
+import qualified Sara.Ast.Types as T
 import qualified Sara.Keywords as K
 import Sara.Meta
 import Sara.Lexer as L
 import Sara.Syntax
-import Sara.Types
+import Sara.Ast.Types
 import Sara.Ast.Operators
 import Sara.Errors
 

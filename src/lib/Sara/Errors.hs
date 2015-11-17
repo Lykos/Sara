@@ -31,8 +31,8 @@ module Sara.Errors( ErrorOr
                   , resultArg
                   , functionOrMethod ) where
 
-import Sara.Types
-import qualified Sara.Types as Ty
+import Sara.Ast.Types
+import qualified Sara.Ast.Types as Ty
 import Sara.Ast.Operators
 import Sara.Syntax ( AssertionKind(..) )
 import qualified Sara.PrettyPrinter as P

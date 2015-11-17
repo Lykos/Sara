@@ -7,7 +7,7 @@ module Sara.Symbolizer ( FunctionKey(..)
                        , symbolize ) where
 
 import Sara.Syntax
-import Sara.Types
+import Sara.Ast.Types
 import Sara.Meta
 import Sara.AstUtils
 import Control.Monad.Reader

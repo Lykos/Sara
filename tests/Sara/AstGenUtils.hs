@@ -10,7 +10,7 @@ module Sara.AstGenUtils () where
 import Sara.ArbitraryUtils
 import Sara.Syntax
 import Sara.Symbolizer
-import Sara.Types
+import Sara.Ast.Types
 import Sara.Lexer
 import Sara.Meta
 import Sara.Ast.Operators
@@ -18,7 +18,7 @@ import Sara.AstUtils
 import Sara.GenT
 import Sara.Utils
 import qualified Sara.Syntax as S
-import qualified Sara.Types as T
+import qualified Sara.Ast.Types as T
 
 import qualified Data.Set as S
 import qualified Test.QuickCheck as Q

@@ -12,7 +12,7 @@ import qualified Data.Map.Strict as M
 
 import Sara.Meta
 import Sara.Syntax as S
-import Sara.Types as T
+import Sara.Ast.Types as T
 import Sara.Ast.Operators
 import Sara.AstUtils
 import Sara.Utils

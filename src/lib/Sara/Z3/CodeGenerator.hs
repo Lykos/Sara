@@ -5,7 +5,7 @@ import Sara.Z3.Ast
 import Sara.Z3.Utils
 import Sara.Meta
 import Sara.Utils
-import Sara.Types
+import Sara.Ast.Types
 
 codegen :: MonadZ3 m => Ast -> m AST
 codegen (BoolConst b)    = mkBool b

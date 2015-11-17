@@ -11,7 +11,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Writer
 import Sara.PrettyPrinter
 import Sara.Meta
-import Sara.Types ( Type (..) )
+import Sara.Ast.Types ( Type (..) )
 import qualified Sara.Z3.ProofPart as P
 import qualified Sara.Z3.Ast as A
 import Sara.Z3.SymbolicStateSpace

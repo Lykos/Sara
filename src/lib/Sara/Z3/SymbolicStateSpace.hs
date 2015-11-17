@@ -27,7 +27,7 @@ import Sara.Z3.Utils
 import Sara.Syntax ( Name )
 import Sara.Errors ( VerifierFailureType )
 import qualified Sara.Z3.SymbolicState as S
-import Sara.Types ( Type( Boolean ) )
+import Sara.Ast.Types ( Type( Boolean ) )
 import Sara.Meta
 import Text.Parsec.Pos
 

@@ -3,7 +3,7 @@ module Sara.Meta where
 import Text.Parsec.Pos
 import qualified Sara.Syntax as S
 import qualified Sara.Builtins as B
-import Sara.Types
+import Sara.Ast.Types
 
 newtype NodeMeta
   = NodeMeta { nodePos :: SourcePos }

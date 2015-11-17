@@ -40,7 +40,7 @@ library
                      , Sara.Parser
                      , Sara.TypeChecker
                      , Sara.AstUtils
-                     , Sara.Types
+                     , Sara.Ast.Types
                      , Sara.Ast.Operators
                      , Sara.Lexer
                      , Sara.CodeGenerator

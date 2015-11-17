@@ -10,7 +10,7 @@ module Sara.CodeGenerator ( codegen
                           , withModule ) where
 
 import qualified Sara.Syntax as S
-import qualified Sara.Types as T
+import qualified Sara.Ast.Types as T
 import Sara.Ast.Operators
 import Sara.Meta
 
