@@ -44,6 +44,7 @@ library
                      , Sara.Ast.Operators
                      , Sara.Parser.Lexer
                      , Sara.Codegen.CodeGenerator
+                     , Sara.Transform.SideEffectLifter
                      , Sara.Ast.Meta
                      , Sara.Semantic.Symbolizer
                      , Sara.Semantic.Checker
