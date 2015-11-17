@@ -24,6 +24,7 @@ z3SymbolName prefix name index = z3Name [prefix, name, show index]
 z3VarName :: VariableMeta -> String
 z3VarName (VariableMeta _ name index) = z3SymbolName "var" name index
 z3VarName (BuiltinVar _ b)            = B.name b
+z3VarName (TmpVar _ stage index)      = z3SymbolName "tmp" (show stage) index
 
 appPrefix :: AppKind -> String
 appPrefix PreApp  = "pre"

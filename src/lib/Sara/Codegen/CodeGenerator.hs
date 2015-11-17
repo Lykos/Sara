@@ -240,8 +240,9 @@ initializeVar meta o = do
   assign meta var
 
 varMetaName :: VariableMeta -> Name
-varMetaName (VariableMeta _ name index) = Name $ name ++ show index
+varMetaName (VariableMeta _ name index) = Name $ name ++ '$' : show index
 varMetaName (BuiltinVar _ e)            = error $ "No code generation for builtin variable " ++ show e ++ " supported."
+varMetaName (TmpVar _ stage index)      = Name $ "tmp$" ++ show stage ++ "$" ++ show index
 
 codegenProgram :: MonadState Module m => PureCheckerProgram -> m ()
 codegenProgram (S.Program p _) = mapM_ codegenDeclaration p
