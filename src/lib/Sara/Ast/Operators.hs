@@ -73,7 +73,7 @@ binaryOperators :: [BinaryOperator]
 binaryOperators = enumFrom minBound
 
 -- | Description for which value a short circuit operator is predetermined by the left side.
-data PredeterminedForValue = PredeterminedForFalse | PredeterminedForTrue
+data PredeterminedForValue = PredeterminedForTrue | PredeterminedForFalse
                            deriving (Eq, Ord, Show, Enum, Bounded)
 
 -- | Description which value is used if a short circuit operator is predetermined by the left side.
@@ -86,6 +86,10 @@ data ValueWhenNotPredetermined = RightSideWhenNotPredetermined | NotRightSideWhe
 
 class MaybeNegation a where
   isPositive :: a -> Bool
+
+instance MaybeNegation PredeterminedForValue where
+  isPositive PredeterminedForTrue = True
+  isPositive PredeterminedForFalse = False
 
 instance MaybeNegation ValueWhenPredetermined where
   isPositive LeftSideWhenPredetermined = True
