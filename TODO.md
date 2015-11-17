@@ -14,7 +14,6 @@ Independent:
 - Consistency checks for assumptions/proof obligations
 - Use monad classes everywhere
 - Pretty print metadata
-- Split directory structure
 - I/O
 - Refactor CodeGenerator
 - Function symbols without index
