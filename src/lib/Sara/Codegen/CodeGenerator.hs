@@ -373,8 +373,6 @@ shortCircuit name ShortCircuitKind{..} left right = do
   exitBlock <- addBlock $ name ++ ".exit"
 
   left' <- codegenExpression left
-  return left'
-  
   leftResult <- case valueWhenPredetermined of
     LeftSideWhenPredetermined    -> return left'
     NotLeftSideWhenPredetermined -> logicalNot left'
