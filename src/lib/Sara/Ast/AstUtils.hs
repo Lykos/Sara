@@ -2,23 +2,24 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Sara.Ast.AstUtils ( mapFunctionMetas
-                     , mapVariableMetas
-                     , mapExpressionMetas
-                     , mapNodeMetas
-                     , mapExpressions
-                     , mapMExpression_
-                     , mapMExpressions_
-                     , mapMTypedVariables
-                     , mapMSignatures_
-                     , mapMDeclarations_
-                     , mapMSignatures
-                     , mapMExpressions
-                     , weirdTransformExpressions
-                     , foldMapSignatures
-                     , foldMapDeclarations
-                     , foldMapExpression
-                     , foldMapExpressions
-                     , children ) where
+                         , mapVariableMetas
+                         , mapExpressionMetas
+                         , mapNodeMetas
+                         , mapExpressions
+                         , mapMExpression_
+                         , mapMExpressions_
+                         , mapMTypedVariables
+                         , mapMSignatures_
+                         , mapMDeclarations_
+                         , mapMDeclarations
+                         , mapMSignatures
+                         , mapMExpressions
+                         , weirdTransformExpressions
+                         , foldMapSignatures
+                         , foldMapDeclarations
+                         , foldMapExpression
+                         , foldMapExpressions
+                         , children ) where
 
 import Data.Maybe
 import Sara.Ast.Syntax
@@ -63,8 +64,7 @@ mapMSignatures sigTrans = transformProgramInternal transformer
 
 -- | Monadic map over all signatures and discard the result.
 mapMSignatures_ :: Monad m => (Signature a b c d -> m ()) -> Program a b c d -> m ()
-mapMSignatures_ sigTrans prog = mapMSignatures sigTrans' prog >> return ()
-  where sigTrans' sig = sigTrans sig >> return sig
+mapMSignatures_ = ignoreResult mapMSignatures
 
 -- | Monadic map over all expressions
 mapMExpressions :: Monad m => (Expression a b c d -> m (Expression a b c d)) -> Program a b c d -> m (Program a b c d)
@@ -77,8 +77,11 @@ mapExpressions f = runIdentity . mapMExpressions (Identity . f)
 
 -- | Monadic map over all expressions and discard the result.
 mapMExpressions_ :: Monad m => (Expression a b c d -> m ()) -> Program a b c d -> m ()
-mapMExpressions_ expTrans prog = mapMExpressions expTrans' prog >> return ()
-  where expTrans' exp = expTrans exp >> return exp
+mapMExpressions_ = ignoreResult mapMExpressions
+
+ignoreResult :: Monad m => ((a -> m a) -> b -> m b) -> (a -> m ()) -> b -> m ()
+ignoreResult mapMStuff transformer prog = mapMStuff transformer' prog >> return ()
+  where transformer' stuff = transformer stuff >> return stuff
 
 -- | Monadic map over all typed variables.
 mapMTypedVariables :: Monad m => (TypedVariable b d -> m (TypedVariable b d)) -> Program a b c d -> m (Program a b c d)
@@ -90,17 +93,23 @@ foldMapSignatures :: Monoid m => (Signature a b c d -> m) -> Program a b c d -> 
 foldMapSignatures f = execWriter . transformProgramInternal transformer
   where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return return (accumulate f) return
 
+-- | Monadic map over one expression and its subexpressions.
+mapMExpression :: Monad m => (Expression a b c d -> m (Expression a b c d)) -> Expression a b c d -> m (Expression a b c d)
+mapMExpression expTrans = transformExpressionInternal transformer
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing return expTrans return return
+
 -- | Monadic map over one expression and its subexpressions and discard the result.
 mapMExpression_ :: Monad m => (Expression a b c d -> m ()) -> Expression a b c d -> m ()
-mapMExpression_ expTrans exp = transformExpressionInternal transformer exp >> return ()
-  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing undefined expTrans' undefined undefined
-        expTrans' exp = expTrans exp >> return exp
+mapMExpression_ = ignoreResult mapMExpression
 
 -- | Monadic map over all declarations and discard the result.
 mapMDeclarations_ :: Monad m => (Declaration a b c d -> m ()) -> Program a b c d -> m ()
-mapMDeclarations_ declTrans prog = transformProgramInternal transformer prog >> return ()
-  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing declTrans' return return return
-        declTrans' decl = declTrans decl >> return decl
+mapMDeclarations_ = ignoreResult mapMDeclarations
+
+-- | Monadic map over all declarations.
+mapMDeclarations :: Monad m => (Declaration a b c d -> m (Declaration a b c d)) -> Program a b c d -> m (Program a b c d)
+mapMDeclarations declTrans prog = transformProgramInternal transformer prog
+  where transformer = AstTransformer id id id id nullTVarContextTrans Nothing declTrans return return return
 
 -- | Accumulates a monoid over an expression.
 foldMapExpression :: Monoid m => (Expression a b c d -> m) -> Expression a b c d -> m

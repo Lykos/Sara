@@ -7,6 +7,7 @@ module Sara.Transform.SideEffectLifter ( liftSideEffects ) where
 import Control.Monad.State.Strict ( MonadState, get, modify, evalState )
 import Control.Monad.Writer.Strict ( MonadWriter, tell, runWriterT )
 import qualified Sara.Parser.PrettyPrinter as P
+import qualified Sara.Ast.AstUtils as A
 import qualified Sara.Ast.Syntax as Sy
 import qualified Sara.Ast.Operators as O
 import qualified Sara.Ast.Meta as M
@@ -14,8 +15,15 @@ import qualified Sara.Ast.Types as T
 
 type Expression = M.PureCheckerExpression
 
-liftSideEffects :: Expression -> M.ExpressionMeta -> M.NodeMeta -> Expression
-liftSideEffects = sideEffectBlock . flip evalState 0 . runLiftSideEffects
+liftSideEffects :: M.PureCheckerProgram -> M.PureCheckerProgram
+liftSideEffects prog = evalState (A.mapMDeclarations liftSideEffectsForBody prog) 0
+
+liftSideEffectsForBody :: MonadState Int m => M.PureCheckerDeclaration -> m M.PureCheckerDeclaration
+liftSideEffectsForBody (Sy.Function sig body meta) = do
+  block@(exp, _) <- runLiftSideEffects body
+  let body' = sideEffectBlock block (Sy.expMeta exp) meta
+  return $ Sy.Function sig body' meta
+liftSideEffectsForBody e@Sy.Extern{}               = return e
 
 getTmpVar :: MonadState Int m => T.Type -> M.NodeMeta -> m Expression
 getTmpVar t n = do
