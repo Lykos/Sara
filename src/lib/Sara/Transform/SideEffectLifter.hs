@@ -96,17 +96,14 @@ liftSideEffectsInternal Sy.BinaryOperation{..}  = case binOp of
     Nothing                   -> do
       left'  <- liftSideEffectsInternal left
       right' <- liftSideEffectsInternal right
-      let result = Sy.BinaryOperation binOp left' right' expMeta expNodeMeta
-      -- Crashing because of division by 0 is a bit like a side effect.
-      case binOp of
-        O.DividedBy -> assignAndReturnTmpVar result
-        O.Modulo    -> assignAndReturnTmpVar result
-        _           -> return result
+      return $ Sy.BinaryOperation binOp left' right' expMeta expNodeMeta
 liftSideEffectsInternal v@Sy.Variable{}         = return v
 liftSideEffectsInternal Sy.Call{..}             = do
   args' <- mapM liftSideEffectsInternal expArgs
-  let expMeta' = expMeta{ M.expPure = M.funcSymPure expCallMeta }
-  assignAndReturnTmpVar $ Sy.Call expName args' expCallMeta expMeta' expNodeMeta
+  let pure = M.funcSymPure expCallMeta
+  let expMeta' = expMeta{ M.expPure = pure }
+  let call' = Sy.Call expName args' expCallMeta expMeta' expNodeMeta
+  if pure then return call' else assignAndReturnTmpVar call'
 liftSideEffectsInternal Sy.Conditional{..}      = do
   cond' <- liftSideEffectsInternal cond
   thenPart <- runLiftSideEffects thenExp
