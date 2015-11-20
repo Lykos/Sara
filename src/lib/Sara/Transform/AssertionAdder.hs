@@ -32,6 +32,6 @@ addAssertion c@S.Call{..} = do
       Block (assert precs ++ [assign v c] ++ assume posts) v expMeta expNodeMeta
 addAssertions o@S.BinaryOperation{ binOp = binOp } =
   case binOp of
-  
+    
   
 
